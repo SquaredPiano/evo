@@ -55,7 +55,7 @@ export default function ToolsPanel() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [offtarget, setOfftarget] = useState<{ repeat_fraction: number; gc_balance_risk: number; hits: OffTargetHit[] } | null>(null);
+  const [offtarget, setOfftarget] = useState<{ repeat_fraction: number; gc_balance_risk: string; hits: OffTargetHit[] } | null>(null);
   const [organism, setOrganism] = useState("homo_sapiens");
   const [codon, setCodon] = useState<CodonOptimizationResult | null>(null);
   const [gene, setGene] = useState("BRCA1");
@@ -149,7 +149,10 @@ export default function ToolsPanel() {
           {offtarget && (
             <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
               <div className="flex justify-between"><span>Repeat fraction</span><span className="font-mono">{(offtarget.repeat_fraction * 100).toFixed(1)}%</span></div>
-              <div className="flex justify-between"><span>GC balance risk</span><span className="font-mono">{(offtarget.gc_balance_risk * 100).toFixed(1)}%</span></div>
+              <div className="flex justify-between">
+                <span>GC balance risk</span>
+                <span className="font-mono capitalize" style={{ color: RISK_COLOR[offtarget.gc_balance_risk] ?? "var(--text-muted)" }}>{offtarget.gc_balance_risk}</span>
+              </div>
               <div className="pt-1" style={{ color: "var(--text-muted)" }}>{offtarget.hits.length} hit(s) vs known elements</div>
               {offtarget.hits.slice(0, 6).map((h, i) => (
                 <div key={i} className="flex items-center justify-between gap-2 py-0.5">

@@ -417,7 +417,7 @@ export async function scanOffTargets(
 ): Promise<{
   query_length: number;
   repeat_fraction: number;
-  gc_balance_risk: number;
+  gc_balance_risk: "low" | "medium" | "high";
   hit_count: number;
   hits: OffTargetHit[];
 }> {
