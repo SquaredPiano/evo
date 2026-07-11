@@ -62,6 +62,7 @@ export default function ChatPanel() {
   const [agentPhase, setAgentPhase] = useState<"idle" | "thinking" | "executing" | "reflecting">("idle");
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallEntry[]>([]);
   const [reasoningSteps, setReasoningSteps] = useState<string[]>([]);
+  const [comparison, setComparison] = useState<Record<string, any>[]>([]);
   const [iterations, setIterations] = useState(0);
   const [streamingText, setStreamingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -243,6 +244,7 @@ export default function ChatPanel() {
     setAgentPhase("thinking");
     setActiveToolCalls([]);
     setReasoningSteps([]);
+    setComparison([]);
     setIterations(0);
 
     const s = useEvoStore.getState();
@@ -347,7 +349,8 @@ export default function ChatPanel() {
         await applyAgentUpdate(data.candidate_update);
       }
 
-      if (data.comparison && Array.isArray(data.comparison)) {
+      if (data.comparison && Array.isArray(data.comparison) && data.comparison.length > 0) {
+        setComparison(data.comparison);
         setActiveToolCalls((prev) => [
           ...prev,
           { tool: "compare", status: "ok", summary: `Ranked ${data.comparison.length} candidates` },
@@ -374,26 +377,30 @@ export default function ChatPanel() {
   };
 
   return (
-    <div className="w-full sm:w-[360px] shrink-0 flex flex-col h-full"
-      style={{ background: "var(--surface-raised)", borderLeft: "1px solid var(--ghost-border)" }}
+    <div className="w-full sm:w-[380px] shrink-0 flex flex-col h-full"
+      style={{ background: "var(--surface-raised)", borderLeft: "2px solid var(--hard-border)" }}
       role="complementary"
       aria-label="Helio AI assistant">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3 shrink-0"
-        style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+      <div className="flex items-center justify-between px-5 h-16 shrink-0"
+        style={{ borderBottom: "2px solid var(--hard-border)" }}>
         <div className="flex items-center gap-2.5">
-          <Sparkles size={14} style={{ color: "var(--accent)" }} aria-hidden="true" />
-          <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Helio Agent</span>
+          <span className="inline-flex items-center justify-center w-7 h-7" style={{ background: "var(--honey-500)", color: "var(--ink)" }}>
+            <Sparkles size={14} aria-hidden="true" />
+          </span>
+          <div className="leading-tight">
+            <span className="text-sm font-bold block" style={{ color: "var(--text-primary)" }}>Helio</span>
+            <span className="label-caps" style={{ fontSize: "8px" }}>Genomic Copilot</span>
+          </div>
           {iterations > 1 && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(var(--accent-rgb, 9,212,156), 0.15)", color: "var(--accent)", border: "1px solid rgba(var(--accent-rgb, 9,212,156), 0.3)" }}>
-              {iterations} iterations
+            <span className="chip-honey" style={{ fontSize: "9px" }}>
+              {iterations} iters
             </span>
           )}
         </div>
-        <button onClick={toggleChat} className="p-1.5 rounded-md hover:bg-white/5 transition-colors" aria-label="Close chat panel">
-          <X size={14} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
+        <button onClick={toggleChat} className="p-1.5 rounded-md transition-colors" style={{ color: "var(--text-muted)" }} aria-label="Close chat panel">
+          <X size={16} aria-hidden="true" />
         </button>
       </div>
 
@@ -435,17 +442,44 @@ export default function ChatPanel() {
           </div>
         )}
         {chatMessages.map((msg, i) => (
-          <div key={i}>
-            <div className="text-[10px] font-medium uppercase tracking-wider mb-1"
-              style={{ color: msg.role === "user" ? "var(--text-faint)" : "var(--accent)" }}>
+          <div key={i} className={msg.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}>
+            <div className="label-caps mb-1" style={{ fontSize: "9px", color: msg.role === "user" ? "var(--text-faint)" : "var(--accent-bright)" }}>
               {msg.role === "user" ? "You" : "Helio"}
             </div>
-            <div className="text-[13px] leading-relaxed"
-              style={{ color: "var(--text-primary)" }}>
+            <div className="text-[13px] leading-relaxed px-3.5 py-2.5 max-w-[92%]"
+              style={
+                msg.role === "user"
+                  ? { color: "var(--ink)", background: "var(--honey-200)", borderRadius: "14px 14px 4px 14px" }
+                  : { color: "var(--text-primary)", background: "var(--surface-elevated)", borderRadius: "14px 14px 14px 4px", borderLeft: "2px solid var(--accent)" }
+              }>
               {msg.content}
             </div>
           </div>
         ))}
+
+        {/* Comparison table */}
+        {comparison.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="label-caps" style={{ fontSize: "9px" }}>Candidate Ranking</div>
+            <div className="overflow-hidden" style={{ border: "1.5px solid var(--hard-border)", borderRadius: "8px" }}>
+              {comparison.slice(0, 6).map((row, i) => {
+                const combined = Number(row.combined ?? row.scores?.combined ?? row.overall ?? 0);
+                const cid = row.candidate_id ?? row.id ?? i;
+                return (
+                  <div key={`cmp-${i}`} className="flex items-center justify-between px-3 py-2 text-[11px]"
+                    style={{ background: i === 0 ? "rgba(245,158,11,0.12)" : "var(--surface-base)", borderTop: i > 0 ? "1px solid var(--ghost-border)" : "none" }}>
+                    <span className="font-mono font-bold" style={{ color: "var(--text-primary)" }}>
+                      {i === 0 ? "★ " : `${i + 1}. `}#{cid}
+                    </span>
+                    <span className="font-mono" style={{ color: combined >= 0.6 ? "var(--base-a)" : combined >= 0.4 ? "var(--base-g)" : "var(--base-t)" }}>
+                      {combined.toFixed(3)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Agent thinking/executing indicator */}
         {isTyping && (

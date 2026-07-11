@@ -158,8 +158,10 @@ export async function submitDesign(
   const {
     sessionId,
     numCandidates = 10,
-    runProfile = "demo",
-    truthMode = "demo_fallback",
+    // Default to live, real-data runs: real Evo 2 generation, live NCBI/PubMed/ClinVar
+    // retrieval, and live ESMFold folding. No synthesized "demo" papers or mock structures.
+    runProfile = "live",
+    truthMode = "real_only",
     targetLength,
   } = options;
   const body: Record<string, unknown> = {

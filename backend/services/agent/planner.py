@@ -200,16 +200,24 @@ def _build_planning_context(
             f"preview: {candidate_snapshot.get('preview', '?')}"
         )
 
+    if history:
+        # Real conversation content — lets the planner resolve references like
+        # "do that again", "the other one", "make it safer instead".
+        recent = history[-6:]
+        parts.append("Conversation so far:")
+        for turn in recent:
+            role = str(turn.get("role", "user")).capitalize()
+            content = str(turn.get("content", "")).strip().replace("\n", " ")
+            if content:
+                parts.append(f"  {role}: {content[:200]}")
+
     if memory_entries:
         recent = memory_entries[-3:]
-        parts.append("Recent conversation:")
+        parts.append("Recent tool activity:")
         for entry in recent:
             user_msg = entry.get("user_message", "")
             tools_used = [tc.get("tool", "?") for tc in entry.get("tool_calls", [])]
-            parts.append(f"  User: {user_msg[:80]} -> Tools: {', '.join(tools_used)}")
-
-    if history:
-        parts.append(f"Turns so far: {len(history)}")
+            parts.append(f"  User: {user_msg[:80]} -> Tools: {', '.join(tools_used) or 'none'}")
 
     parts.append(f"\nUser request: {message}")
     return "\n".join(parts)

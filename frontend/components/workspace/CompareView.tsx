@@ -70,7 +70,7 @@ export default function CompareView() {
           </div>
           <button onClick={() => setViewMode("ide")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-[1.02]"
-            style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+            style={{ background: "var(--accent)", color: "var(--ink)" }}>
             Edit in Studio <ArrowRight size={14} />
           </button>
         </div>

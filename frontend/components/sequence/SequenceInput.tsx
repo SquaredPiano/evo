@@ -136,18 +136,18 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
           {onDesign && (
             <div className="flex rounded-lg overflow-hidden mb-6" style={{ background: "var(--surface-raised)" }}>
               <button onClick={() => { setMode("paste"); setValidationError(null); }}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-medium transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-wider transition-colors"
                 style={{
-                  background: mode === "paste" ? "color-mix(in oklch, var(--accent), transparent 90%)" : "transparent",
-                  color: mode === "paste" ? "var(--accent)" : "var(--text-muted)",
+                  background: mode === "paste" ? "var(--honey-500)" : "transparent",
+                  color: mode === "paste" ? "var(--ink)" : "var(--text-muted)",
                 }}>
                 <Dna size={14} /> Paste Sequence
               </button>
               <button onClick={() => { setMode("design"); setValidationError(null); }}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-medium transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-wider transition-colors"
                 style={{
-                  background: mode === "design" ? "color-mix(in oklch, var(--accent), transparent 90%)" : "transparent",
-                  color: mode === "design" ? "var(--accent)" : "var(--text-muted)",
+                  background: mode === "design" ? "var(--honey-500)" : "transparent",
+                  color: mode === "design" ? "var(--ink)" : "var(--text-muted)",
                   borderLeft: "1px solid var(--ghost-border)",
                 }}>
                 <Wand2 size={14} /> Design New
@@ -197,8 +197,8 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
               )}
 
               <button onClick={handlePasteSubmit} disabled={isLoading || charCount === 0}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
-                style={{ background: charCount > 0 ? "var(--accent)" : "var(--surface-elevated)", color: charCount > 0 ? "var(--surface-base)" : "var(--text-faint)" }}>
+                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
+                style={{ background: charCount > 0 ? "var(--honey-500)" : "var(--surface-elevated)", color: charCount > 0 ? "var(--ink)" : "var(--text-faint)", border: "2px solid var(--hard-border)", boxShadow: charCount > 0 ? "4px 4px 0 0 var(--hard-border)" : "none" }}>
                 {isLoading ? (
                   <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Analyzing...</>
                 ) : (
@@ -255,8 +255,8 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
               )}
 
               <button onClick={handleDesignSubmit} disabled={isLoading || designGoal.trim().length === 0}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
-                style={{ background: designGoal.trim() ? "var(--accent)" : "var(--surface-elevated)", color: designGoal.trim() ? "var(--surface-base)" : "var(--text-faint)" }}>
+                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
+                style={{ background: designGoal.trim() ? "var(--honey-500)" : "var(--surface-elevated)", color: designGoal.trim() ? "var(--ink)" : "var(--text-faint)", border: "2px solid var(--hard-border)", boxShadow: designGoal.trim() ? "4px 4px 0 0 var(--hard-border)" : "none" }}>
                 {isLoading ? (
                   <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Designing...</>
                 ) : (

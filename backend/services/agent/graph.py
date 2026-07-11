@@ -37,10 +37,40 @@ from services.session_store import SessionStore
 
 logger = logging.getLogger(__name__)
 
-RESPONDER_PROMPT = """You are Evo's genomic copilot.
-Given executed tool traces and computed outcomes, produce a concise,
-clear researcher-facing response (2-5 sentences).
-Avoid fluff. Mention concrete outcomes and next best action."""
+RESPONDER_PROMPT = """You are Helio, the copilot inside Evo — a genomic design IDE.
+You are talking to a researcher who just issued a request. You are given the
+user's message, the conversation so far, a snapshot of the active DNA candidate,
+and the tools you just ran with their concrete numeric outcomes.
+
+Write a reply that a smart colleague would give:
+- Lead with what actually happened / what the numbers mean (plain English, not jargon soup).
+- Interpret the scores: functional plausibility, tissue specificity, off-target risk
+  (higher = worse), novelty, and combined rank are all 0–1. Say whether an edit helped
+  or hurt and by how much when a delta is available.
+- Be specific and grounded ONLY in the provided tool outcomes — never invent numbers.
+- End with one concrete, useful next action the user could take in Evo.
+- 2–5 sentences. Confident, warm, no filler, no bullet lists unless comparing candidates."""
+
+
+def _weakest_objective(scores: dict[str, Any]) -> str:
+    """Pick the optimization objective that most needs work from a score dict.
+
+    Scores are 0–1; off_target is inverted (higher = worse). Returns one of the
+    objectives understood by tool_optimize.
+    """
+    candidates: dict[str, float] = {}
+    if "functional" in scores:
+        candidates["functional"] = float(scores["functional"])
+    if "tissue_specificity" in scores:
+        candidates["tissue_specificity"] = float(scores["tissue_specificity"])
+    if "novelty" in scores:
+        candidates["novelty"] = float(scores["novelty"])
+    if "off_target" in scores:
+        # Invert so it competes on the same "headroom" scale.
+        candidates["safety"] = 1.0 - float(scores["off_target"])
+    if not candidates:
+        return "functional"
+    return min(candidates, key=candidates.get)
 
 
 class AgenticCopilot:
@@ -156,6 +186,13 @@ class AgenticCopilot:
         memory_entries = state.get("memory_entries", [])
         candidate_snapshot = state.get("candidate_snapshot", {})
 
+        # 0. Forced plan injected by the reflect node (e.g. auto-optimize).
+        forced = state.get("forced_plan")
+        if forced:
+            tool_names = [a.get("tool", "?") for a in forced]
+            reasoning.append(f"[iter {iteration}] Forced plan from reflection: {', '.join(tool_names)}")
+            return {"actions": list(forced), "forced_plan": None, "reasoning_steps": reasoning}
+
         if not message:
             reasoning.append(f"[iter {iteration}] No message provided, defaulting to explain_candidate")
             return {
@@ -240,30 +277,42 @@ class AgenticCopilot:
 
         update = state.get("candidate_update")
         combined_score = None
+        scores: dict[str, Any] = {}
         if update and isinstance(update, dict):
-            combined_score = update.get("scores", {}).get("combined")
+            scores = update.get("scores", {}) or {}
+            combined_score = scores.get("combined")
 
         should_continue = False
+        forced_plan: list[dict[str, Any]] | None = None
+
+        already_optimized = any(
+            tc.get("tool") == "optimize_candidate" for tc in tool_calls
+        )
+        message = state.get("message", "")
 
         if has_failures and iteration < MAX_AGENT_ITERATIONS:
             reasoning.append(
                 f"[reflect iter {iteration}] {len(failed_tools)} tool(s) failed. Re-planning to recover."
             )
             should_continue = True
-        elif combined_score is not None and combined_score < 0.4 and iteration < MAX_AGENT_ITERATIONS:
+        elif (
+            combined_score is not None
+            and combined_score < 0.45
+            and iteration < MAX_AGENT_ITERATIONS
+            and not already_optimized
+        ):
+            # Actually inject an optimization pass targeting the weakest dimension,
+            # rather than hoping keyword-matching re-plans it.
+            objective = _weakest_objective(scores)
             reasoning.append(
-                f"[reflect iter {iteration}] Combined score {combined_score:.3f} is weak (<0.4). "
-                f"Attempting optimization pass."
+                f"[reflect iter {iteration}] Combined score {combined_score:.3f} is weak (<0.45). "
+                f"Auto-optimizing for '{objective}'."
             )
             should_continue = True
-            message = state.get("message", "")
-            if "optimize" not in message.lower() and "safer" not in message.lower():
-                return {
-                    "iteration": iteration,
-                    "should_continue": should_continue,
-                    "reasoning_steps": reasoning,
-                    "message": f"{message} (auto-optimize: improve combined score)",
-                }
+            forced_plan = [
+                {"tool": "optimize_candidate", "args": {"objective": objective, "rounds": 3}},
+                {"tool": "explain_candidate", "args": {}},
+            ]
         else:
             reasoning.append(
                 f"[reflect iter {iteration}] "
@@ -274,6 +323,7 @@ class AgenticCopilot:
         return {
             "iteration": iteration,
             "should_continue": should_continue,
+            "forced_plan": forced_plan,
             "reasoning_steps": reasoning,
         }
 

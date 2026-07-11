@@ -164,7 +164,7 @@ const initialState = {
   generationTokenCount: 0,
   completedStages: [] as string[],
   wsStatus: "disconnected" as "disconnected" | "connecting" | "connected",
-  theme: "dark" as "dark" | "light",
+  theme: "light" as "dark" | "light",
   savedSnapshot: null as { sequence: string; editHistory: EditEntry[]; pdb?: string | null } | null,
   user: null as { id: string; name: string; email: string } | null,
 };
@@ -176,7 +176,6 @@ export const useEvoStore = create<EvoState>((set, get) => ({
     const next = get().theme === "dark" ? "light" : "dark";
     set({ theme: next });
     if (typeof document !== "undefined") {
-      document.documentElement.classList.toggle("light", next === "light");
       document.documentElement.classList.toggle("dark", next === "dark");
     }
   },

@@ -152,7 +152,7 @@ export default function ToolsPanel() {
 
       {tab === "offtarget" && (
         <div className="space-y-2">
-          <button onClick={runOfftarget} disabled={busy || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+          <button onClick={runOfftarget} disabled={busy || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
             {busy ? "Scanning…" : "Scan for off-targets"}
           </button>
           {offtarget && (
@@ -188,7 +188,7 @@ export default function ToolsPanel() {
               <option key={o.id} value={o.id} style={{ background: "var(--surface-elevated)" }}>{o.label}</option>
             ))}
           </select>
-          <button onClick={runCodon} disabled={busy || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+          <button onClick={runCodon} disabled={busy || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
             {busy ? "Optimizing…" : "Optimize codons"}
           </button>
           {codon && (
@@ -218,7 +218,7 @@ export default function ToolsPanel() {
               className="flex-1 text-[11px] px-2 py-1.5 rounded bg-transparent"
               style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
             />
-            <button onClick={runVariants} disabled={busy || !gene.trim()} className={btn} style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+            <button onClick={runVariants} disabled={busy || !gene.trim()} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
               {busy ? "…" : "Fetch"}
             </button>
           </div>
@@ -250,7 +250,7 @@ export default function ToolsPanel() {
               className="flex-1 text-[11px] px-2 py-1.5 rounded bg-transparent"
               style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
             />
-            <button onClick={runCalibrate} disabled={busy || !calGene.trim() || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+            <button onClick={runCalibrate} disabled={busy || !calGene.trim() || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
               {busy ? "…" : "Run"}
             </button>
           </div>

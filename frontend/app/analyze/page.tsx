@@ -280,7 +280,17 @@ function AnalyzePageInner() {
       {/* ── SIDEBAR ── */}
       <motion.aside
         className={`w-[220px] shrink-0 flex flex-col h-full fixed lg:relative z-50 lg:z-auto transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
-        style={{ background: "var(--surface-void)" }}
+        style={{
+          background: "var(--rail-bg)",
+          borderRight: "2px solid var(--hard-border)",
+          // Scope light-on-dark tokens to the rail so descendants stay legible.
+          ["--text-primary" as string]: "var(--rail-text)",
+          ["--text-secondary" as string]: "rgba(244,239,226,0.82)",
+          ["--text-muted" as string]: "var(--rail-muted)",
+          ["--text-faint" as string]: "rgba(244,239,226,0.45)",
+          ["--surface-elevated" as string]: "rgba(255,255,255,0.08)",
+          ["--accent-bright" as string]: "var(--honey-400)",
+        } as React.CSSProperties}
         initial={{ x: -220, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ ...springTransition, delay: 0.1 }}
@@ -288,8 +298,11 @@ function AnalyzePageInner() {
         role="navigation"
       >
         {/* Wordmark */}
-        <div className="px-6 h-14 flex items-center">
-          <span className="wordmark text-sm" style={{ color: "var(--accent-bright)" }}>Evo</span>
+        <div className="px-5 h-16 flex items-center gap-2" style={{ borderBottom: "1px solid var(--rail-border)" }}>
+          <span className="inline-flex items-center justify-center w-7 h-7" style={{ background: "var(--honey-500)", color: "var(--ink)" }}>
+            <Dna size={16} strokeWidth={2.5} />
+          </span>
+          <span className="wordmark text-[15px]" style={{ color: "var(--rail-text)" }}>Evo</span>
         </div>
 
         {/* Navigation */}
@@ -387,8 +400,8 @@ function AnalyzePageInner() {
       <div className="flex-1 flex flex-col overflow-hidden" id="main-content">
         {/* ── HEADER (glassmorphic) ── */}
         <motion.header
-          className="h-14 shrink-0 flex items-center justify-between px-4 lg:px-6"
-          style={{ background: "color-mix(in oklch, var(--surface-base), transparent 40%)", backdropFilter: "blur(20px) saturate(1.8)", borderBottom: "0.5px solid var(--ghost-border)" }}
+          className="h-16 shrink-0 flex items-center justify-between px-4 lg:px-6"
+          style={{ background: "color-mix(in srgb, var(--surface-base) 82%, transparent)", backdropFilter: "blur(16px)", borderBottom: "2px solid var(--hard-border)" }}
           initial={{ y: -56, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ ...smoothTransition, delay: 0.15 }}
@@ -418,11 +431,13 @@ function AnalyzePageInner() {
                     <motion.button key={m} onClick={() => setViewMode(m)}
                       role="tab"
                       aria-selected={viewMode === m}
-                      whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                      className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-colors font-label"
+                      whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors font-label"
                       style={{
-                        background: viewMode === m ? "color-mix(in oklch, var(--accent), transparent 90%)" : "transparent",
-                        color: viewMode === m ? "var(--accent-bright)" : "var(--text-faint)",
+                        background: viewMode === m ? "var(--honey-500)" : "transparent",
+                        color: viewMode === m ? "var(--ink)" : "var(--text-muted)",
+                        border: viewMode === m ? "1.5px solid var(--hard-border)" : "1.5px solid transparent",
+                        borderRadius: "6px",
                       }}>
                       {VIEW_LABELS[m]}
                     </motion.button>
@@ -431,9 +446,13 @@ function AnalyzePageInner() {
                 <button onClick={toggleChat}
                   aria-label={chatOpen ? "Close Helio chat" : "Open Helio chat"}
                   aria-pressed={chatOpen}
-                  className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all font-label"
-                  style={{ color: chatOpen ? "var(--accent-bright)" : "var(--text-faint)" }}>
-                  Helio
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all font-label"
+                  style={{
+                    color: chatOpen ? "var(--ink)" : "var(--accent-bright)",
+                    background: chatOpen ? "var(--honey-200)" : "transparent",
+                    border: "1.5px solid var(--accent)",
+                  }}>
+                  <Sparkles size={12} /> Helio
                 </button>
               </>
             )}
@@ -492,7 +511,7 @@ function AnalyzePageInner() {
                     <motion.button onClick={() => setViewMode("explorer")}
                       whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                       className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
-                      style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+                      style={{ background: "var(--accent)", color: "var(--ink)" }}>
                       Open Explorer <ArrowRight size={15} />
                     </motion.button>
                   </div>
@@ -669,7 +688,7 @@ function AnalyzePageInner() {
                     <motion.button onClick={() => setViewMode("explorer")}
                       whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                       className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider font-label transition-all"
-                      style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+                      style={{ background: "var(--accent)", color: "var(--ink)" }}>
                       <Search size={12} /> Explore Sequence
                     </motion.button>
                   </div>
@@ -910,7 +929,7 @@ function AnalyzePageInner() {
                   <motion.button onClick={() => setViewMode("ide")}
                     whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[12px] font-medium font-label tracking-wider uppercase transition-all"
-                    style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+                    style={{ background: "var(--accent)", color: "var(--ink)" }}>
                     <Pencil size={13} /> Open Studio <ArrowRight size={13} />
                   </motion.button>
                 </div>
@@ -1048,7 +1067,7 @@ function AnalyzePageInner() {
                     style={{ color: "var(--text-muted)" }}>Compare</button>
                   <button onClick={handleRescore} disabled={rescoring}
                     className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors disabled:opacity-50"
-                    style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+                    style={{ background: "var(--accent)", color: "var(--ink)" }}>
                     {rescoring ? "Rescoring..." : "Rescore"}
                   </button>
                 </div>
@@ -1187,11 +1206,12 @@ function AnalyzePageInner() {
       {!chatOpen && viewMode !== "input" && viewMode !== "pipeline" && analysisResult && (
         <motion.button onClick={toggleChat}
           aria-label="Open Helio AI assistant"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 text-sm font-bold uppercase tracking-wider"
           style={{
-            background: "var(--accent)",
-            color: "var(--surface-base)",
-            boxShadow: "0 8px 32px oklch(0.72 0.12 175 / 0.3)",
+            background: "var(--honey-500)",
+            color: "var(--ink)",
+            border: "2px solid var(--hard-border)",
+            boxShadow: "5px 5px 0 0 var(--hard-border)",
           }}
           initial={{ opacity: 0, y: 20, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}

@@ -17,6 +17,7 @@ class CopilotState(TypedDict, total=False):
     message: str
     history: list[dict[str, str]]
     actions: list[dict[str, Any]]
+    forced_plan: list[dict[str, Any]] | None
     tool_calls: list[dict[str, str]]
     candidate_update: dict[str, Any] | None
     comparison: list[dict[str, Any]] | None

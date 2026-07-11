@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Instrument_Serif, Space_Grotesk } from "next/font/google";
+import { Instrument_Sans, JetBrains_Mono, Instrument_Serif } from "next/font/google";
+import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import "./globals.css";
 
-const inter = Inter({
+const instrumentSans = Instrument_Sans({
   subsets: ["latin"],
   variable: "--font-sans",
   display: "swap",
@@ -21,12 +22,6 @@ const instrumentSerif = Instrument_Serif({
   variable: "--font-display",
   weight: "400",
   style: ["normal", "italic"],
-  display: "swap",
-});
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-label",
   display: "swap",
 });
 
@@ -49,10 +44,22 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn("dark", inter.variable, jetbrainsMono.variable, instrumentSerif.variable, spaceGrotesk.variable)}>
+    <html lang="en" className={cn(instrumentSans.variable, jetbrainsMono.variable, instrumentSerif.variable)}>
       <body className="antialiased min-h-screen font-sans">
         <a href="#main-content" className="skip-to-content">Skip to content</a>
         <ErrorBoundary>{children}</ErrorBoundary>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: "var(--surface-raised)",
+              color: "var(--text-primary)",
+              border: "1px solid var(--ghost-border)",
+              borderRadius: "12px",
+              fontFamily: "var(--font-sans)",
+            },
+          }}
+        />
       </body>
     </html>
   );

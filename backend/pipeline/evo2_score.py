@@ -139,6 +139,20 @@ def score_off_target(
         if ll_std > 0.2:
             risk += 0.05 * (ll_std - 0.2)
 
+    # Real k-mer homology scan against curated genomic panels (Alu/LINE repeats,
+    # oncogene hotspots, repeat expansions, regulatory elements). This replaces
+    # pure motif-counting with an actual similarity search — a clean, novel
+    # sequence shares few k-mers with these panels and stays low-risk.
+    try:
+        from services.offtarget import scan_offtargets
+
+        scan = scan_offtargets(sequence, k=12, max_hits=5)
+        if scan.hits:
+            risk += 0.4 * float(scan.hits[0].similarity_score)
+        risk += 0.15 * float(scan.repeat_fraction)
+    except Exception:  # scan is best-effort; never break scoring
+        pass
+
     return _clamp(risk)
 
 

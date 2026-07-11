@@ -276,7 +276,7 @@ export default function SequenceEditor({
             Rev-comp
           </button>
           {onRescoreBase && selRange.end - selRange.start === 1 && (
-            <button onClick={mutateAndRescore} className="px-2 py-0.5 rounded" style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+            <button onClick={mutateAndRescore} className="px-2 py-0.5 rounded" style={{ background: "var(--accent)", color: "var(--ink)" }}>
               Mutate + rescore
             </button>
           )}

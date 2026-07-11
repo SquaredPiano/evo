@@ -30,7 +30,9 @@ logger = logging.getLogger("evo")
 # OpenRouter recommends these headers for attribution / rankings. Harmless if ignored.
 _ATTRIBUTION_HEADERS = {
     "HTTP-Referer": "https://github.com/evo-genomics/evo",
-    "X-Title": "Evo — Genomic Design IDE",
+    # HTTP header values must be latin-1/ASCII encodable — keep this plain ASCII
+    # (no em dash) or httpx raises UnicodeEncodeError when building the request.
+    "X-Title": "Evo - Genomic Design IDE",
 }
 
 

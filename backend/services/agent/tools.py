@@ -31,10 +31,13 @@ async def tool_explain(
 ) -> ToolExecution:
     scores, per_position = await score_candidate(service, sequence)
     score_dict = scores.to_dict()
+    gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
     note = (
-        f"Candidate #{candidate_id} is {band(score_dict['combined'])}. "
-        f"Functional {score_dict['functional']:.3f}, tissue {score_dict['tissue_specificity']:.3f}, "
-        f"off-target {score_dict['off_target']:.3f}, novelty {score_dict['novelty']:.3f}."
+        f"Candidate #{candidate_id} ({len(sequence)} bp, GC {gc:.0%}) is {band(score_dict['combined'])} "
+        f"(combined {score_dict['combined']:.3f}). "
+        f"Functional plausibility {score_dict['functional']:.3f}, tissue specificity "
+        f"{score_dict['tissue_specificity']:.3f}, off-target risk {score_dict['off_target']:.3f} "
+        f"(lower is better), novelty {score_dict['novelty']:.3f}."
     )
     return ToolExecution(
         call=AgentToolCall(tool="score_candidate", status="ok", summary="Scored active candidate."),
