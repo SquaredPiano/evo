@@ -431,6 +431,42 @@ export async function scanOffTargets(
 }
 
 // ---------------------------------------------------------------------------
+// Scoring calibration (ClinVar ground-truth validation)
+// ---------------------------------------------------------------------------
+
+export interface CalibrationReport {
+  gene: string;
+  engine_mode: string;
+  auroc: number | null;
+  n_pathogenic: number;
+  n_benign: number;
+  n_scored: number;
+  n_skipped_unaligned: number;
+  mean_delta_pathogenic: number | null;
+  mean_delta_benign: number | null;
+  note: string;
+}
+
+/** POST /api/calibration - Measure real AUROC of the active scoring engine vs ClinVar. */
+export async function runCalibration(payload: {
+  gene: string;
+  sequence: string;
+  maxPerClass?: number;
+}): Promise<CalibrationReport> {
+  const res = await fetch(`${API_BASE}/api/calibration`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      gene: payload.gene,
+      sequence: payload.sequence,
+      max_per_class: payload.maxPerClass ?? 40,
+    }),
+  });
+  if (!res.ok) throw new Error(`Calibration failed: ${res.status}`);
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 // Experiment history (version tracking)
 // ---------------------------------------------------------------------------
 

@@ -1,10 +1,17 @@
 import os
 from enum import Enum
+from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
-load_dotenv()
+# Single source of truth for secrets: the repo-root .env (one dir above backend/).
+# Fall back to a backend-local .env if someone keeps one there, then to the
+# process environment (used by Docker / CI). Root wins so keys live in one place.
+_ROOT_ENV = Path(__file__).resolve().parent.parent / ".env"
+_BACKEND_ENV = Path(__file__).resolve().parent / ".env"
+_ENV_FILE = _ROOT_ENV if _ROOT_ENV.exists() else _BACKEND_ENV
+load_dotenv(_ENV_FILE)
 
 
 class Evo2Mode(str, Enum):
@@ -69,7 +76,7 @@ class Settings(BaseSettings):
     hugging_face_token: str = ""
 
     # Allow extra env vars (teammates may add keys we don't own)
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {"env_file": str(_ENV_FILE), "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()

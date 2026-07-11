@@ -178,6 +178,7 @@ async def annotate_variants(
     gene: str,
     sequence: str | None = None,
     max_variants: int = 25,
+    significance: str = "pathogenic",
 ) -> AnnotationResult:
     """Fetch ClinVar variants for a gene and map them to sequence positions.
 
@@ -197,7 +198,9 @@ async def annotate_variants(
         return AnnotationResult(gene="", total_variants_in_gene=0)
 
     # Fetch variants from ClinVar
-    clinvar_result = await lookup_variants(gene, max_results=max_variants)
+    clinvar_result = await lookup_variants(
+        gene, max_results=max_variants, significance=significance
+    )
 
     if not clinvar_result.variants:
         return AnnotationResult(

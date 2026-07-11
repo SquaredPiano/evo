@@ -13,15 +13,17 @@ import {
   scanOffTargets,
   optimizeCodons,
   annotateVariants,
+  runCalibration,
   exportFasta,
   exportGenbank,
   downloadText,
   type OffTargetHit,
   type CodonOptimizationResult,
   type VariantAnnotation,
+  type CalibrationReport,
 } from "@/lib/api";
 
-type Tab = "offtarget" | "codon" | "variants" | "export";
+type Tab = "offtarget" | "codon" | "variants" | "validate" | "export";
 
 const ORGANISMS = [
   { id: "homo_sapiens", label: "Human" },
@@ -60,6 +62,8 @@ export default function ToolsPanel() {
   const [codon, setCodon] = useState<CodonOptimizationResult | null>(null);
   const [gene, setGene] = useState("BRCA1");
   const [variants, setVariants] = useState<VariantAnnotation[] | null>(null);
+  const [calGene, setCalGene] = useState("BRCA1");
+  const [calibration, setCalibration] = useState<CalibrationReport | null>(null);
 
   const active = candidates.find((c) => c.id === (activeCandidateId ?? 0)) ?? candidates[0];
 
@@ -89,6 +93,10 @@ export default function ToolsPanel() {
     setVariants(res.annotations);
   });
 
+  const runCalibrate = () => run(async () => {
+    setCalibration(await runCalibration({ gene: calGene.trim(), sequence: rawSequence }));
+  });
+
   const doExportFasta = () => run(async () => {
     const header = `evo_candidate_${active?.id ?? 0}`;
     const text = await exportFasta([{ header, sequence: rawSequence }]);
@@ -115,6 +123,7 @@ export default function ToolsPanel() {
     { id: "offtarget", label: "Off-target" },
     { id: "codon", label: "Codon opt" },
     { id: "variants", label: "Variants" },
+    { id: "validate", label: "Validate" },
     { id: "export", label: "Export" },
   ];
 
@@ -226,6 +235,45 @@ export default function ToolsPanel() {
                   <div className="truncate" style={{ color: "var(--text-muted)" }} title={v.condition}>{v.condition || v.variant_title}</div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "validate" && (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              value={calGene}
+              onChange={(e) => setCalGene(e.target.value)}
+              placeholder="Gene (e.g. BRCA1)"
+              className="flex-1 text-[11px] px-2 py-1.5 rounded bg-transparent"
+              style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
+            />
+            <button onClick={runCalibrate} disabled={busy || !calGene.trim() || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+              {busy ? "…" : "Run"}
+            </button>
+          </div>
+          <div className="text-[10px]" style={{ color: "var(--text-faint)" }}>
+            Scores known pathogenic vs benign ClinVar variants aligned to the current sequence and reports a real AUROC — no claim, a measurement.
+          </div>
+          {calibration && (
+            <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
+              <div className="flex justify-between">
+                <span>AUROC</span>
+                <span className="font-mono" style={{ color: calibration.auroc == null ? "var(--text-muted)" : calibration.auroc >= 0.7 ? "var(--accent)" : calibration.auroc >= 0.55 ? "var(--annotation-rrna)" : "var(--base-t)" }}>
+                  {calibration.auroc == null ? "n/a" : calibration.auroc.toFixed(3)}
+                </span>
+              </div>
+              <div className="flex justify-between"><span>Engine</span><span className="font-mono">{calibration.engine_mode}</span></div>
+              <div className="flex justify-between"><span>Scored (path / benign)</span><span className="font-mono">{calibration.n_pathogenic} / {calibration.n_benign}</span></div>
+              {calibration.n_skipped_unaligned > 0 && (
+                <div className="flex justify-between"><span>Skipped (unaligned)</span><span className="font-mono">{calibration.n_skipped_unaligned}</span></div>
+              )}
+              {calibration.mean_delta_pathogenic != null && (
+                <div className="flex justify-between"><span>Mean Δ path / benign</span><span className="font-mono">{calibration.mean_delta_pathogenic.toFixed(3)} / {calibration.mean_delta_benign?.toFixed(3) ?? "—"}</span></div>
+              )}
+              <div className="pt-1 leading-relaxed" style={{ color: "var(--text-faint)" }}>{calibration.note}</div>
             </div>
           )}
         </div>

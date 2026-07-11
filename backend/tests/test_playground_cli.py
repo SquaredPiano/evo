@@ -10,6 +10,7 @@ from services.evo2 import Evo2MockService
 def test_resolve_service_fallback(monkeypatch):
     monkeypatch.delenv("EVO2_KEY", raising=False)
     monkeypatch.delenv("EVO2_NIM_API_KEY", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
 
     class _BadSettings:
         evo2_mode = Evo2Mode.NIM_API

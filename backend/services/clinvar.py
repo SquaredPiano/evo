@@ -33,11 +33,25 @@ class ClinVarResult:
     total_count: int = 0
 
 
-async def lookup_variants(gene: str, max_results: int = 10) -> ClinVarResult:
-    """Fetch pathogenic/likely-pathogenic ClinVar variants for a gene."""
+# ClinVar clinsig filter fragments per significance class.
+_CLINSIG_TERMS = {
+    "pathogenic": "(pathogenic[clinsig] OR likely_pathogenic[clinsig])",
+    "benign": "(benign[clinsig] OR likely_benign[clinsig])",
+}
+
+
+async def lookup_variants(
+    gene: str, max_results: int = 10, significance: str = "pathogenic"
+) -> ClinVarResult:
+    """Fetch ClinVar variants for a gene, filtered by significance class.
+
+    ``significance`` is "pathogenic" (default, preserves prior behavior) or
+    "benign". Unknown values fall back to the pathogenic filter.
+    """
     if not gene:
         return ClinVarResult(gene="")
 
+    clinsig = _CLINSIG_TERMS.get(significance, _CLINSIG_TERMS["pathogenic"])
     try:
         async with eutils_client() as client:
             search_resp = await get_with_retry(
@@ -45,7 +59,7 @@ async def lookup_variants(gene: str, max_results: int = 10) -> ClinVarResult:
                 f"{EUTILS_BASE}/esearch.fcgi",
                 params=eutils_params({
                     "db": "clinvar",
-                    "term": f"{gene}[gene] AND (pathogenic[clinsig] OR likely_pathogenic[clinsig])",
+                    "term": f"{gene}[gene] AND {clinsig}",
                     "retmax": max_results,
                     "retmode": "json",
                 }),

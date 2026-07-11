@@ -16,6 +16,7 @@ from models.requests import (
     AnalyzeRequest,
     AgentChatRequest,
     BaseEditRequest,
+    CalibrationRequest,
     CodonOptimizationRequest,
     DesignRequest,
     ExperimentDiffRequest,
@@ -600,6 +601,32 @@ async def variant_annotation(request: VariantAnnotationRequest) -> dict[str, obj
         ],
         "unmapped_variants": result.unmapped_variants,
         "count": len(result.annotations),
+    }
+
+
+@app.post("/api/calibration")
+async def scoring_calibration(request: CalibrationRequest) -> dict[str, object]:
+    """Measure how well the active Evo2 scoring engine separates known
+    pathogenic from benign ClinVar variants (real AUROC, not a claim)."""
+    from services.calibration import calibrate_gene
+
+    report = await calibrate_gene(
+        service=evo2_service,
+        gene=request.gene,
+        sequence=request.sequence,
+        max_per_class=request.max_per_class,
+    )
+    return {
+        "gene": report.gene,
+        "engine_mode": report.engine_mode,
+        "auroc": report.auroc,
+        "n_pathogenic": report.n_pathogenic,
+        "n_benign": report.n_benign,
+        "n_scored": report.n_scored,
+        "n_skipped_unaligned": report.n_skipped_unaligned,
+        "mean_delta_pathogenic": report.mean_delta_pathogenic,
+        "mean_delta_benign": report.mean_delta_benign,
+        "note": report.note,
     }
 
 

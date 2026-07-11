@@ -132,6 +132,17 @@ class VariantAnnotationRequest(BaseModel):
         return v
 
 
+class CalibrationRequest(BaseModel):
+    gene: str = Field(..., min_length=1, description="Gene symbol (e.g. BRCA1)")
+    sequence: str = Field(..., description="CDS-aligned reference sequence to score variants against")
+    max_per_class: int = Field(40, ge=2, le=100, description="Max variants to fetch per class")
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
 class CodonOptimizationRequest(BaseModel):
     sequence: str = Field(..., description="Protein-coding DNA sequence to optimize")
     organism: str = Field("homo_sapiens", description="Target organism for codon usage")

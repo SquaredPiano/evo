@@ -30,7 +30,14 @@ status rather than hard-coding "Ready".
 | Intent parsing / explanation / agent | Heuristic fallback | OpenRouter (`OPENROUTER_API_KEY`) |
 
 Scoring is a transparent heuristic, not a clinically validated model — it is
-labeled as such in the UI rather than presented as ground truth.
+labeled as such in the UI rather than presented as ground truth. The workspace
+includes a **Validate** tab that *measures* this rather than asserting it: it
+pulls known pathogenic and benign variants from ClinVar, scores each with the
+active Evo2 engine, and reports a real AUROC (`POST /api/calibration`). With the
+mock or hosted-NIM engines — neither of which exposes real per-sequence
+log-likelihoods — an AUROC near 0.5 is the honest result; a real signal requires
+`EVO2_MODE=local`. Variants whose reference base does not align to the supplied
+sequence are counted and skipped rather than silently mis-scored.
 
 ---
 
