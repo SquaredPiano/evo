@@ -1,0 +1,59 @@
+import type { Metadata } from "next";
+import { Inter, JetBrains_Mono, Instrument_Serif, Space_Grotesk } from "next/font/google";
+import { cn } from "@/lib/utils";
+import ErrorBoundary from "@/components/ui/ErrorBoundary";
+import "./globals.css";
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: "400",
+  style: ["normal", "italic"],
+  display: "swap",
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-label",
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: { default: "Evo", template: "%s — Evo" },
+  description:
+    "The genomic design IDE. Generate, score, and edit DNA sequences with the Evo 2 foundation model and live ESMFold structure prediction.",
+  icons: { icon: "/favicon.svg" },
+  metadataBase: new URL("https://evo.bio"),
+  openGraph: {
+    title: "Evo — Genomic Design IDE",
+    description: "Co-design genomes with an IDE that thinks out loud. Powered by the Evo 2 model and ESMFold.",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className={cn("dark", inter.variable, jetbrainsMono.variable, instrumentSerif.variable, spaceGrotesk.variable)}>
+      <body className="antialiased min-h-screen font-sans">
+        <a href="#main-content" className="skip-to-content">Skip to content</a>
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </body>
+    </html>
+  );
+}
