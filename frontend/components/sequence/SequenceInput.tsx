@@ -26,7 +26,7 @@ const PASTE_STEPS = [
   { step: "1", label: "Region annotation", desc: "Exons, introns, ORFs, regulatory elements" },
   { step: "2", label: "Likelihood scoring", desc: "Per-position Evo 2 log-likelihood scores" },
   { step: "3", label: "Mutation analysis", desc: "Click any base to predict variant effects" },
-  { step: "4", label: "Structure prediction", desc: "AlphaFold 3 protein folding for top regions" },
+  { step: "4", label: "Structure prediction", desc: "ESMFold protein folding for top regions" },
 ];
 
 const DESIGN_STEPS = [
@@ -79,9 +79,26 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
     }
   }, [mode, handlePasteSubmit, handleDesignSubmit]);
 
-  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const name = file.name.toLowerCase();
+    const isGenBank = name.endsWith(".gb") || name.endsWith(".gbk") || name.endsWith(".genbank");
+    // GenBank carries feature tables the browser can't parse — let the backend
+    // handle it; fall back to local FASTA header-stripping for plain sequences.
+    if (isGenBank) {
+      try {
+        const { importSequenceFile } = await import("@/lib/api");
+        const res = await importSequenceFile(file);
+        if (res.sequences[0]?.sequence) {
+          setInput(res.sequences[0].sequence);
+          setValidationError(null);
+          return;
+        }
+      } catch {
+        setValidationError("Could not parse GenBank file (backend unreachable?)");
+      }
+    }
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
@@ -148,9 +165,9 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                     <button onClick={() => fileRef.current?.click()}
                       className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md transition-colors hover:bg-white/[0.04]"
                       style={{ color: "var(--text-muted)" }}>
-                      <Upload size={12} /> Upload FASTA
+                      <Upload size={12} /> Upload FASTA / GenBank
                     </button>
-                    <input ref={fileRef} type="file" accept=".fasta,.fa,.txt" onChange={handleFile} className="hidden" />
+                    <input ref={fileRef} type="file" accept=".fasta,.fa,.txt,.gb,.gbk,.genbank" onChange={handleFile} className="hidden" />
                   </div>
                 </div>
                 <textarea
@@ -312,33 +329,35 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
 
         {/* Model status */}
         <div className="mb-8">
-          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Model status</span>
-          <div className="p-4 rounded-lg" style={{ background: "var(--surface-elevated)" }}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Evo 2 (40B)</span>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-                <span className="text-[11px]" style={{ color: "var(--accent)" }}>Ready</span>
-              </div>
+          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Engine status</span>
+          <div className="p-4 rounded-lg space-y-2" style={{ background: "var(--surface-elevated)" }}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Evo 2 (sequence + scoring)</span>
+              <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>hosted API</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>AlphaFold 3</span>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-                <span className="text-[11px]" style={{ color: "var(--accent)" }}>Ready</span>
-              </div>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>ESMFold (structure)</span>
+              <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>live API</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>NCBI / PubMed / ClinVar</span>
+              <span className="text-[11px] font-mono" style={{ color: "var(--accent)" }}>live</span>
             </div>
           </div>
         </div>
 
-        {/* Hardware */}
+        {/* Provenance / honesty */}
         <div>
-          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Infrastructure</span>
-          <div className="flex items-center gap-2 mb-2">
-            <Cpu size={14} style={{ color: "var(--text-muted)" }} />
-            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>ASUS Ascent GX10</span>
+          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>What&apos;s real</span>
+          <div className="flex items-start gap-2 mb-2">
+            <Cpu size={14} style={{ color: "var(--text-muted)", marginTop: 2 }} />
+            <span className="text-[11px] leading-relaxed" style={{ color: "var(--text-faint)" }}>
+              Retrieval, translation, and ESMFold structure prediction are live.
+              Evo 2 uses the hosted endpoint when a key is configured, and a
+              deterministic local model otherwise — the sidebar pill shows which
+              is active so nothing is presented as more than it is.
+            </span>
           </div>
-          <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>128 GB LPDDRX / Local inference / No rate limits</span>
         </div>
       </div>
     </div>

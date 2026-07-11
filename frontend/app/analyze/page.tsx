@@ -18,6 +18,9 @@ import { useMutationSim } from "@/hooks/useMutationSim";
 import SequenceInput from "@/components/sequence/SequenceInput";
 import SequenceViewer from "@/components/sequence/SequenceViewer";
 import SequenceEditor from "@/components/sequence/SequenceEditor";
+import EngineStatus from "@/components/ui/EngineStatus";
+import ToolsPanel from "@/components/workspace/ToolsPanel";
+import ExperimentHistory from "@/components/workspace/ExperimentHistory";
 import AnnotationTrack from "@/components/annotation/AnnotationTrack";
 import AnnotationLegend from "@/components/annotation/AnnotationLegend";
 import LikelihoodGraph from "@/components/annotation/LikelihoodGraph";
@@ -366,10 +369,7 @@ function AnalyzePageInner() {
             <LogOut size={14} style={{ color: "var(--text-muted)" }} />
             <span className="label-caps" style={{ fontSize: "9px" }}>Exit to landing</span>
           </Link>
-          <div className="flex items-center gap-2.5 px-3 pt-2">
-            <div className="status-pulse" />
-            <span className="label-caps" style={{ fontSize: "9px" }}>Evo 2 · Ready</span>
-          </div>
+          <EngineStatus />
           {wsStatus !== "disconnected" && (
             <div className="flex items-center gap-2.5 px-3 pt-1">
               <div className="w-2 h-2 rounded-full" style={{
@@ -1121,6 +1121,9 @@ function AnalyzePageInner() {
                     })()}
                   </div>
                   <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
+                  {/* Research tools: off-target, codon opt, variants, export */}
+                  <ToolsPanel />
+                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
                   {/* Live 3D structure preview */}
                   <div className="p-5">
                     <div className="flex items-center justify-between mb-2">
@@ -1170,6 +1173,8 @@ function AnalyzePageInner() {
                       </div>
                     )}
                   </div>
+                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
+                  <ExperimentHistory />
                 </motion.div>
                 {chatOpen && <ChatPanel />}
               </div>

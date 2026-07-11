@@ -491,9 +491,17 @@ def create_evo2_service(cfg: Settings | None = None) -> Evo2Service:
     if cfg.evo2_mode == "local":
         return Evo2LocalService(model_path=cfg.evo2_model_path)
     if cfg.evo2_mode == "nim_api":
-        api_key = cfg.evo2_nim_api_key or getattr(cfg, "evo2_key", "") or os.environ.get("EVO2_KEY", "")
+        api_key = (
+            cfg.evo2_nim_api_key
+            or getattr(cfg, "evo2_key", "")
+            or os.environ.get("EVO2_KEY", "")
+            or os.environ.get("EVO2_NIM_API_KEY", "")
+            or os.environ.get("NVIDIA_API_KEY", "")
+        )
         if not api_key:
-            raise ValueError("EVO2_NIM_API_KEY or EVO2_KEY required for NIM mode")
+            raise ValueError(
+                "EVO2_NIM_API_KEY, EVO2_KEY, or NVIDIA_API_KEY required for NIM mode"
+            )
         return Evo2NIMService(
             api_key=api_key, api_url=cfg.evo2_nim_api_url
         )
