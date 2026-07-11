@@ -115,9 +115,21 @@ def deterministic_plan(
     if any(token in text for token in ("compare", "rank", "best candidate", "which candidate")):
         actions.append({"tool": "compare_candidates", "args": {}})
 
-    # Optimize
-    if any(token in text for token in ("tissue-specific", "tissue specific", "safer", "novel", "functional")):
-        actions.append({"tool": "optimize_candidate", "args": {"objective": objective_from_prompt(text)}})
+    # Optimize / improve
+    if any(token in text for token in (
+        "tissue-specific", "tissue specific", "safer", "novel", "functional",
+        "improve", "better", "boost", "increase", "suggestion", "what should",
+    )):
+        if not any(a["tool"] == "optimize_candidate" for a in actions):
+            actions.append({"tool": "optimize_candidate", "args": {"objective": objective_from_prompt(text)}})
+            actions.append({"tool": "explain_candidate", "args": {}})
+
+    # Explain / interpret scores — still default explain, but ensure LLM responder runs
+    if any(token in text for token in (
+        "what do", "what does", "explain", "mean", "beginner", "plain english",
+        "scores mean", "interpret", "why is", "how good",
+    )) and not actions:
+        actions.append({"tool": "explain_candidate", "args": {}})
 
     # Codon optimize
     if any(token in text for token in ("codon", "codon optim", "expression optim", "cai")):

@@ -22,24 +22,20 @@ export default function CompareView() {
   const candA = candidates[0];
   const candB = candidates[1];
 
-  // Generate stable mock diffs based on sequence
+  // Real sequence diff between top two candidates
   const diffs = useMemo(() => {
-    if (!rawSequence || rawSequence.length < 20) return [];
-    const bases = "ATCG";
-    const result = [];
-    for (let i = 0; i < Math.min(rawSequence.length, 200); i++) {
-      // Deterministic pseudo-random from position
-      const hash = ((i * 2654435761) >>> 0) % 100;
-      if (hash < 8) { // ~8% of positions differ
-        const orig = rawSequence[i];
-        let alt = bases[(bases.indexOf(orig) + 1 + (hash % 3)) % 4];
-        if (alt === orig) alt = bases[(bases.indexOf(orig) + 2) % 4];
-        const delta = ((hash - 50) / 10) * (hash % 2 === 0 ? 1 : -1);
-        result.push({ position: i, baseA: orig, baseB: alt, delta: Math.round(delta * 100) / 100 });
+    const seqA = candA?.sequence ?? rawSequence;
+    const seqB = candB?.sequence;
+    if (!seqA || !seqB || seqB.length === 0) return [];
+    const len = Math.min(seqA.length, seqB.length);
+    const result: Array<{ position: number; baseA: string; baseB: string; delta: number }> = [];
+    for (let i = 0; i < len; i++) {
+      if (seqA[i] !== seqB[i]) {
+        result.push({ position: i, baseA: seqA[i], baseB: seqB[i], delta: 0 });
       }
     }
-    return result.slice(0, 12);
-  }, [rawSequence]);
+    return result.slice(0, 24);
+  }, [candA?.sequence, candB?.sequence, rawSequence]);
 
   if (!candA || !candB) {
     return (
@@ -51,9 +47,10 @@ export default function CompareView() {
 
   // Get a short region of sequence for the split-pane view
   const seqStart = diffs.length > 0 ? Math.max(0, diffs[0].position - 10) : 0;
-  const seqEnd = Math.min(rawSequence.length, seqStart + 60);
-  const seqSliceA = rawSequence.slice(seqStart, seqEnd);
-  const diffPositionSet = new Set(diffs.map(d => d.position));
+  const seqEnd = Math.min((candA?.sequence ?? rawSequence).length, seqStart + 60);
+  const seqSliceA = (candA?.sequence ?? rawSequence).slice(seqStart, seqEnd);
+  const seqSliceB = (candB?.sequence ?? "").slice(seqStart, seqEnd);
+  const diffPositionSet = new Set(diffs.map((d) => d.position));
 
   return (
     <div className="flex-1 overflow-auto" style={{ background: "var(--surface-base)" }}>
@@ -134,19 +131,17 @@ export default function CompareView() {
               <div className="flex gap-1">
                 <span className="text-[10px] w-8 text-right shrink-0 tabular-nums select-none" style={{ color: "var(--text-faint)" }}>{seqStart}</span>
                 <div className="flex flex-wrap">
-                  {seqSliceA.split("").map((base, i) => {
+                  {seqSliceB.split("").map((base, i) => {
                     const pos = seqStart + i;
-                    const diff = diffs.find(d => d.position === pos);
-                    const displayBase = diff ? diff.baseB : base;
-                    const isDiff = !!diff;
+                    const isDiff = diffPositionSet.has(pos);
                     return (
                       <span key={i} className="inline-block w-[1ch] text-center"
                         style={{
-                          color: BC[displayBase] ?? "var(--text-muted)",
+                          color: BC[base] ?? "var(--text-muted)",
                           background: isDiff ? "color-mix(in oklch, var(--accent), transparent 85%)" : "transparent",
                           borderRadius: isDiff ? "2px" : "0",
                         }}>
-                        {displayBase}
+                        {base}
                       </span>
                     );
                   })}

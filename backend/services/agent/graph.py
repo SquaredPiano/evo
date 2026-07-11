@@ -37,9 +37,10 @@ from services.session_store import SessionStore
 
 logger = logging.getLogger(__name__)
 
-RESPONDER_PROMPT = """You are Helio, the copilot inside Evo — a genomic design IDE.
+RESPONDER_PROMPT = """You are the Evo copilot — the reasoning layer inside a genomic design IDE.
 You are talking to a researcher who just issued a request. You are given the
-user's message, the conversation so far, a snapshot of the active DNA candidate,
+user's message, the conversation so far, a snapshot of the active DNA candidate
+(including any UI context: scores, selected base position, current view),
 and the tools you just ran with their concrete numeric outcomes.
 
 Write a reply that a smart colleague would give:
@@ -92,9 +93,12 @@ class AgenticCopilot:
         candidate_id: int,
         message: str,
         history: list[dict[str, str]] | None = None,
+        ui_context: dict[str, Any] | None = None,
     ) -> AgentChatResult:
         memory_entries = await self._memory.snapshot(session_id, candidate_id)
         candidate_snapshot = await self._candidate_snapshot(session_id=session_id, candidate_id=candidate_id)
+        if ui_context:
+            candidate_snapshot = {**candidate_snapshot, **ui_context}
         state: CopilotState = {
             "session_id": session_id,
             "candidate_id": candidate_id,
@@ -180,7 +184,6 @@ class AgenticCopilot:
 
     async def _plan_node(self, state: CopilotState) -> dict[str, object]:
         iteration = state.get("iteration", 0)
-        reasoning = list(state.get("reasoning_steps", []))
         message = state.get("message", "")
         history = state.get("history", [])
         memory_entries = state.get("memory_entries", [])
@@ -190,25 +193,30 @@ class AgenticCopilot:
         forced = state.get("forced_plan")
         if forced:
             tool_names = [a.get("tool", "?") for a in forced]
-            reasoning.append(f"[iter {iteration}] Forced plan from reflection: {', '.join(tool_names)}")
-            return {"actions": list(forced), "forced_plan": None, "reasoning_steps": reasoning}
+            return {
+                "actions": list(forced),
+                "forced_plan": None,
+                "reasoning_steps": [f"[iter {iteration}] Forced plan from reflection: {', '.join(tool_names)}"],
+            }
 
         if not message:
-            reasoning.append(f"[iter {iteration}] No message provided, defaulting to explain_candidate")
             return {
                 "actions": [{"tool": "explain_candidate", "args": {}}],
                 "iteration": iteration,
-                "reasoning_steps": reasoning,
+                "reasoning_steps": [f"[iter {iteration}] No message provided, defaulting to explain_candidate"],
             }
-
-        reasoning.append(f"[iter {iteration}] Planning actions for: {message[:80]}...")
 
         # 1. Deterministic fast path — reliable for demo-critical commands
         det_plan = deterministic_plan(message, memory_entries=memory_entries)
         if not is_default_explain_plan(det_plan):
             tool_names = [a["tool"] for a in det_plan]
-            reasoning.append(f"[iter {iteration}] Deterministic plan: {', '.join(tool_names)}")
-            return {"actions": det_plan, "reasoning_steps": reasoning}
+            return {
+                "actions": det_plan,
+                "reasoning_steps": [
+                    f"[iter {iteration}] Planning: {message[:80]}...",
+                    f"[iter {iteration}] Deterministic plan: {', '.join(tool_names)}",
+                ],
+            }
 
         # 2. OpenRouter JSON planning — handles everything the fast path can't
         llm_actions = await plan_with_llm(
@@ -216,11 +224,21 @@ class AgenticCopilot:
         )
         if llm_actions:
             tool_names = [a["tool"] for a in llm_actions]
-            reasoning.append(f"[iter {iteration}] OpenRouter plan: {', '.join(tool_names)}")
-            return {"actions": llm_actions, "reasoning_steps": reasoning}
+            return {
+                "actions": llm_actions,
+                "reasoning_steps": [
+                    f"[iter {iteration}] Planning: {message[:80]}...",
+                    f"[iter {iteration}] OpenRouter plan: {', '.join(tool_names)}",
+                ],
+            }
 
-        reasoning.append(f"[iter {iteration}] Fallback plan: explain_candidate")
-        return {"actions": det_plan, "reasoning_steps": reasoning}
+        return {
+            "actions": det_plan,
+            "reasoning_steps": [
+                f"[iter {iteration}] Planning: {message[:80]}...",
+                f"[iter {iteration}] Fallback plan: explain_candidate",
+            ],
+        }
 
     async def _execute_node(self, state: CopilotState) -> dict[str, object]:
         session_id = str(state["session_id"])
@@ -269,7 +287,6 @@ class AgenticCopilot:
 
     async def _reflect_node(self, state: CopilotState) -> dict[str, object]:
         iteration = state.get("iteration", 0) + 1
-        reasoning = list(state.get("reasoning_steps", []))
         tool_calls = state.get("tool_calls", [])
 
         failed_tools = [tc for tc in tool_calls if tc.get("status") == "failed"]
@@ -284,14 +301,26 @@ class AgenticCopilot:
 
         should_continue = False
         forced_plan: list[dict[str, Any]] | None = None
+        new_steps: list[str] = []
 
         already_optimized = any(
             tc.get("tool") == "optimize_candidate" for tc in tool_calls
         )
-        message = state.get("message", "")
+        message_lc = (state.get("message") or "").lower()
+        explicit_transform = any(
+            phrase in message_lc
+            for phrase in (
+                "all t", "all ts", "all a", "all c", "all g",
+                "transform", "replace all", "reverse complement", "for the fun",
+            )
+        )
+        wants_optimization = any(
+            kw in message_lc
+            for kw in ("optim", "improve", "better", "safer", "boost", "stronger", "fix score", "make it")
+        )
 
         if has_failures and iteration < MAX_AGENT_ITERATIONS:
-            reasoning.append(
+            new_steps.append(
                 f"[reflect iter {iteration}] {len(failed_tools)} tool(s) failed. Re-planning to recover."
             )
             should_continue = True
@@ -300,11 +329,11 @@ class AgenticCopilot:
             and combined_score < 0.45
             and iteration < MAX_AGENT_ITERATIONS
             and not already_optimized
+            and wants_optimization
+            and not explicit_transform
         ):
-            # Actually inject an optimization pass targeting the weakest dimension,
-            # rather than hoping keyword-matching re-plans it.
             objective = _weakest_objective(scores)
-            reasoning.append(
+            new_steps.append(
                 f"[reflect iter {iteration}] Combined score {combined_score:.3f} is weak (<0.45). "
                 f"Auto-optimizing for '{objective}'."
             )
@@ -314,7 +343,7 @@ class AgenticCopilot:
                 {"tool": "explain_candidate", "args": {}},
             ]
         else:
-            reasoning.append(
+            new_steps.append(
                 f"[reflect iter {iteration}] "
                 + (f"Score {combined_score:.3f}. " if combined_score is not None else "")
                 + f"Satisfied after {iteration} iteration(s)."
@@ -324,7 +353,7 @@ class AgenticCopilot:
             "iteration": iteration,
             "should_continue": should_continue,
             "forced_plan": forced_plan,
-            "reasoning_steps": reasoning,
+            "reasoning_steps": new_steps,
         }
 
     async def _respond_node(self, state: CopilotState) -> dict[str, str]:
@@ -466,12 +495,15 @@ class AgenticCopilot:
                 service=self._service, candidate_id=candidate_id, sequence=sequence,
             )
         except Exception:
-            scores, per_position = await score_candidate(Evo2MockService(), sequence)
+            try:
+                scores, per_position = await score_candidate(self._service, sequence)
+            except Exception:
+                scores, per_position = await score_candidate(Evo2MockService(), sequence)
             score_dict = scores.to_dict()
             return ToolExecution(
                 call=AgentToolCall(
-                    tool="score_candidate", status="ok",
-                    summary="Scored active candidate with mock fallback.",
+                    tool="explain_candidate", status="ok",
+                    summary="Recovered by re-scoring the active candidate.",
                 ),
                 note=(
                     f"Recovered with fallback scoring. Candidate #{candidate_id} combined "

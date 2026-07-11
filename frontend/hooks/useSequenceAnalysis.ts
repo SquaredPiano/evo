@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { analyzeSequence, submitDesign } from "@/lib/api";
+import { analyzeSequence, bootstrapSession } from "@/lib/api";
 import { useEvoStore } from "@/lib/store";
-
-const MIN_PIPELINE_DURATION = 6200; // ms — let the animation play out
 
 export function useSequenceAnalysis() {
   const pipelineStatus = useEvoStore((s) => s.pipelineStatus);
@@ -20,29 +18,17 @@ export function useSequenceAnalysis() {
       setViewMode("pipeline");
       setPipelineStatus("analyzing");
 
-      const startTime = Date.now();
-
       try {
-        // Hits local Next.js API routes (mock) or real backend via NEXT_PUBLIC_API_URL
         const result = await analyzeSequence(sequence);
-
-        // Let the pipeline animation play for a satisfying duration
-        const elapsed = Date.now() - startTime;
-        if (elapsed < MIN_PIPELINE_DURATION) {
-          await new Promise((r) => setTimeout(r, MIN_PIPELINE_DURATION - elapsed));
-        }
 
         setAnalysisResult(result);
 
-        // Create a backend session so Helio agent chat works
+        // Bind the analyzed sequence to a backend session so the agent edits the right DNA.
         try {
-          const { sessionId } = await submitDesign(
-            `Analyze sequence: ${sequence.slice(0, 50)}...`,
-            { numCandidates: 1, runProfile: "demo", truthMode: "demo_fallback" }
-          );
-          useEvoStore.getState().setSessionId(sessionId);
+          const boot = await bootstrapSession(sequence);
+          useEvoStore.getState().setSessionId(boot.session_id);
         } catch {
-          // Session creation is optional — Helio falls back to local responses
+          // Agent can still bootstrap via sequence on first chat message.
         }
 
         return result;

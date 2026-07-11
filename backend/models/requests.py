@@ -32,8 +32,8 @@ class DesignRequest(BaseModel):
     session_id: str | None = None
     user_id: str | None = None
     num_candidates: int = Field(10, ge=1, le=10, description="Number of candidates to generate (1–10)")
-    run_profile: Literal["demo", "live"] = "demo"
-    truth_mode: Literal["demo_fallback", "real_only"] = "demo_fallback"
+    run_profile: Literal["demo", "live"] = "live"
+    truth_mode: Literal["demo_fallback", "real_only"] = "real_only"
     target_length: int | None = Field(
         None,
         ge=100,
@@ -82,12 +82,32 @@ class FollowupEditRequest(BaseModel):
     candidate_id: int | None = None
 
 
+class SessionBootstrapRequest(BaseModel):
+    """Bind a DNA sequence to a session without running the full design pipeline."""
+    sequence: str
+    session_id: str | None = None
+    candidate_id: int = Field(0, ge=0)
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
+class AgentContext(BaseModel):
+    """Optional UI context so the agent can explain what the user is looking at."""
+    scores: dict[str, float] | None = None
+    selected_position: int | None = Field(None, ge=0)
+    view_mode: str | None = None
+
+
 class AgentChatRequest(BaseModel):
     session_id: str
     candidate_id: int = 0
     message: str
     history: list[dict[str, str]] = Field(default_factory=list)
-    sequence: str | None = None  # Optional: bootstrap a session on the fly
+    sequence: str | None = None  # Sync session to the sequence visible in the editor
+    context: AgentContext | None = None
 
 
 class MutationRequest(BaseModel):

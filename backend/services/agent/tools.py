@@ -40,7 +40,7 @@ async def tool_explain(
         f"(lower is better), novelty {score_dict['novelty']:.3f}."
     )
     return ToolExecution(
-        call=AgentToolCall(tool="score_candidate", status="ok", summary="Scored active candidate."),
+        call=AgentToolCall(tool="explain_candidate", status="ok", summary="Scored and summarized active candidate."),
         note=note,
         candidate_update=AgentCandidateUpdate(
             candidate_id=candidate_id,

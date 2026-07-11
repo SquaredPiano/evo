@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from collections.abc import AsyncIterator as _AsyncIterator
 from contextlib import asynccontextmanager as _acm
 from typing import Any
@@ -25,6 +26,7 @@ from models.requests import (
     FollowupEditRequest,
     MutationRequest,
     OffTargetRequest,
+    SessionBootstrapRequest,
     StructureRequest,
     VariantAnnotationRequest,
 )
@@ -255,8 +257,8 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
             message=request.message,
             candidate_id=candidate_id,
             base_sequence=base_sequence,
-            run_profile=str(context.get("run_profile", "demo")),
-            truth_mode=str(context.get("truth_mode", "demo_fallback")),
+            run_profile=str(context.get("run_profile", "live")),
+            truth_mode=str(context.get("truth_mode", "real_only")),
             design_type_hint=str(context.get("design_type", "regulatory_element")),
             on_candidate_ready=lambda updated_candidate_id, sequence: _persist_candidate_sequence(
                 request.session_id, updated_candidate_id, sequence
@@ -267,29 +269,49 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
     return FollowupAcceptedResponse(steps_rerunning=steps)
 
 
+@app.post("/api/session/bootstrap")
+async def bootstrap_session(request: SessionBootstrapRequest) -> dict[str, object]:
+    """Bind a sequence to a session for agent chat / edits — no pipeline run."""
+    session_id = request.session_id or str(uuid.uuid4())
+    await session_store.set_candidate_sequence(session_id, request.candidate_id, request.sequence)
+    return {
+        "session_id": session_id,
+        "candidate_id": request.candidate_id,
+        "length": len(request.sequence),
+    }
+
+
 @app.post("/api/agent/chat", response_model=AgentChatResponse)
 async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
-    # Auto-bootstrap session when frontend sends a sequence but no real session exists
-    try:
-        await session_store.require_candidate_sequence(request.session_id, request.candidate_id)
-    except (SessionNotFoundError, CandidateNotFoundError):
-        if request.sequence:
-            await session_store.set_candidate_sequence(
-                request.session_id, request.candidate_id, request.sequence,
-            )
-        else:
+    session_id = request.session_id
+
+    # Keep the backend sequence aligned with what the user sees in the editor.
+    if request.sequence:
+        try:
+            stored = await session_store.require_candidate_sequence(session_id, request.candidate_id)
+            if stored != request.sequence:
+                await session_store.set_candidate_sequence(session_id, request.candidate_id, request.sequence)
+        except (SessionNotFoundError, CandidateNotFoundError):
+            await session_store.set_candidate_sequence(session_id, request.candidate_id, request.sequence)
+    else:
+        try:
+            await session_store.require_candidate_sequence(session_id, request.candidate_id)
+        except (SessionNotFoundError, CandidateNotFoundError):
             raise HTTPException(
                 status_code=404,
-                detail="session not found — include 'sequence' to auto-create",
-            )
+                detail="session not found — include 'sequence' to bootstrap",
+            ) from None
+
+    ctx = request.context.model_dump(exclude_none=True) if request.context else None
 
     async with _session_errors_to_http(request.candidate_id):
-        async with session_store.candidate_guard(request.session_id, request.candidate_id):
+        async with session_store.candidate_guard(session_id, request.candidate_id):
             result = await copilot.chat(
-                session_id=request.session_id,
+                session_id=session_id,
                 candidate_id=request.candidate_id,
                 message=request.message,
                 history=request.history,
+                ui_context=ctx,
             )
 
     candidate_update = None

@@ -166,12 +166,16 @@ async def _score_with_fallback(
     sequence: str,
     target_tissues: list[str] | None,
     timeout: float,
+    *,
+    allow_demo_fallback: bool = False,
 ) -> tuple[CandidateScores, list[LikelihoodScore]]:
-    """Score a candidate, falling back to mock service on timeout or error."""
+    """Score a candidate; only use mock fallback when demo_fallback is allowed."""
     try:
         async with asyncio.timeout(timeout):
             return await score_candidate(service, sequence, target_tissues=target_tissues)
     except Exception:
+        if not allow_demo_fallback:
+            raise
         logger.warning("Primary scoring failed, falling back to mock", exc_info=True)
         return await score_candidate(fallback_service, sequence, target_tissues=target_tissues)
 
@@ -519,17 +523,27 @@ async def run_generation_pipeline(
                                     data=GenerationTokenData(candidate_id=candidate_id, token=token, position=position)
                                 ).to_json(),
                             )
-            except Exception:
-                generated = await _fill_with_demo_tokens(
-                    manager=manager,
-                    session_id=session_id,
-                    candidate_id=candidate_id,
-                    generated=generated,
-                    seed_length=len(varied_seed),
-                    n_tokens=tokens_to_generate,
-                    temperature=temperature,
-                    fallback_service=fallback_service,
-                )
+            except Exception as gen_exc:
+                if profile.truth_mode == "demo_fallback":
+                    generated = await _fill_with_demo_tokens(
+                        manager=manager,
+                        session_id=session_id,
+                        candidate_id=candidate_id,
+                        generated=generated,
+                        seed_length=len(varied_seed),
+                        n_tokens=tokens_to_generate,
+                        temperature=temperature,
+                        fallback_service=fallback_service,
+                    )
+                else:
+                    candidate = await _mark_failed(
+                        candidate_id, varied_seed, f"generation_error:{gen_exc}", "generation"
+                    )
+                    runtime[candidate_id] = candidate
+                    async with runtime_lock:
+                        finished_generation += 1
+                        await tracker.set("generation", "active", finished_generation / candidate_count)
+                    return
 
             if on_candidate_ready is not None:
                 callback_result = on_candidate_ready(candidate_id, generated)
@@ -543,9 +557,24 @@ async def run_generation_pipeline(
 
             # --- Score ---
             target_tissues = spec.tissue_specificity.high_expression if spec.tissue_specificity else None
-            scores, per_position = await _score_with_fallback(
-                service, fallback_service, generated, target_tissues, profile.scoring_timeout,
-            )
+            try:
+                scores, per_position = await _score_with_fallback(
+                    service,
+                    fallback_service,
+                    generated,
+                    target_tissues,
+                    profile.scoring_timeout,
+                    allow_demo_fallback=profile.truth_mode == "demo_fallback",
+                )
+            except Exception as score_exc:
+                candidate = await _mark_failed(
+                    candidate_id, generated, f"scoring_error:{score_exc}", "scoring"
+                )
+                runtime[candidate_id] = candidate
+                async with runtime_lock:
+                    finished_scoring += 1
+                    await tracker.set("scoring", "active", finished_scoring / candidate_count)
+                return
             score_dict = await _emit_scored(manager, session_id, candidate_id, scores, per_position)
 
             async with runtime_lock:
@@ -690,8 +719,8 @@ async def run_followup_pipeline(
     message: str,
     candidate_id: int = 0,
     base_sequence: str = DEFAULT_SEED,
-    run_profile: str = "demo",
-    truth_mode: str = "demo_fallback",
+    run_profile: str = "live",
+    truth_mode: str = "real_only",
     design_type_hint: str | None = None,
     on_candidate_ready: CandidateUpdateCallback | None = None,
     on_spec_ready: SpecUpdateCallback | None = None,
@@ -729,7 +758,12 @@ async def run_followup_pipeline(
     await tracker.set("scoring", "active", 0.2)
     target_tissues = spec.tissue_specificity.high_expression if spec.tissue_specificity else None
     scores, per_position = await _score_with_fallback(
-        service, fallback_service, base, target_tissues, profile.scoring_timeout,
+        service,
+        fallback_service,
+        base,
+        target_tissues,
+        profile.scoring_timeout,
+        allow_demo_fallback=profile.truth_mode == "demo_fallback",
     )
     await _emit_scored(manager, session_id, candidate_id, scores, per_position)
     await tracker.set("scoring", "done", 1.0)

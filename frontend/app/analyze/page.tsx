@@ -18,7 +18,7 @@ import { useMutationSim } from "@/hooks/useMutationSim";
 import SequenceInput from "@/components/sequence/SequenceInput";
 import SequenceViewer from "@/components/sequence/SequenceViewer";
 import SequenceEditor from "@/components/sequence/SequenceEditor";
-import EngineStatus from "@/components/ui/EngineStatus";
+import WorkspaceSidebar from "@/components/layout/WorkspaceSidebar";
 import ToolsPanel from "@/components/workspace/ToolsPanel";
 import ExperimentHistory from "@/components/workspace/ExperimentHistory";
 import AnnotationTrack from "@/components/annotation/AnnotationTrack";
@@ -39,11 +39,11 @@ const ProteinViewer = dynamic(() => import("@/components/structure/ProteinViewer
 /* ─── Constants ──────────────────────────────────────────────────────── */
 
 const SIDEBAR_ITEMS = [
-  { icon: Dna, label: "Sequencing", viewMode: "analyze" as const },
+  { icon: Dna, label: "Overview", viewMode: "analyze" as const },
   { icon: Box, label: "Structure", viewMode: "structure" as const },
-  { icon: Search, label: "Proteomics", viewMode: "explorer" as const },
-  { icon: FlaskConical, label: "Synthesis", viewMode: "ide" as const },
-  { icon: BarChart3, label: "Analysis", viewMode: "leaderboard" as const },
+  { icon: Search, label: "Explorer", viewMode: "explorer" as const },
+  { icon: Pencil, label: "Studio", viewMode: "ide" as const },
+  { icon: BarChart3, label: "Candidates", viewMode: "leaderboard" as const },
 ];
 
 const VIEW_LABELS = {
@@ -92,7 +92,7 @@ const scaleIn = {
 
 function AnimatedScoreBar({ value, color, delay = 0 }: { value: number; color: string; delay?: number }) {
   return (
-    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
+    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "var(--wax)" }}>
       <motion.div
         className="h-full rounded-full"
         initial={{ width: 0 }}
@@ -252,8 +252,6 @@ function AnalyzePageInner() {
     }
   }, [setHighlightResidues, clickedResidue]);
 
-  // Sidebar hover state for spring animation
-  const [hoveredNav, setHoveredNav] = useState<string | null>(null);
   // Mobile sidebar collapse
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -277,125 +275,20 @@ function AnalyzePageInner() {
         currentView={viewMode}
       />
 
-      {/* ── SIDEBAR ── */}
-      <motion.aside
-        className={`w-[220px] shrink-0 flex flex-col h-full fixed lg:relative z-50 lg:z-auto transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
-        style={{
-          background: "var(--rail-bg)",
-          borderRight: "2px solid var(--hard-border)",
-          // Scope light-on-dark tokens to the rail so descendants stay legible.
-          ["--text-primary" as string]: "var(--rail-text)",
-          ["--text-secondary" as string]: "rgba(244,239,226,0.82)",
-          ["--text-muted" as string]: "var(--rail-muted)",
-          ["--text-faint" as string]: "rgba(244,239,226,0.45)",
-          ["--surface-elevated" as string]: "rgba(255,255,255,0.08)",
-          ["--accent-bright" as string]: "var(--honey-400)",
-        } as React.CSSProperties}
-        initial={{ x: -220, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        transition={{ ...springTransition, delay: 0.1 }}
-        aria-label="Main navigation"
-        role="navigation"
-      >
-        {/* Wordmark */}
-        <div className="px-5 h-16 flex items-center gap-2" style={{ borderBottom: "1px solid var(--rail-border)" }}>
-          <span className="inline-flex items-center justify-center w-7 h-7" style={{ background: "var(--honey-500)", color: "var(--ink)" }}>
-            <Dna size={16} strokeWidth={2.5} />
-          </span>
-          <span className="wordmark text-[15px]" style={{ color: "var(--rail-text)" }}>Evo</span>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 px-3 space-y-0.5 mt-2" aria-label="Workspace views">
-          <motion.button
-            onClick={() => { setViewMode("input"); setSidebarOpen(false); }}
-            onMouseEnter={() => setHoveredNav("input")}
-            onMouseLeave={() => setHoveredNav(null)}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            transition={springTransition}
-            aria-current={viewMode === "input" || viewMode === "pipeline" ? "page" : undefined}
-            className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-left transition-colors ${
-              viewMode === "input" || viewMode === "pipeline" ? "nav-active" : "hover:bg-white/[0.03]"
-            }`}>
-            <Home size={16} aria-hidden="true" style={{ color: viewMode === "input" || viewMode === "pipeline" ? "var(--accent-bright)" : "var(--text-faint)" }} />
-            <span className="label-caps" style={{ color: viewMode === "input" || viewMode === "pipeline" ? "var(--accent-bright)" : "var(--text-muted)" }}>Home</span>
-          </motion.button>
-          {SIDEBAR_ITEMS.map(({ icon: Icon, label, viewMode: target }) => {
-            const isActive = viewMode === target || (target === "ide" && viewMode === "compare");
-            return (
-              <motion.button key={target}
-                onClick={() => { (analysisResult || target === "structure") ? setViewMode(target) : setViewMode("input"); setSidebarOpen(false); }}
-                onMouseEnter={() => setHoveredNav(target)}
-                onMouseLeave={() => setHoveredNav(null)}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                transition={springTransition}
-                aria-current={isActive ? "page" : undefined}
-                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-left transition-colors ${
-                  isActive ? "nav-active" : "hover:bg-white/[0.03]"
-                }`}>
-                <Icon size={16} aria-hidden="true" style={{ color: isActive ? "var(--accent-bright)" : "var(--text-faint)" }} />
-                <span className="label-caps" style={{ color: isActive ? "var(--accent-bright)" : "var(--text-muted)" }}>{label}</span>
-              </motion.button>
-            );
-          })}
-        </nav>
-
-        {/* User */}
-        <div className="px-4 py-3">
-          {user ? (
-            <div className="flex items-center gap-2.5 px-3 py-2">
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold"
-                style={{ background: "var(--surface-elevated)", color: "var(--text-secondary)" }}>
-                {user.name.charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-[12px] font-medium block truncate" style={{ color: "var(--text-primary)" }}>{user.name}</span>
-                <span className="text-[10px] block truncate" style={{ color: "var(--text-faint)" }}>{user.email}</span>
-              </div>
-            </div>
-          ) : (
-            <button onClick={signIn}
-              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md transition-all hover:bg-white/[0.04]">
-              <span className="label-caps" style={{ fontSize: "9px", color: "var(--accent)" }}>Sign in</span>
-            </button>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-4 py-3 space-y-2">
-          <button onClick={() => setShowTutorial(true)}
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md transition-all hover:bg-white/[0.04]"
-            title="Restart tutorial">
-            <HelpCircle size={14} style={{ color: "var(--text-muted)" }} />
-            <span className="label-caps" style={{ fontSize: "9px" }}>Tutorial</span>
-          </button>
-          <button onClick={toggleTheme}
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md transition-all hover:bg-white/[0.04]"
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
-            {theme === "dark" ? <Sun size={14} style={{ color: "var(--text-muted)" }} /> : <Moon size={14} style={{ color: "var(--text-muted)" }} />}
-            <span className="label-caps" style={{ fontSize: "9px" }}>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
-          </button>
-          <Link href="/"
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md transition-all hover:bg-white/[0.04]">
-            <LogOut size={14} style={{ color: "var(--text-muted)" }} />
-            <span className="label-caps" style={{ fontSize: "9px" }}>Exit to landing</span>
-          </Link>
-          <EngineStatus />
-          {wsStatus !== "disconnected" && (
-            <div className="flex items-center gap-2.5 px-3 pt-1">
-              <div className="w-2 h-2 rounded-full" style={{
-                background: wsStatus === "connected" ? "var(--accent)" : "var(--base-g)",
-                boxShadow: wsStatus === "connected" ? "0 0 6px oklch(0.72 0.12 175 / 0.4)" : "none",
-              }} />
-              <span className="label-caps" style={{ fontSize: "9px" }}>
-                WS · {wsStatus === "connected" ? "Connected" : "Connecting..."}
-              </span>
-            </div>
-          )}
-        </div>
-      </motion.aside>
+      <WorkspaceSidebar
+        viewMode={viewMode}
+        analysisResult={analysisResult}
+        sidebarOpen={sidebarOpen}
+        onNavigate={(v) => setViewMode(v as typeof viewMode)}
+        onCloseMobile={() => setSidebarOpen(false)}
+        user={user}
+        onSignIn={signIn}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onShowTutorial={() => setShowTutorial(true)}
+        wsStatus={wsStatus}
+        navItems={SIDEBAR_ITEMS}
+      />
 
       <div className="flex-1 flex flex-col overflow-hidden" id="main-content">
         {/* ── HEADER (glassmorphic) ── */}
@@ -444,7 +337,7 @@ function AnalyzePageInner() {
                   ))}
                 </div>
                 <button onClick={toggleChat}
-                  aria-label={chatOpen ? "Close Helio chat" : "Open Helio chat"}
+                  aria-label={chatOpen ? "Close Evo Copilot" : "Open Evo Copilot"}
                   aria-pressed={chatOpen}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all font-label"
                   style={{
@@ -452,7 +345,7 @@ function AnalyzePageInner() {
                     background: chatOpen ? "var(--honey-200)" : "transparent",
                     border: "1.5px solid var(--accent)",
                   }}>
-                  <Sparkles size={12} /> Helio
+                  <Sparkles size={12} /> Copilot
                 </button>
               </>
             )}
@@ -1202,11 +1095,11 @@ function AnalyzePageInner() {
         </AnimatePresence>
       </div>
 
-      {/* Floating Helio button */}
+      {/* Floating Copilot button */}
       {!chatOpen && viewMode !== "input" && viewMode !== "pipeline" && analysisResult && (
         <motion.button onClick={toggleChat}
-          aria-label="Open Helio AI assistant"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 text-sm font-bold uppercase tracking-wider"
+          aria-label="Open Evo Copilot"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 text-sm font-bold uppercase tracking-wider rounded-2xl"
           style={{
             background: "var(--honey-500)",
             color: "var(--ink)",
@@ -1219,7 +1112,7 @@ function AnalyzePageInner() {
           whileTap={{ scale: 0.95 }}
           transition={springTransition}
         >
-          <Sparkles size={16} /> Ask Helio
+          <Sparkles size={16} /> Ask Copilot
         </motion.button>
       )}
     </div>

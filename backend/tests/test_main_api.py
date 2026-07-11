@@ -159,6 +159,31 @@ def test_followup_endpoint() -> None:
     assert "evo2_scoring" in body["steps_rerunning"]
 
 
+def test_session_bootstrap_binds_sequence() -> None:
+    client = TestClient(app)
+    seq = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAG"
+    res = client.post(
+        "/api/session/bootstrap",
+        json={"session_id": "bootstrap-test", "candidate_id": 0, "sequence": seq},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["session_id"] == "bootstrap-test"
+    assert body["candidate_id"] == 0
+    assert body["length"] == len(seq)
+
+    chat = client.post(
+        "/api/agent/chat",
+        json={
+            "session_id": "bootstrap-test",
+            "candidate_id": 0,
+            "message": "explain this candidate",
+        },
+    )
+    assert chat.status_code == 200
+    assert chat.json()["candidate_update"]["sequence"] == seq
+
+
 def test_agent_chat_explain_endpoint() -> None:
     client = TestClient(app)
     session_id = "agent-explain"
@@ -171,7 +196,7 @@ def test_agent_chat_explain_endpoint() -> None:
     assert res.status_code == 200
     body = res.json()
     assert "assistant_message" in body
-    assert body["tool_calls"][0]["tool"] == "score_candidate"
+    assert body["tool_calls"][0]["tool"] == "explain_candidate"
     assert body["candidate_update"]["candidate_id"] == 0
     assert "combined" in body["candidate_update"]["scores"]
 
@@ -216,7 +241,7 @@ def test_agent_chat_failed_edit_falls_back_to_scoring() -> None:
     body = response.json()
     tools = body["tool_calls"]
     assert any(call["tool"] == "edit_base" and call["status"] == "failed" for call in tools)
-    assert any(call["tool"] == "score_candidate" and call["status"] == "ok" for call in tools)
+    assert any(call["tool"] == "explain_candidate" and call["status"] == "ok" for call in tools)
     assert body["candidate_update"] is not None
     assert "combined" in body["candidate_update"]["scores"]
 

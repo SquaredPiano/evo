@@ -428,6 +428,7 @@ class Evo2NIMService(Evo2Service):
                 "model": "evo2-40b-nim",
                 "gpu_available": True,
                 "inference_mode": "nim_api",
+                "scoring_note": "NIM generate API used for token generation; per-position logits use calibrated heuristic until a forward endpoint is available.",
             }
         except Exception as e:
             if self._is_retryable_nim_error(e):

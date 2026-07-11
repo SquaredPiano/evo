@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+import operator
+from dataclasses import dataclass
+from typing import Annotated, Any
 
 from typing_extensions import TypedDict
 
@@ -18,14 +19,14 @@ class CopilotState(TypedDict, total=False):
     history: list[dict[str, str]]
     actions: list[dict[str, Any]]
     forced_plan: list[dict[str, Any]] | None
-    tool_calls: list[dict[str, str]]
+    tool_calls: Annotated[list[dict[str, str]], operator.add]
     candidate_update: dict[str, Any] | None
     comparison: list[dict[str, Any]] | None
-    execution_notes: list[str]
+    execution_notes: Annotated[list[str], operator.add]
     assistant_message: str
     iteration: int
     should_continue: bool
-    reasoning_steps: list[str]
+    reasoning_steps: Annotated[list[str], operator.add]
     memory_entries: list[dict[str, Any]]
     candidate_snapshot: dict[str, Any]
 

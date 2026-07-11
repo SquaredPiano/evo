@@ -61,8 +61,9 @@ export function useDesignPipeline() {
         candidateScoresRef.current = {};
         const { sessionId, wsUrl } = await submitDesign(goal, {
           numCandidates: 10,
-          runProfile: "demo",
-          truthMode: "demo_fallback",
+          runProfile: "live",
+          truthMode: "real_only",
+          seedSequence: useEvoStore.getState().rawSequence || undefined,
         });
         setSessionId(sessionId);
 

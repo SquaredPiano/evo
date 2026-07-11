@@ -148,6 +148,25 @@ export interface SubmitDesignOptions {
   runProfile?: "demo" | "live";
   truthMode?: "demo_fallback" | "real_only";
   targetLength?: number;
+  seedSequence?: string;
+}
+
+/** POST /api/session/bootstrap - Bind a sequence to a session (no pipeline). */
+export async function bootstrapSession(
+  sequence: string,
+  options: { sessionId?: string; candidateId?: number } = {}
+): Promise<{ session_id: string; candidate_id: number; length: number }> {
+  const res = await fetch(`${API_BASE}/api/session/bootstrap`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sequence,
+      session_id: options.sessionId,
+      candidate_id: options.candidateId ?? 0,
+    }),
+  });
+  if (!res.ok) throw new Error(`Session bootstrap failed: ${res.status}`);
+  return res.json();
 }
 
 /** POST /api/design - Start a full design pipeline. Returns WS URL for streaming. */
@@ -163,6 +182,7 @@ export async function submitDesign(
     runProfile = "live",
     truthMode = "real_only",
     targetLength,
+    seedSequence,
   } = options;
   const body: Record<string, unknown> = {
     goal,
@@ -173,6 +193,9 @@ export async function submitDesign(
   };
   if (targetLength !== undefined) {
     body.target_length = targetLength;
+  }
+  if (seedSequence) {
+    body.seed_sequence = seedSequence;
   }
   const res = await fetch(`${API_BASE}/api/design`, {
     method: "POST",
