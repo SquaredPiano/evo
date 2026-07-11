@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -42,7 +43,7 @@ class LLMError(RuntimeError):
 
 def llm_available() -> bool:
     """True when an OpenRouter API key is configured."""
-    return bool(settings.openrouter_api_key)
+    return bool(settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", ""))
 
 
 def default_model() -> str:
@@ -55,8 +56,9 @@ def fast_model() -> str:
 
 
 def _headers() -> dict[str, str]:
+    key = settings.openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")
     return {
-        "Authorization": f"Bearer {settings.openrouter_api_key}",
+        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
         **_ATTRIBUTION_HEADERS,
     }

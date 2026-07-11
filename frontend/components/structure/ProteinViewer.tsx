@@ -9,6 +9,7 @@ interface ProteinViewerProps {
   onResidueHover?: (residueSeq: number | null) => void;
   isFullscreen?: boolean;
   theme?: "dark" | "light";
+  structureModel?: string | null;
 }
 
 type RenderMode = "cinematic" | "cartoon" | "sticks";
@@ -20,17 +21,13 @@ declare global {
 }
 
 let molScriptPromise: Promise<void> | null = null;
+const DRAG_THRESHOLD_PX = 6;
 
 function load3DMol(): Promise<void> {
-  if (typeof window === "undefined") {
-    return Promise.resolve();
-  }
-  if (window.$3Dmol) {
-    return Promise.resolve();
-  }
-  if (molScriptPromise) {
-    return molScriptPromise;
-  }
+  if (typeof window === "undefined") return Promise.resolve();
+  if (window.$3Dmol) return Promise.resolve();
+  if (molScriptPromise) return molScriptPromise;
+
   const scriptSources = [
     "https://cdn.jsdelivr.net/npm/3dmol@2.4.2/build/3Dmol-min.js",
     "https://unpkg.com/3dmol@2.4.2/build/3Dmol-min.js",
@@ -59,13 +56,9 @@ function load3DMol(): Promise<void> {
             window.clearTimeout(timeout);
             reject(new Error(`Failed loading ${src}`));
           };
-          if (!existing) {
-            document.head.appendChild(script);
-          }
+          if (!existing) document.head.appendChild(script);
         });
-        if (window.$3Dmol) {
-          return;
-        }
+        if (window.$3Dmol) return;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
       }
@@ -86,44 +79,18 @@ function confidenceColor(bFactor?: number): string {
 function applyViewerStyle(viewer: any, mode: RenderMode) {
   if (!viewer) return;
   if (mode === "sticks") {
-    viewer.setStyle(
-      {},
-      {
-        stick: {
-          radius: 0.2,
-          colorfunc: (atom: any) => confidenceColor(atom?.b),
-        },
-      }
-    );
+    viewer.setStyle({}, { stick: { radius: 0.2, colorfunc: (atom: any) => confidenceColor(atom?.b) } });
     return;
   }
-
   if (mode === "cartoon") {
-    viewer.setStyle(
-      {},
-      {
-        cartoon: {
-          colorfunc: (atom: any) => confidenceColor(atom?.b),
-          opacity: 1.0,
-        },
-      }
-    );
+    viewer.setStyle({}, { cartoon: { colorfunc: (atom: any) => confidenceColor(atom?.b), opacity: 1.0 } });
     return;
   }
-
-  // Cinematic blend: cartoon backbone + subtle atom detail.
   viewer.setStyle(
     {},
     {
-      cartoon: {
-        colorfunc: (atom: any) => confidenceColor(atom?.b),
-        opacity: 1.0,
-      },
-      stick: {
-        radius: 0.1,
-        opacity: 0.35,
-        colorfunc: (atom: any) => confidenceColor(atom?.b),
-      },
+      cartoon: { colorfunc: (atom: any) => confidenceColor(atom?.b), opacity: 1.0 },
+      stick: { radius: 0.1, opacity: 0.35, colorfunc: (atom: any) => confidenceColor(atom?.b) },
     }
   );
 }
@@ -135,9 +102,7 @@ function pdbStats(pdbText: string): { atoms: number; residues: number } {
     if (!line.startsWith("ATOM")) continue;
     atoms += 1;
     const resi = Number.parseInt(line.substring(22, 26).trim(), 10);
-    if (!Number.isNaN(resi)) {
-      residues.add(resi);
-    }
+    if (!Number.isNaN(resi)) residues.add(resi);
   }
   return { atoms, residues: residues.size };
 }
@@ -150,19 +115,32 @@ export default function ProteinViewer({
   onResidueClick,
   onResidueHover,
   isFullscreen = false,
-  theme = "dark",
+  theme = "light",
+  structureModel = null,
 }: ProteinViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<any>(null);
-  const clickHandlerRef = useRef<typeof onResidueClick>(onResidueClick);
-  const hoverHandlerRef = useRef<typeof onResidueHover>(onResidueHover);
+  const clickHandlerRef = useRef(onResidueClick);
+  const hoverHandlerRef = useRef(onResidueHover);
+  const pointerDownRef = useRef<{ x: number; y: number } | null>(null);
+  const draggedRef = useRef(false);
+  const lastClickResidueRef = useRef<number | null>(null);
+  const lastClickAtRef = useRef(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [renderMode, setRenderMode] = useState<RenderMode>("cinematic");
+  const [renderMode, setRenderMode] = useState<RenderMode>("cartoon");
   const [compatibilityMode, setCompatibilityMode] = useState(false);
 
   const pdb = pdbData?.trim() ? pdbData : "";
   const stats = useMemo(() => pdbStats(pdb), [pdb]);
+  const modelLabel =
+    structureModel === "esmfold"
+      ? "ESMFold"
+      : structureModel === "mock"
+        ? "Mock fold"
+        : structureModel
+          ? structureModel
+          : "Structure";
 
   useEffect(() => {
     clickHandlerRef.current = onResidueClick;
@@ -171,6 +149,38 @@ export default function ProteinViewer({
   useEffect(() => {
     hoverHandlerRef.current = onResidueHover;
   }, [onResidueHover]);
+
+  // Track pointer travel so orbit-drags don't fire residue clicks.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onDown = (e: PointerEvent) => {
+      pointerDownRef.current = { x: e.clientX, y: e.clientY };
+      draggedRef.current = false;
+    };
+    const onMove = (e: PointerEvent) => {
+      const start = pointerDownRef.current;
+      if (!start) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) draggedRef.current = true;
+    };
+    const onUp = () => {
+      pointerDownRef.current = null;
+    };
+
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+    };
+  }, [pdb]);
 
   useEffect(() => {
     const handler = (event: ErrorEvent) => {
@@ -184,7 +194,7 @@ export default function ProteinViewer({
           try {
             viewer.spin(false);
           } catch {
-            // noop
+            /* noop */
           }
         }
         setCompatibilityMode(true);
@@ -213,7 +223,6 @@ export default function ProteinViewer({
         await load3DMol();
         if (!mounted || !containerRef.current || !window.$3Dmol) return;
 
-        // Avoid initializing when container is effectively hidden/zero-sized.
         const rect = containerRef.current.getBoundingClientRect();
         if ((rect.width < 24 || rect.height < 24) && retries < 8) {
           retries += 1;
@@ -223,7 +232,7 @@ export default function ProteinViewer({
 
         containerRef.current.innerHTML = "";
         const viewer = window.$3Dmol.createViewer(containerRef.current, {
-          backgroundColor: theme === "dark" ? "#050b14" : "#f7fafc",
+          backgroundColor: theme === "dark" ? "#0F0F0F" : "#FAF9F6",
         });
 
         viewer.addModel(pdb, "pdb");
@@ -231,33 +240,37 @@ export default function ProteinViewer({
         applyViewerStyle(viewer, effectiveMode);
 
         viewer.setClickable({}, true, (atom: any) => {
+          if (draggedRef.current) return;
           const residue = Number(atom?.resi);
-          if (!Number.isNaN(residue)) {
-            clickHandlerRef.current?.(residue);
+          if (Number.isNaN(residue)) return;
+          const now = Date.now();
+          if (lastClickResidueRef.current === residue && now - lastClickAtRef.current < 300) {
+            return;
           }
+          lastClickResidueRef.current = residue;
+          lastClickAtRef.current = now;
+          clickHandlerRef.current?.(residue);
         });
+
         viewer.setHoverable(
           {},
           true,
           (atom: any) => {
+            if (draggedRef.current) return;
             const residue = Number(atom?.resi);
-            if (!Number.isNaN(residue)) {
-              hoverHandlerRef.current?.(residue);
-            }
+            if (!Number.isNaN(residue)) hoverHandlerRef.current?.(residue);
           },
-          () => hoverHandlerRef.current?.(null)
+          () => {
+            if (!draggedRef.current) hoverHandlerRef.current?.(null);
+          }
         );
 
         viewer.zoomTo();
-        viewer.zoom(1.15);
-        // Avoid internal spin interval; it can trigger OffscreenCanvas crashes
-        // on some browser/GPU combinations.
+        viewer.zoom(1.12);
         viewer.render();
 
         viewerRef.current = viewer;
-        if (mounted) {
-          setIsReady(true);
-        }
+        if (mounted) setIsReady(true);
       } catch (err) {
         if (mounted) {
           setLoadError(err instanceof Error ? err.message : "3D viewer failed to initialize");
@@ -269,9 +282,7 @@ export default function ProteinViewer({
 
     return () => {
       mounted = false;
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-      }
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
       if (viewerRef.current && typeof viewerRef.current.spin === "function") {
         viewerRef.current.spin(false);
       }
@@ -290,15 +301,15 @@ export default function ProteinViewer({
       viewer.setStyle(
         { resi: highlightResidues },
         {
-          stick: { radius: 0.22, color: "#f8fafc" },
-          sphere: { radius: 0.38, color: "#f8fafc" },
+          stick: { radius: 0.22, color: theme === "dark" ? "#f8fafc" : "#0F0F0F" },
+          sphere: { radius: 0.35, color: "#F59E0B" },
         }
       );
-      viewer.zoomTo({ resi: highlightResidues }, 260);
+      // Do NOT zoomTo on highlight — that causes camera jumps that feel like phantom clicks.
     }
 
     viewer.render();
-  }, [compatibilityMode, highlightResidues, renderMode]);
+  }, [compatibilityMode, highlightResidues, renderMode, theme]);
 
   useEffect(() => {
     const onResize = () => {
@@ -311,73 +322,55 @@ export default function ProteinViewer({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  const hudStyle = {
+    background: theme === "dark" ? "rgba(15,15,15,0.72)" : "rgba(255,255,255,0.75)",
+    color: theme === "dark" ? "#FAF9F6" : "#0F0F0F",
+    border: "1px solid var(--ghost-border)",
+    backdropFilter: "blur(12px)",
+  } as const;
+
   return (
-    <div className="relative w-full h-full">
-      <div ref={containerRef} className="absolute inset-0" />
+    <div className="relative w-full h-full select-none">
+      <div ref={containerRef} className="absolute inset-0 touch-none" style={{ cursor: "grab" }} />
 
       {loadError && (
-        <div
-          className="absolute inset-0 flex items-center justify-center text-sm"
-          style={{ color: "var(--base-t)" }}
-        >
+        <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none" style={{ color: "var(--base-t)" }}>
           {loadError}
         </div>
       )}
 
       {!pdb && (
-        <div
-          className="absolute inset-0 flex items-center justify-center text-sm"
-          style={{ color: "var(--text-faint)" }}
-        >
-          Waiting for structure data...
+        <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none" style={{ color: "var(--text-faint)" }}>
+          Waiting for structure data…
         </div>
       )}
 
       {!isReady && !loadError && pdb && (
-        <div
-          className="absolute inset-0 flex items-center justify-center text-sm"
-          style={{ color: "var(--text-faint)" }}
-        >
-          Loading protein fold...
+        <div className="absolute inset-0 flex items-center justify-center text-sm pointer-events-none" style={{ color: "var(--text-faint)" }}>
+          Folding with {modelLabel === "ESMFold" ? "ESMFold" : "structure engine"}…
         </div>
       )}
 
-      <div
-        className="absolute left-4 top-4 rounded-md px-3 py-2 text-[11px] font-mono"
-        style={{
-          background: "rgba(5, 11, 20, 0.72)",
-          color: "#dbeafe",
-          border: "1px solid rgba(148, 163, 184, 0.3)",
-        }}
-      >
+      {/* HUD — pointer-events none so they never steal orbit/click */}
+      <div className="absolute left-4 top-4 rounded-2xl px-3 py-2 text-[11px] font-mono pointer-events-none" style={hudStyle}>
         {stats.residues > 0 ? `${stats.residues} residues · ${stats.atoms} atoms` : "No PDB loaded"}
       </div>
 
-      <div
-        className="absolute right-4 top-4 rounded-md px-3 py-2 text-[11px]"
-        style={{
-          background: "rgba(5, 11, 20, 0.72)",
-          color: "#dbeafe",
-          border: "1px solid rgba(148, 163, 184, 0.3)",
-        }}
-      >
-        {isFullscreen ? "Fullscreen" : "Interactive"} 3D fold
+      <div className="absolute right-4 top-4 rounded-2xl px-3 py-2 text-[11px] pointer-events-none" style={hudStyle}>
+        {modelLabel}
+        {isFullscreen ? " · Fullscreen" : ""}
       </div>
 
       {compatibilityMode && (
         <div
-          className="absolute right-4 top-14 rounded-md px-3 py-2 text-[10px]"
-          style={{
-            background: "rgba(5, 11, 20, 0.78)",
-            color: "#f8d7a0",
-            border: "1px solid rgba(248, 215, 160, 0.35)",
-          }}
+          className="absolute right-4 top-14 rounded-2xl px-3 py-2 text-[10px] pointer-events-none"
+          style={{ ...hudStyle, color: "#B45309" }}
         >
           Compatibility mode
         </div>
       )}
 
-      <div className="absolute right-4 bottom-4 flex items-center gap-1.5">
+      <div className="absolute right-4 bottom-4 flex items-center gap-1.5 z-10">
         {([
           { id: "cinematic", label: "Cinematic" },
           { id: "cartoon", label: "Cartoon" },
@@ -385,18 +378,19 @@ export default function ProteinViewer({
         ] as const).map((mode) => (
           <button
             key={mode.id}
-            onClick={() => setRenderMode(mode.id)}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRenderMode(mode.id);
+            }}
             disabled={compatibilityMode}
-            className="px-2.5 py-1 rounded text-[10px] transition-colors"
+            className="px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-300"
             style={{
-              background:
-                renderMode === mode.id ? "rgba(91, 181, 162, 0.22)" : "rgba(15, 23, 42, 0.68)",
-              color: renderMode === mode.id ? "#b7f7e8" : "#cbd5e1",
-              border:
-                renderMode === mode.id
-                  ? "1px solid rgba(91, 181, 162, 0.55)"
-                  : "1px solid rgba(148, 163, 184, 0.25)",
+              background: renderMode === mode.id ? "var(--honey-500)" : "rgba(255,255,255,0.75)",
+              color: renderMode === mode.id ? "var(--ink)" : "var(--text-muted)",
+              border: "1px solid var(--ghost-border)",
               opacity: compatibilityMode ? 0.45 : 1,
+              boxShadow: "var(--shadow-soft)",
             }}
           >
             {mode.label}

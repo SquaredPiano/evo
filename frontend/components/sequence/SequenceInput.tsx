@@ -198,7 +198,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
 
               <button onClick={handlePasteSubmit} disabled={isLoading || charCount === 0}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
-                style={{ background: charCount > 0 ? "var(--honey-500)" : "var(--surface-elevated)", color: charCount > 0 ? "var(--ink)" : "var(--text-faint)", border: "2px solid var(--hard-border)", boxShadow: charCount > 0 ? "4px 4px 0 0 var(--hard-border)" : "none" }}>
+                style={{ background: charCount > 0 ? "var(--ink)" : "var(--wax)", color: charCount > 0 ? "var(--cream)" : "var(--text-faint)", border: "none", boxShadow: charCount > 0 ? "0 12px 30px -10px rgba(15,15,15,0.3)" : "none" }}>
                 {isLoading ? (
                   <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Analyzing...</>
                 ) : (
@@ -256,7 +256,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
 
               <button onClick={handleDesignSubmit} disabled={isLoading || designGoal.trim().length === 0}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
-                style={{ background: designGoal.trim() ? "var(--honey-500)" : "var(--surface-elevated)", color: designGoal.trim() ? "var(--ink)" : "var(--text-faint)", border: "2px solid var(--hard-border)", boxShadow: designGoal.trim() ? "4px 4px 0 0 var(--hard-border)" : "none" }}>
+                style={{ background: designGoal.trim() ? "var(--ink)" : "var(--wax)", color: designGoal.trim() ? "var(--cream)" : "var(--text-faint)", border: "none", boxShadow: designGoal.trim() ? "0 12px 30px -10px rgba(15,15,15,0.3)" : "none" }}>
                 {isLoading ? (
                   <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Designing...</>
                 ) : (

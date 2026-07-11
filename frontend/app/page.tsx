@@ -93,7 +93,7 @@ export default function Home() {
       {/* ── NAV ── */}
       <nav
         className="fixed top-0 w-full z-50 flex justify-between items-center px-6 md:px-10 h-16"
-        style={{ background: "color-mix(in srgb, var(--surface-base) 88%, transparent)", backdropFilter: "blur(14px)", borderBottom: "2px solid var(--hard-border)" }}
+        style={{ background: "color-mix(in srgb, var(--surface-base) 88%, transparent)", backdropFilter: "blur(14px)", borderBottom: "1px solid var(--ghost-border)" }}
       >
         <EvoLogo size="md" />
         <div className="flex items-center gap-2">
@@ -109,7 +109,7 @@ export default function Home() {
           <Link
             href="/analyze"
             className="inline-flex items-center gap-2 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.14em] transition-smooth"
-            style={{ background: "var(--honey-500)", color: "var(--ink)", border: "2px solid var(--hard-border)", boxShadow: "3px 3px 0 0 var(--hard-border)" }}
+            style={{ background: "var(--honey-500)", color: "var(--ink)", border: "none", boxShadow: "0 8px 24px -8px rgba(245,158,11,0.45)" }}
           >
             Open IDE
           </Link>
@@ -132,14 +132,14 @@ export default function Home() {
           <Link
             href="/analyze"
             className="inline-flex items-center gap-2 px-8 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-smooth hover:-translate-x-0.5 hover:-translate-y-0.5"
-            style={{ background: "var(--ink)", color: "var(--cream)", border: "2px solid var(--hard-border)", boxShadow: "5px 5px 0 0 var(--honey-500)" }}
+            style={{ background: "var(--ink)", color: "var(--cream)", border: "none", boxShadow: "0 16px 40px -12px rgba(15,15,15,0.35)" }}
           >
             Start designing <ArrowRight size={16} />
           </Link>
           <Link
             href="/analyze?view=input"
             className="inline-flex items-center gap-2 px-8 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-smooth"
-            style={{ background: "var(--surface-raised)", color: "var(--text-primary)", border: "2px solid var(--hard-border)", boxShadow: "5px 5px 0 0 var(--hard-border)" }}
+            style={{ background: "var(--surface-raised)", color: "var(--text-primary)", border: "1px solid var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}
           >
             Paste a sequence
           </Link>
@@ -153,7 +153,7 @@ export default function Home() {
           </div>
           <div
             className="flex flex-wrap justify-center gap-[3px] p-4"
-            style={{ background: "var(--surface-raised)", border: "2px solid var(--hard-border)", boxShadow: "var(--shadow-brutal)" }}
+            style={{ background: "var(--surface-raised)", border: "1px solid var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}
           >
             {HERO_STRIP.map((b, i) => (
               <span
@@ -169,7 +169,7 @@ export default function Home() {
       </section>
 
       {/* ═══ STEPS (alternating editorial rows) ═══ */}
-      <section className="px-6 md:px-10 py-24" style={{ background: "var(--surface-raised)", borderTop: "2px solid var(--hard-border)", borderBottom: "2px solid var(--hard-border)" }}>
+      <section className="px-6 md:px-10 py-24" style={{ background: "var(--surface-raised)", borderTop: "1px solid var(--ghost-border)", borderBottom: "1px solid var(--ghost-border)" }}>
         <div className="max-w-5xl mx-auto">
           <p className="label-caps mb-3">How it works</p>
           <h2 className="display text-[clamp(2rem,4.5vw,3.5rem)] mb-16 max-w-2xl">
@@ -180,11 +180,11 @@ export default function Home() {
               <div
                 key={s.kicker}
                 className="step-row grid grid-cols-1 md:grid-cols-[auto_1fr] gap-5 md:gap-8 items-start p-7 md:p-9 hover-lift"
-                style={{ background: "var(--surface-base)", border: "2px solid var(--hard-border)", boxShadow: "var(--shadow-brutal)" }}
+                style={{ background: "var(--surface-base)", border: "1px solid var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}
               >
                 <div
                   className="inline-flex items-center justify-center w-14 h-14 shrink-0"
-                  style={{ background: "var(--ink)", color: "var(--honey-400)", border: "2px solid var(--hard-border)" }}
+                  style={{ background: "var(--ink)", color: "var(--honey-400)", border: "1px solid var(--ghost-border)" }}
                 >
                   {s.icon}
                 </div>
@@ -222,7 +222,7 @@ export default function Home() {
           <Link
             href="/analyze"
             className="inline-flex items-center gap-2 px-9 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-smooth hover:-translate-x-0.5 hover:-translate-y-0.5"
-            style={{ background: "var(--honey-500)", color: "var(--ink)", border: "2px solid var(--honey-500)", boxShadow: "5px 5px 0 0 var(--cream)" }}
+            style={{ background: "var(--honey-500)", color: "var(--ink)", border: "none", boxShadow: "0 12px 30px -10px rgba(245,158,11,0.4)" }}
           >
             Open Evo IDE <ArrowRight size={18} />
           </Link>
@@ -230,7 +230,7 @@ export default function Home() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer className="py-10 px-8" style={{ background: "var(--surface-base)", borderTop: "2px solid var(--hard-border)" }}>
+      <footer className="py-10 px-8" style={{ background: "var(--surface-base)", borderTop: "1px solid var(--ghost-border)" }}>
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <EvoLogo size="sm" />
           <span className="label-caps">Genomic Design IDE · Powered by Evo 2 + ESMFold</span>

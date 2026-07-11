@@ -12,7 +12,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(({ className, type,
       "disabled:cursor-not-allowed disabled:opacity-50",
       className
     )}
-    style={{ borderColor: "var(--hard-border)", color: "var(--text-primary)" }}
+    style={{ borderColor: "var(--ghost-border)", color: "var(--text-primary)" }}
     ref={ref}
     {...props}
   />

@@ -13,13 +13,22 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    # Root .env is the single source of truth (OpenRouter, NVIDIA, NCBI, STRUCTURE_MODE, EVO2_MODE).
     env_file:
+      - path: ./.env
+        required: false
       - path: ./backend/.env
         required: false
     environment:
       - REDIS_URL=redis://redis:6379/0
       - SESSION_STORE_MODE=redis
-      - FRONTEND_URL=http://frontend:3000
+      - FRONTEND_URL=http://localhost:3000
+      # Ensure structure + LLM modes from host .env win even if empty backend/.env exists
+      - STRUCTURE_MODE=${STRUCTURE_MODE:-esmfold}
+      - EVO2_MODE=${EVO2_MODE:-nim_api}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - NCBI_API_KEY=${NCBI_API_KEY:-}
     depends_on:
       redis:
         condition: service_healthy

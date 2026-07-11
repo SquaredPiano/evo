@@ -250,6 +250,22 @@ export default function ChatPanel() {
     const s = useEvoStore.getState();
     const lc = msg.toLowerCase();
 
+    // Ensure a backend session exists before any agent/tool work.
+    let sessionId = s.sessionId;
+    if ((!sessionId || sessionId === "local") && s.rawSequence) {
+      try {
+        const { bootstrapSession } = await import("@/lib/api");
+        const boot = await bootstrapSession(s.rawSequence, {
+          sessionId: sessionId ?? undefined,
+          candidateId: s.activeCandidateId ?? 0,
+        });
+        sessionId = boot.session_id;
+        useEvoStore.getState().setSessionId(sessionId);
+      } catch {
+        /* agent endpoint can still bootstrap via sequence body */
+      }
+    }
+
     // ── LOCAL ACTIONS: handle these directly, never send to backend agent ──
 
     // RESCORE: just re-analyze, no mutations
@@ -279,16 +295,16 @@ export default function ChatPanel() {
     if (/\brefold\b|\bre-fold\b|\bpredict structure\b|\bfold again\b/i.test(lc)) {
       if (s.rawSequence) {
         setAgentPhase("executing");
-        setActiveToolCalls([{ tool: "fetchStructure", status: "running", summary: "Re-folding protein..." }]);
+        setActiveToolCalls([{ tool: "fetchStructure", status: "running", summary: "Re-folding protein with ESMFold..." }]);
         try {
           const { fetchStructure } = await import("@/lib/api");
           const pdb = await fetchStructure(0, s.rawSequence.length, s.rawSequence);
           useEvoStore.getState().setActivePdb(pdb);
-          setActiveToolCalls([{ tool: "fetchStructure", status: "ok", summary: "Structure re-folded" }]);
-          addChatMessage({ role: "assistant", content: "Structure re-folded with ESMFold. Check the 3D Structure view." });
+          setActiveToolCalls([{ tool: "fetchStructure", status: "ok", summary: "ESMFold structure ready" }]);
+          addChatMessage({ role: "assistant", content: "Structure re-folded with ESMFold. Open the Structure view to inspect it — drag to orbit, scroll to zoom, click a residue only after a short tap (drags won't select)." });
         } catch {
           setActiveToolCalls([{ tool: "fetchStructure", status: "failed", summary: "Prediction failed" }]);
-          addChatMessage({ role: "assistant", content: "Structure prediction failed." });
+          addChatMessage({ role: "assistant", content: "Structure prediction failed. Confirm STRUCTURE_MODE=esmfold and that the backend can reach api.esmatlas.com." });
         }
       } else {
         addChatMessage({ role: "assistant", content: "No sequence to fold." });
@@ -299,8 +315,6 @@ export default function ChatPanel() {
     }
 
     // ── BACKEND AGENT: send everything else to the agentic copilot ──
-    // This handles: mutations, optimizations, comparisons, transforms, explanations
-
     try {
       setAgentPhase("thinking");
       const historyPayload = useEvoStore
@@ -312,11 +326,21 @@ export default function ChatPanel() {
       const activeCand =
         candidates.find((c) => c.id === (s.activeCandidateId ?? -1)) ?? candidates[0];
 
+      if (!s.rawSequence && !sessionId) {
+        addChatMessage({
+          role: "assistant",
+          content: "Load or design a sequence first — I need DNA in the workspace before I can edit, score, or explain.",
+        });
+        setIsTyping(false);
+        setAgentPhase("idle");
+        return;
+      }
+
       const res = await fetch(`${API_BASE}/api/agent/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: s.sessionId ?? "local",
+          session_id: sessionId ?? s.sessionId ?? "local",
           candidate_id: s.activeCandidateId ?? 0,
           message: msg,
           history: historyPayload,
@@ -394,15 +418,15 @@ export default function ChatPanel() {
 
   return (
     <div className="w-full sm:w-[380px] shrink-0 flex flex-col h-full"
-      style={{ background: "var(--surface-raised)", borderLeft: "2px solid var(--hard-border)" }}
+      style={{ background: "var(--surface-raised)", borderLeft: "1px solid var(--ghost-border)" }}
       role="complementary"
       aria-label="Evo copilot">
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-16 shrink-0"
-        style={{ borderBottom: "2px solid var(--hard-border)" }}>
+        style={{ borderBottom: "1px solid var(--ghost-border)" }}>
         <div className="flex items-center gap-2.5">
-          <span className="inline-flex items-center justify-center w-7 h-7" style={{ background: "var(--honey-500)", color: "var(--ink)" }}>
+          <span className="inline-flex items-center justify-center w-8 h-8 rounded-2xl" style={{ background: "var(--honey-500)", color: "var(--ink)", boxShadow: "0 6px 16px -4px rgba(245,158,11,0.4)" }}>
             <Sparkles size={14} aria-hidden="true" />
           </span>
           <div className="leading-tight">
@@ -477,7 +501,7 @@ export default function ChatPanel() {
         {comparison.length > 0 && (
           <div className="space-y-1.5">
             <div className="label-caps" style={{ fontSize: "9px" }}>Candidate Ranking</div>
-            <div className="overflow-hidden" style={{ border: "1.5px solid var(--hard-border)", borderRadius: "8px" }}>
+            <div className="overflow-hidden rounded-2xl" style={{ border: "1px solid var(--ghost-border)" }}>
               {comparison.slice(0, 6).map((row, i) => {
                 const combined = Number(row.combined ?? row.scores?.combined ?? row.overall ?? 0);
                 const cid = row.candidate_id ?? row.id ?? i;
@@ -592,8 +616,8 @@ export default function ChatPanel() {
 
       {/* Input */}
       <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid var(--ghost-border)" }}>
-        <div className="flex gap-2 items-center rounded-2xl px-3 py-2.5 border-2"
-          style={{ background: "var(--surface-base)", borderColor: "var(--hard-border)" }}>
+        <div className="flex gap-2 items-center rounded-2xl px-3 py-2.5 border"
+          style={{ background: "rgba(255,255,255,0.7)", borderColor: "var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}>
           <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Ask Evo Copilot to edit, optimize, or explain..."

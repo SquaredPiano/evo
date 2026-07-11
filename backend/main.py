@@ -128,15 +128,31 @@ MAX_SESSION_CONTEXT_ENTRIES = 512
 async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
     sequence = request.sequence
     scores, per_position = await score_candidate(evo2_service, sequence)
-    proteins = [
-        {
-            "region_start": orf.start,
-            "region_end": orf.end,
-            "pdb_data": None,
-            "sequence_identity": 0.0,
-        }
-        for orf in find_orfs(sequence, min_length=30)[:3]
-    ]
+    orfs = find_orfs(sequence, min_length=30)[:3]
+    proteins: list[dict[str, object]] = []
+
+    for idx, orf in enumerate(orfs):
+        pdb_data: str | None = None
+        confidence = 0.0
+        # Fold the first ORF with ESMFold (or mock fallback) so Structure view is real.
+        if idx == 0:
+            try:
+                pdb_data, confidence, _model = await _predict_structure_snapshot(
+                    sequence=sequence[orf.start : orf.end],
+                    candidate_id=0,
+                )
+            except Exception:
+                logger.warning("Structure fold during analyze failed", exc_info=True)
+                pdb_data, confidence = None, 0.0
+        proteins.append(
+            {
+                "region_start": orf.start,
+                "region_end": orf.end,
+                "pdb_data": pdb_data,
+                "sequence_identity": float(confidence or 0.0),
+            }
+        )
+
     return AnalysisResponse(
         sequence=sequence,
         scores=[{"position": x.position, "score": x.score} for x in per_position],
@@ -754,6 +770,20 @@ async def health() -> HealthResponse:
         gpu_available=bool(payload.get("gpu_available", False)),
         inference_mode=str(payload.get("inference_mode", "unknown")),
     )
+
+
+@app.get("/api/health/detail")
+async def health_detail() -> dict[str, object]:
+    """Extended health for debugging — includes structure + LLM readiness."""
+    payload = await evo2_service.health()
+    from services import llm as llm_service
+
+    return {
+        **payload,
+        "structure_mode": settings.structure_mode.value,
+        "llm_available": llm_service.llm_available(),
+        "evo2_mode": settings.evo2_mode.value,
+    }
 
 
 @app.websocket("/ws/pipeline/{session_id}")

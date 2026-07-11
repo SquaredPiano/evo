@@ -190,8 +190,25 @@ function AnalyzePageInner() {
   useEffect(() => {
     if (analysisResult?.predictedProteins?.[0]?.pdbData && !activePdb) {
       setActivePdb(analysisResult.predictedProteins[0].pdbData);
+      return;
     }
-  }, [analysisResult, activePdb, setActivePdb]);
+    // Analyze may return ORF metadata without PDB — fold via /api/structure (ESMFold).
+    if (analysisResult && !activePdb && rawSequence && rawSequence.length >= 30) {
+      let cancelled = false;
+      (async () => {
+        try {
+          const { fetchStructure } = await import("@/lib/api");
+          const pdb = await fetchStructure(0, rawSequence.length, rawSequence);
+          if (!cancelled && pdb) setActivePdb(pdb);
+        } catch {
+          /* structure optional until user opens Structure tab */
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [analysisResult, activePdb, setActivePdb, rawSequence]);
 
   const handleSequenceSubmit = useCallback((seq: string) => { analyze(seq); }, [analyze]);
   const handleDesignSubmit = useCallback((goal: string) => { startDesign(goal); }, [startDesign]);
@@ -243,14 +260,17 @@ function AnalyzePageInner() {
   }, [bases.length, rawSequence.length, setSelectedPosition, setHighlightResidues]);
 
   const handleResidueHover = useCallback((residueSeq: number | null) => {
-    // Show hover highlight but don't clear clicked residue
+    // Only update hover highlight — never clear an intentional click selection mid-drag.
     if (residueSeq !== null) {
       setHighlightResidues([residueSeq]);
-    } else if (clickedResidue !== null) {
-      // Restore clicked residue highlight when hover leaves
-      setHighlightResidues([clickedResidue]);
     }
-  }, [setHighlightResidues, clickedResidue]);
+    // On hover leave, restore click selection if any; otherwise clear.
+    else if (clickedResidue !== null) {
+      setHighlightResidues([clickedResidue]);
+    } else {
+      setHighlightResidues([]);
+    }
+  }, [clickedResidue, setHighlightResidues]);
 
   // Mobile sidebar collapse
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -294,7 +314,7 @@ function AnalyzePageInner() {
         {/* ── HEADER (glassmorphic) ── */}
         <motion.header
           className="h-16 shrink-0 flex items-center justify-between px-4 lg:px-6"
-          style={{ background: "color-mix(in srgb, var(--surface-base) 82%, transparent)", backdropFilter: "blur(16px)", borderBottom: "2px solid var(--hard-border)" }}
+          style={{ background: "color-mix(in srgb, var(--surface-base) 82%, transparent)", backdropFilter: "blur(20px)", borderBottom: "1px solid var(--ghost-border)" }}
           initial={{ y: -56, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ ...smoothTransition, delay: 0.15 }}
@@ -327,10 +347,10 @@ function AnalyzePageInner() {
                       whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
                       className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors font-label"
                       style={{
-                        background: viewMode === m ? "var(--honey-500)" : "transparent",
-                        color: viewMode === m ? "var(--ink)" : "var(--text-muted)",
-                        border: viewMode === m ? "1.5px solid var(--hard-border)" : "1.5px solid transparent",
-                        borderRadius: "6px",
+                        background: viewMode === m ? "var(--ink)" : "transparent",
+                        color: viewMode === m ? "var(--cream)" : "var(--text-muted)",
+                        borderRadius: "999px",
+                        boxShadow: viewMode === m ? "0 8px 20px -6px rgba(15,15,15,0.25)" : "none",
                       }}>
                       {VIEW_LABELS[m]}
                     </motion.button>
@@ -339,11 +359,11 @@ function AnalyzePageInner() {
                 <button onClick={toggleChat}
                   aria-label={chatOpen ? "Close Evo Copilot" : "Open Evo Copilot"}
                   aria-pressed={chatOpen}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all font-label"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-500 font-label"
                   style={{
-                    color: chatOpen ? "var(--ink)" : "var(--accent-bright)",
-                    background: chatOpen ? "var(--honey-200)" : "transparent",
-                    border: "1.5px solid var(--accent)",
+                    color: chatOpen ? "var(--ink)" : "var(--honey-600)",
+                    background: chatOpen ? "var(--honey-100)" : "rgba(245,158,11,0.1)",
+                    border: "1px solid rgba(245,158,11,0.25)",
                   }}>
                   <Sparkles size={12} /> Copilot
                 </button>
@@ -606,11 +626,12 @@ function AnalyzePageInner() {
 
                   {/* pLDDT legend overlay */}
                   <motion.div
-                    className="absolute bottom-4 left-4 flex items-center gap-4 px-4 py-2.5 rounded-lg"
+                    className="absolute bottom-4 left-4 flex items-center gap-4 px-4 py-2.5 rounded-2xl pointer-events-none"
                     style={{
-                      background: "color-mix(in oklch, var(--surface-elevated), transparent 20%)",
+                      background: "rgba(255,255,255,0.75)",
                       backdropFilter: "blur(12px)",
-                      border: "0.5px solid var(--ghost-border)",
+                      border: "1px solid var(--ghost-border)",
+                      boxShadow: "var(--shadow-soft)",
                     }}
                     initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3, ...springTransition }}
@@ -1099,12 +1120,12 @@ function AnalyzePageInner() {
       {!chatOpen && viewMode !== "input" && viewMode !== "pipeline" && analysisResult && (
         <motion.button onClick={toggleChat}
           aria-label="Open Evo Copilot"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3 text-sm font-bold uppercase tracking-wider rounded-2xl"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3.5 text-sm font-bold uppercase tracking-wider rounded-2xl"
           style={{
-            background: "var(--honey-500)",
-            color: "var(--ink)",
-            border: "2px solid var(--hard-border)",
-            boxShadow: "5px 5px 0 0 var(--hard-border)",
+            background: "var(--ink)",
+            color: "var(--cream)",
+            border: "none",
+            boxShadow: "0 12px 40px -10px rgba(15,15,15,0.35)",
           }}
           initial={{ opacity: 0, y: 20, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
