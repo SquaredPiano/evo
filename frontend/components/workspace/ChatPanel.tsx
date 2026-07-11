@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useEvoStore } from "@/lib/store";
 import { X, Send, Sparkles, Check, Loader2, AlertCircle } from "lucide-react";
+import { buildEvidenceLinks } from "@/lib/evidence";
 
 const SCREEN_PROMPTS: Record<string, string[]> = {
   analyze: [
     "What do these scores mean?",
+    "Cite the NCBI / PubMed / ClinVar sources for this run",
     "Rescore the sequence",
-    "Change all A's to G's",
   ],
   leaderboard: [
     "Compare candidate #1 and #2",
@@ -29,6 +30,11 @@ const SCREEN_PROMPTS: Record<string, string[]> = {
     "Why does Candidate A outperform B?",
     "Compare all candidates",
     "Suggest an improvement",
+  ],
+  structure: [
+    "Explain this fold in plain English",
+    "Cite the literature used for this design",
+    "What does pLDDT tell me here?",
   ],
 };
 
@@ -57,6 +63,9 @@ export default function ChatPanel() {
   const editHistoryLength = useEvoStore((s) => s.editHistory.length);
   const chatDraft = useEvoStore((s) => s.chatDraft);
   const setChatDraft = useEvoStore((s) => s.setChatDraft);
+  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
+  const seedSource = useEvoStore((s) => s.seedSource);
+  const scoringNote = useEvoStore((s) => s.scoringNote);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [agentPhase, setAgentPhase] = useState<"idle" | "thinking" | "executing" | "reflecting">("idle");
@@ -67,6 +76,15 @@ export default function ChatPanel() {
   const [streamingText, setStreamingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const evidenceLinks = useMemo(() => {
+    const map = Object.fromEntries(
+      retrievalStatuses
+        .filter((r) => r.status === "complete" && r.result)
+        .map((r) => [r.source, r.result])
+    );
+    return buildEvidenceLinks(map);
+  }, [retrievalStatuses]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -268,6 +286,31 @@ export default function ChatPanel() {
 
     // ── LOCAL ACTIONS: handle these directly, never send to backend agent ──
 
+    // CITE SOURCES: surface retrieval provenance without an LLM round-trip
+    if (
+      /\b(cite|citation|pubmed|clinvar|ncbi|sources?|evidence|literature)\b/i.test(lc) &&
+      !/\b(mutate|edit|optim|rescore|fold)\b/i.test(lc)
+    ) {
+      if (evidenceLinks.length > 0) {
+        const lines = [
+          "Here are the live database records tied to this design run:",
+          ...evidenceLinks.map((l) => `${l.source.toUpperCase()}: ${l.label}\n${l.url}`),
+          seedSource ? `Seed provenance: ${seedSource.replace(/_/g, " ")}` : "",
+          "ClinVar/PubMed are context cards — they inform you, they do not rewrite the DNA.",
+        ].filter(Boolean);
+        addChatMessage({ role: "assistant", content: lines.join("\n\n") });
+      } else {
+        addChatMessage({
+          role: "assistant",
+          content:
+            "No NCBI / PubMed / ClinVar links are stored for this session yet. Run a design from a gene goal so retrieval can attach real PMIDs and ClinVar IDs — then ask me again.",
+        });
+      }
+      setIsTyping(false);
+      setAgentPhase("idle");
+      return;
+    }
+
     // RESCORE: just re-analyze, no mutations
     if (/\brescore\b|\bre-score\b|\bre-analyze\b|\bscore.+again\b/i.test(lc)) {
       if (s.rawSequence) {
@@ -357,6 +400,14 @@ export default function ChatPanel() {
                   combined: activeCand.overall / 100,
                 }
               : undefined,
+            evidence_links: evidenceLinks.map((l) => ({
+              source: l.source,
+              label: l.label,
+              url: l.url,
+              ...(l.detail ? { detail: l.detail } : {}),
+            })),
+            seed_source: seedSource ?? undefined,
+            scoring_note: scoringNote ?? undefined,
           },
         }),
       });
@@ -509,7 +560,7 @@ export default function ChatPanel() {
                   ? { color: "var(--ink)", background: "var(--honey-200)", borderRadius: "14px 14px 4px 14px" }
                   : { color: "var(--text-primary)", background: "var(--surface-elevated)", borderRadius: "14px 14px 14px 4px", borderLeft: "2px solid var(--accent)" }
               }>
-              {msg.content}
+              {msg.role === "assistant" ? <ChatMessageBody text={msg.content} /> : msg.content}
             </div>
           </div>
         ))}
@@ -657,6 +708,40 @@ export default function ChatPanel() {
           to { opacity: 1; transform: translateX(0); }
         }
       `}</style>
+    </div>
+  );
+}
+
+const URL_RE = /(https?:\/\/[^\s]+)/g;
+
+function ChatMessageBody({ text }: { text: string }) {
+  const blocks = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  return (
+    <div className="space-y-2">
+      {blocks.map((line, i) => {
+        const parts = line.split(URL_RE);
+        return (
+          <p key={i} className="m-0">
+            {parts.map((part, j) =>
+              /^https?:\/\//.test(part) ? (
+                <a
+                  key={j}
+                  href={part.replace(/[.,;:)]+$/, "")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline break-all"
+                  style={{ color: "var(--honey-700)" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {part.replace(/[.,;:)]+$/, "")}
+                </a>
+              ) : (
+                <span key={j}>{part}</span>
+              )
+            )}
+          </p>
+        );
+      })}
     </div>
   );
 }

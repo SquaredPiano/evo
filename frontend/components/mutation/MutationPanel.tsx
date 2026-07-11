@@ -152,15 +152,20 @@ export default function MutationPanel({
           h-10 rounded-full text-sm font-medium transition-all duration-200
           ${
             canSubmit
-              ? "bg-[var(--text-primary)] text-[var(--surface-void)] hover:bg-[var(--text-secondary)]"
-              : "bg-[var(--surface-raised)] text-[var(--text-faint)] cursor-not-allowed"
+              ? "hover:opacity-90"
+              : "cursor-not-allowed"
           }
         `}
+        style={
+          canSubmit
+            ? { background: "var(--honey-500)", color: "var(--ink)" }
+            : { background: "var(--surface-raised)", color: "var(--text-faint)" }
+        }
       >
         {isLoading ? (
           <span className="flex items-center justify-center gap-2">
             <motion.span
-              className="block w-3 h-3 rounded-full border-2 border-[var(--surface-void)] border-t-transparent"
+              className="block w-3 h-3 rounded-full border-2 border-[var(--ink)] border-t-transparent spinner-keep"
               animate={{ rotate: 360 }}
               transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
             />

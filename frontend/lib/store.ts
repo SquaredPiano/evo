@@ -50,6 +50,7 @@ interface Candidate {
 interface RetrievalStatus {
   source: string;
   status: "pending" | "running" | "complete" | "failed";
+  result?: Record<string, unknown> | null;
 }
 
 interface EvoState {
@@ -136,7 +137,11 @@ interface EvoState {
   appendGeneratingToken: (token: string) => void;
   appendExplanation: (text: string) => void;
   setRetrievalStatuses: (statuses: RetrievalStatus[]) => void;
-  updateRetrievalStatus: (source: string, status: RetrievalStatus["status"]) => void;
+  updateRetrievalStatus: (
+    source: string,
+    status: RetrievalStatus["status"],
+    result?: Record<string, unknown> | null,
+  ) => void;
   addCompletedStage: (stage: string) => void;
   setSeedSource: (source: string | null) => void;
   setScoringNote: (note: string | null) => void;
@@ -326,9 +331,11 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   })),
   appendExplanation: (text) => set((s) => ({ explanation: s.explanation + text })),
   setRetrievalStatuses: (statuses) => set({ retrievalStatuses: statuses }),
-  updateRetrievalStatus: (source, status) => set((s) => ({
+  updateRetrievalStatus: (source, status, result) => set((s) => ({
     retrievalStatuses: s.retrievalStatuses.map((r) =>
-      r.source === source ? { ...r, status } : r
+      r.source === source
+        ? { ...r, status, ...(result !== undefined ? { result } : {}) }
+        : r
     ),
   })),
   addCompletedStage: (stage) => set((s) => ({

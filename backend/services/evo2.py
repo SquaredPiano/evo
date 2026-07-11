@@ -409,14 +409,15 @@ class Evo2NIMService(Evo2Service):
             # Any NIM API failure (422, 429, 5xx, timeout) falls back to mock.
             # Never let an API error crash the pipeline.
             suffix = await self._fallback_generate(seed, n_tokens, temperature)
-            generated = ""
-            for base in suffix.upper():
-                if base not in ("A", "T", "C", "G", "N"):
-                    continue
-                generated += base
-                yield base
-                # Pace yields so the IDE can paint a visible base stream (NIM returns bulk).
-                await asyncio.sleep(0.004)
+
+        # NIM (and mock fallback) return the full suffix in one shot — yield base-by-base
+        # so the WebSocket client can stream into the IDE. Previously the success path
+        # computed `suffix` and never yielded, so Docker/NIM runs looked like a hung stream.
+        for base in (suffix or "").upper():
+            if base not in ("A", "T", "C", "G", "N"):
+                continue
+            yield base
+            await asyncio.sleep(0.004)
 
     async def health(self) -> dict[str, object]:
         try:

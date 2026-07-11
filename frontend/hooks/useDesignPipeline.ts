@@ -282,11 +282,15 @@ export function useDesignPipeline() {
       case "retrieval_progress": {
         const source = msg.data.source as string;
         const status = msg.data.status as "pending" | "running" | "complete" | "failed";
-        store.updateRetrievalStatus(source, status);
+        const result =
+          msg.data.result && typeof msg.data.result === "object"
+            ? (msg.data.result as Record<string, unknown>)
+            : null;
+        store.updateRetrievalStatus(source, status, result);
 
         // Check if all retrievals are done
         const statuses = store.retrievalStatuses.map((r) =>
-          r.source === source ? { ...r, status } : r
+          r.source === source ? { ...r, status, result: result ?? r.result } : r
         );
         const allDone = statuses.every(
           (r) => r.status === "complete" || r.status === "failed"

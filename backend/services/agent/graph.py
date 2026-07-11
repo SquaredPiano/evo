@@ -39,17 +39,21 @@ logger = logging.getLogger(__name__)
 
 RESPONDER_PROMPT = """You are the Evo copilot — a sharp genomic design partner inside a research IDE.
 You just ran real tools against the user's DNA sequence. You have their message, UI context
-(scores, selected base, current view), tool outcomes with real numbers, and conversation history.
+(scores, selected base, current view), tool outcomes with real numbers, evidence links
+(NCBI / PubMed / ClinVar when present), and conversation history.
 
-Write like a competent colleague:
-1. Lead with what you DID (edited / optimized / compared / explained) and the concrete result.
-2. Interpret numbers in plain English: functional, tissue specificity, novelty are higher=better;
-   off-target is higher=worse. Quote deltas when an edit changed scores.
-3. Ground every claim in the tool outcomes — never invent scores or residues.
-4. End with ONE specific next action they can take in Evo (e.g. "Open Structure to inspect residue 12"
-   or "Ask me to optimize for safety").
-5. 3–6 sentences. Warm, precise, no markdown bullet lists unless comparing ≥2 candidates side-by-side.
-6. If a tool failed, say so honestly and suggest a recovery step."""
+Format for a chat bubble — scannable, never a wall of text:
+1. First line: what you DID + the headline result (one short sentence).
+2. Then 2–4 short lines, each starting with a label like "Functional:" / "Off-target:" /
+   "Evidence:" — one idea per line. Prefer line breaks over long paragraphs.
+3. Interpret numbers in plain English: functional, tissue specificity, novelty are higher=better;
+   off-target is higher=worse. Quote real deltas when an edit changed scores.
+4. When evidence_links or retrieval notes are present, cite them with full URLs on their own lines
+   (PubMed, ClinVar, NCBI Gene). Never invent PMIDs or accessions.
+5. Ground every claim in tool outcomes — never invent scores or residues.
+6. End with ONE specific next action in Evo.
+7. Hard limit: ~80 words unless comparing ≥2 candidates. No markdown tables.
+8. If a tool failed, say so honestly and suggest a recovery step."""
 
 
 def _weakest_objective(scores: dict[str, Any]) -> str:
@@ -401,10 +405,23 @@ class AgenticCopilot:
             except Exception:
                 logger.debug("OpenRouter responder failed, using deterministic fallback", exc_info=True)
 
-        # Deterministic fallback
+        # Deterministic fallback — keep line breaks so the chat UI stays scannable.
         base_msg = notes[-1]
+        snapshot = state.get("candidate_snapshot") or {}
+        evidence = snapshot.get("evidence_links") or []
+        if evidence and "pubmed.ncbi.nlm.nih.gov" not in base_msg and "clinvar" not in base_msg.lower():
+            cite_lines = []
+            for link in evidence[:4]:
+                if not isinstance(link, dict):
+                    continue
+                label = str(link.get("label") or link.get("source") or "Source")
+                url = str(link.get("url") or "")
+                if url:
+                    cite_lines.append(f"{label}: {url}")
+            if cite_lines:
+                base_msg = f"{base_msg}\nEvidence:\n" + "\n".join(cite_lines)
         if iteration > 1:
-            base_msg = f"{base_msg} (completed in {iteration} agent iterations)"
+            base_msg = f"{base_msg}\n(completed in {iteration} agent iterations)"
         return {"assistant_message": base_msg}
 
     # -------------------------------------------------------------------------

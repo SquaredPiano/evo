@@ -384,32 +384,34 @@ export default function ProteinViewer({
         </div>
       )}
 
-      <div className="absolute right-4 bottom-4 flex items-center gap-1.5 z-10">
-        {([
-          { id: "cinematic", label: "Cinematic" },
-          { id: "cartoon", label: "Cartoon" },
-          { id: "sticks", label: "Sticks" },
-        ] as const).map((mode) => (
-          <button
-            key={mode.id}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setRenderMode(mode.id);
-            }}
-            disabled={compatibilityMode}
-            className="px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-300"
-            style={{
-              background: renderMode === mode.id ? "var(--honey-500)" : "rgba(255,255,255,0.75)",
-              color: renderMode === mode.id ? "var(--ink)" : "var(--text-muted)",
-              border: "1px solid var(--ghost-border)",
-              opacity: compatibilityMode ? 0.45 : 1,
-              boxShadow: "var(--shadow-soft)",
-            }}
-          >
-            {mode.label}
-          </button>
-        ))}
+      <div className="absolute right-4 bottom-4 flex flex-col items-end gap-2 z-10 max-w-[min(100%,280px)]">
+        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          {([
+            { id: "cinematic", label: "Cinematic" },
+            { id: "cartoon", label: "Cartoon" },
+            { id: "sticks", label: "Sticks" },
+          ] as const).map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRenderMode(mode.id);
+              }}
+              disabled={compatibilityMode}
+              className="px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-300"
+              style={{
+                background: renderMode === mode.id ? "var(--honey-500)" : "rgba(255,255,255,0.75)",
+                color: renderMode === mode.id ? "var(--ink)" : "var(--text-muted)",
+                border: "1px solid var(--ghost-border)",
+                opacity: compatibilityMode ? 0.45 : 1,
+                boxShadow: "var(--shadow-soft)",
+              }}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -99,6 +99,10 @@ class AgentContext(BaseModel):
     scores: dict[str, float] | None = None
     selected_position: int | None = Field(None, ge=0)
     view_mode: str | None = None
+    # Provenance links from the design pipeline (NCBI / PubMed / ClinVar).
+    evidence_links: list[dict[str, str]] | None = None
+    seed_source: str | None = None
+    scoring_note: str | None = None
 
 
 class AgentChatRequest(BaseModel):

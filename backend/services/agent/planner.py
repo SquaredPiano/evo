@@ -119,6 +119,7 @@ def deterministic_plan(
         "what do", "what does", "explain", "mean", "beginner", "plain english",
         "scores mean", "interpret", "why is", "how good", "what should i do",
         "for a beginner", "in plain english",
+        "cite", "citation", "pubmed", "clinvar", "ncbi", "evidence", "literature", "sources",
     ))
     explicit_mutate = any(token in text for token in (
         "optim", "mutate", "mutation", "edit base", "change base",

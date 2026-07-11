@@ -47,11 +47,12 @@ async def tool_explain(
     )
     note = (
         f"Candidate #{candidate_id} ({len(sequence)} bp, GC {gc:.0%}) is {band(score_dict['combined'])} "
-        f"(combined {score_dict['combined']:.3f}). "
-        f"Functional heuristic {score_dict['functional']:.3f}, tissue-motif score "
-        f"{score_dict['tissue_specificity']:.3f}, panel off-target {score_dict['off_target']:.3f} "
-        f"(lower is better), novelty heuristic {score_dict['novelty']:.3f}."
-        f"{caveat} "
+        f"(combined {score_dict['combined']:.3f}).\n"
+        f"Functional: {score_dict['functional']:.3f} (higher = better)\n"
+        f"Tissue specificity: {score_dict['tissue_specificity']:.3f} (higher = better)\n"
+        f"Off-target: {score_dict['off_target']:.3f} (lower = better)\n"
+        f"Novelty: {score_dict['novelty']:.3f} (higher = more unique)\n"
+        f"{caveat.strip()}\n"
         "These are research demo metrics — not clinical predictions."
     )
     return ToolExecution(

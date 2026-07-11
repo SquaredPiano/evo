@@ -114,7 +114,7 @@ export default function PipelineStatus() {
                   {isComplete ? (
                     <Check size={14} style={{ color: "var(--honey-600)" }} />
                   ) : isActive ? (
-                    <Loader2 size={14} className="animate-spin" style={{ color: "var(--honey-600)" }} />
+                    <Loader2 size={14} className="animate-spin spinner-keep" style={{ color: "var(--honey-600)" }} />
                   ) : (
                     <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--wax-deep)" }} />
                   )}
@@ -214,7 +214,7 @@ export default function PipelineStatus() {
             <span className="text-[13px] font-medium" style={{ color: "var(--honey-700)" }}>
               Done — opening results
             </span>
-            <Loader2 size={14} className="animate-spin ml-auto" style={{ color: "var(--honey-600)" }} />
+            <Loader2 size={14} className="animate-spin spinner-keep ml-auto" style={{ color: "var(--honey-600)" }} />
           </motion.div>
         )}
       </div>

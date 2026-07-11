@@ -33,6 +33,7 @@ import MutationDiff from "@/components/mutation/MutationDiff";
 
 import { ScienceTooltip, ScienceInfo } from "@/components/ui/ScienceTooltip";
 import TutorialOverlay, { isTutorialCompleted } from "@/components/ui/TutorialOverlay";
+import { buildEvidenceLinks } from "@/lib/evidence";
 
 const ProteinViewer = dynamic(() => import("@/components/structure/ProteinViewer"), { ssr: false });
 
@@ -145,6 +146,7 @@ function AnalyzePageInner() {
   const seedSource = useEvoStore((s) => s.seedSource);
   const scoringNote = useEvoStore((s) => s.scoringNote);
   const structureModel = useEvoStore((s) => s.structureModel);
+  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -251,6 +253,8 @@ function AnalyzePageInner() {
 
   // 3D ↔ sequence linking
   const [clickedResidue, setClickedResidue] = useState<number | null>(null);
+  const [hoveredResidue, setHoveredResidue] = useState<number | null>(null);
+  const inspectedResidue = hoveredResidue ?? clickedResidue;
 
   const queueGuidedPrompt = useCallback((prompt: string) => {
     setChatOpen(true);
@@ -267,12 +271,11 @@ function AnalyzePageInner() {
   }, [bases.length, rawSequence.length, setSelectedPosition, setHighlightResidues]);
 
   const handleResidueHover = useCallback((residueSeq: number | null) => {
-    // Only update hover highlight — never clear an intentional click selection mid-drag.
+    setHoveredResidue(residueSeq);
+    // Live highlight on hover so you don't need to click every residue.
     if (residueSeq !== null) {
       setHighlightResidues([residueSeq]);
-    }
-    // On hover leave, restore click selection if any; otherwise clear.
-    else if (clickedResidue !== null) {
+    } else if (clickedResidue !== null) {
       setHighlightResidues([clickedResidue]);
     } else {
       setHighlightResidues([]);
@@ -567,6 +570,44 @@ function AnalyzePageInner() {
                       </div>
                     </div>
 
+                    {(() => {
+                      const evidenceMap = Object.fromEntries(
+                        retrievalStatuses
+                          .filter((r) => r.status === "complete" && r.result)
+                          .map((r) => [r.source, r.result])
+                      );
+                      const links = buildEvidenceLinks(evidenceMap);
+                      if (links.length === 0) return null;
+                      return (
+                        <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
+                          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
+                            Source evidence
+                          </span>
+                          <p className="text-[11px] mb-3 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                            Live NCBI / PubMed / ClinVar records used as context for this run.
+                          </p>
+                          <ul className="space-y-2">
+                            {links.slice(0, 6).map((link) => (
+                              <li key={link.url}>
+                                <a
+                                  href={link.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[12px] leading-snug block hover:underline"
+                                  style={{ color: "var(--honey-700)" }}
+                                >
+                                  <span className="uppercase text-[9px] font-bold tracking-wider mr-1.5" style={{ color: "var(--text-faint)" }}>
+                                    {link.source}
+                                  </span>
+                                  {link.label}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })()}
+
                     <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
                       <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Model</span>
                       <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
@@ -640,26 +681,26 @@ function AnalyzePageInner() {
                     structureModel={structureModel}
                   />
 
-                  {/* pLDDT legend overlay */}
+                  {/* pLDDT legend — top-left so it never collides with view-mode buttons */}
                   <motion.div
-                    className="absolute bottom-4 left-4 flex items-center gap-4 px-4 py-2.5 rounded-2xl pointer-events-none"
+                    className="absolute top-14 left-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 rounded-2xl pointer-events-none max-w-[min(100%,340px)] z-10"
                     style={{
-                      background: "rgba(255,255,255,0.75)",
+                      background: "rgba(255,255,255,0.82)",
                       backdropFilter: "blur(12px)",
                       border: "1px solid var(--ghost-border)",
                       boxShadow: "var(--shadow-soft)",
                     }}
-                    initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3, ...springTransition }}
                   >
                     <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
                       <ScienceTooltip term="plddt">pLDDT</ScienceTooltip>
                     </span>
                     {[
-                      { color: "#5bb5a2", label: "≥90 Very high" },
-                      { color: "#6b9fd4", label: "≥70 Confident" },
-                      { color: "#c9a855", label: "≥50 Low" },
-                      { color: "#d47a7a", label: "<50 Very low" },
+                      { color: "#5bb5a2", label: "≥90" },
+                      { color: "#6b9fd4", label: "≥70" },
+                      { color: "#c9a855", label: "≥50" },
+                      { color: "#d47a7a", label: "<50" },
                     ].map(({ color, label }) => (
                       <div key={label} className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
@@ -681,24 +722,31 @@ function AnalyzePageInner() {
                     <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--accent)" }}>
                       <ScienceTooltip term="residue">Residue Inspector</ScienceTooltip>
                     </span>
-                    {clickedResidue !== null ? (
-                      <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={clickedResidue}>
+                    {inspectedResidue !== null ? (
+                      <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={inspectedResidue}>
                         <div>
-                          <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Residue</span>
+                          <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                            {hoveredResidue !== null && hoveredResidue !== clickedResidue ? "Hovering" : "Residue"}
+                          </span>
                           <div className="text-lg font-semibold font-mono" style={{ color: "var(--text-primary)" }}>
-                            #{clickedResidue}
+                            #{inspectedResidue}
                           </div>
                         </div>
-                        {selectedPosition !== null && (
+                        {selectedPosition !== null && clickedResidue === inspectedResidue && (
                           <div>
                             <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Linked base position</span>
                             <div className="text-sm font-mono" style={{ color: "var(--accent)" }}>{selectedPosition}</div>
                           </div>
                         )}
+                        {hoveredResidue !== null && (
+                          <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-faint)" }}>
+                            Click to pin this residue and jump to its codon in the sequence.
+                          </p>
+                        )}
                       </motion.div>
                     ) : (
                       <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                        Hover or click a <ScienceTooltip term="residue">residue</ScienceTooltip> in the 3D view to inspect it.
+                        Hover the ribbon to preview residues — click once to pin and link the DNA codon.
                       </p>
                     )}
                   </div>

@@ -410,4 +410,15 @@ body {
     scroll-behavior: auto !important;
   }
   .skeleton { animation: none; }
+  /* Keep indeterminate loading indicators moving — they communicate progress, not decoration. */
+  .animate-spin,
+  .spinner-keep {
+    animation: spin 0.8s linear infinite !important;
+    animation-duration: 0.8s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
