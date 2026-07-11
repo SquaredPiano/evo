@@ -21,6 +21,8 @@ export default function PipelineStatus() {
   const generationTokenCount = useEvoStore((s) => s.generationTokenCount);
   const generatingSequence = useEvoStore((s) => s.generatingSequence);
   const candidates = useEvoStore((s) => s.candidates);
+  const seedSource = useEvoStore((s) => s.seedSource);
+  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
   const error = useEvoStore((s) => s.error);
 
   if (pipelineStatus !== "analyzing") return null;
@@ -48,9 +50,37 @@ export default function PipelineStatus() {
         </h2>
         <p className="text-[14px] mb-8 leading-relaxed" style={{ color: "var(--text-muted)" }}>
           {isStreaming
-            ? "Evo 2 is generating a few candidates, then scoring and folding them."
+            ? generationTokenCount === 0 && pipelineStage === "generation"
+              ? "Calling Evo 2… bases will stream here as soon as NIM responds."
+              : "Evo 2 is streaming DNA. NCBI seeds identity when available; scores stay labeled as heuristics under NIM."
             : "Scoring your sequence and preparing structure."}
         </p>
+
+        {(seedSource || retrievalStatuses.some((r) => r.status !== "pending")) && (
+          <div className="flex flex-wrap gap-2 mb-6">
+            {seedSource && (
+              <span
+                className="inline-flex px-3 py-1 rounded-full text-[11px] font-medium"
+                style={{ background: "var(--wax)", color: "var(--ink)" }}
+              >
+                Seed: {seedSource.replace(/_/g, " ")}
+              </span>
+            )}
+            {retrievalStatuses.map((r) => (
+              <span
+                key={r.source}
+                className="inline-flex px-3 py-1 rounded-full text-[11px] font-medium"
+                style={{
+                  background: r.status === "complete" ? "rgba(22,163,74,0.1)" : r.status === "failed" ? "rgba(220,38,38,0.08)" : "var(--wax)",
+                  color: r.status === "complete" ? "#16A34A" : r.status === "failed" ? "#B91C1C" : "var(--text-muted)",
+                }}
+              >
+                {r.source.toUpperCase()} · {r.status}
+                {r.source === "clinvar" && r.status === "complete" ? " (context)" : ""}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div
           className="h-1.5 rounded-full mb-8 overflow-hidden"
@@ -107,16 +137,21 @@ export default function PipelineStatus() {
           })}
         </div>
 
-        {isStreaming && generatingSequence.length > 0 && (
+        {isStreaming && (generatingSequence.length > 0 || (pipelineStage === "generation" && generationTokenCount === 0)) && (
           <div className="mb-6 px-1">
             <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-faint)" }}>
-              Live DNA
+              {generationTokenCount === 0 ? "Evo 2 · waiting" : "Evo 2 · live DNA"}
             </p>
             <p
-              className="font-mono text-[11px] leading-relaxed break-all max-h-16 overflow-hidden"
-              style={{ color: "var(--text-secondary)" }}
+              className="font-mono text-[12px] leading-relaxed break-all max-h-28 overflow-y-auto rounded-2xl px-3 py-3"
+              style={{ color: "var(--text-secondary)", background: "var(--wax)" }}
             >
-              {generatingSequence.slice(-200)}
+              {generationTokenCount === 0
+                ? "········ awaiting first base ········"
+                : generatingSequence.slice(-320)}
+              {pipelineStage === "generation" && (
+                <span className="inline-block w-2 h-3 ml-0.5 align-middle animate-pulse" style={{ background: "var(--honey-600)" }} />
+              )}
             </p>
           </div>
         )}

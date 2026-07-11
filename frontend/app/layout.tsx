@@ -44,8 +44,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn(instrumentSans.variable, jetbrainsMono.variable, instrumentSerif.variable)}>
-      <body className="antialiased min-h-screen font-sans">
+    <html lang="en" className={cn(instrumentSans.variable, jetbrainsMono.variable, instrumentSerif.variable)} suppressHydrationWarning>
+      <body className="antialiased min-h-screen font-sans" style={{ background: "var(--cream)", color: "var(--ink)" }}>
         <a href="#main-content" className="skip-to-content">Skip to content</a>
         <ErrorBoundary>{children}</ErrorBoundary>
         <Toaster

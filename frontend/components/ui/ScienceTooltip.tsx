@@ -19,29 +19,29 @@ export const SCIENCE_TERMS: Record<
       "A confidence score from 0\u2013100 that tells you how sure the AI is about each part of a protein\u2019s predicted 3D shape. Above 90 is very reliable, below 50 means the prediction is uncertain.",
   },
   "functional-plausibility": {
-    title: "Functional Plausibility",
+    title: "Functional Plausibility (heuristic)",
     explanation:
-      "How likely this DNA sequence is to produce a working, functional protein. Higher scores mean the sequence follows patterns seen in real, working genes.",
+      "A demo score from composition, ORF presence, and motif hits — plus model likelihood only when a real forward pass exists. Under NIM generate mode this is not a real Evo2 log-likelihood. Higher ≈ more gene-like patterns, not proof of a working protein.",
   },
   "tissue-specificity": {
-    title: "Tissue Specificity",
+    title: "Tissue Motif Score (heuristic)",
     explanation:
-      "How well this sequence targets a specific tissue or cell type. A high score means the sequence will mainly work in the intended tissue, not everywhere in the body.",
+      "Counts a small set of hand-picked short motifs from neuronal/cardiac literature. Not GTEx/ENCODE expression prediction — does not guarantee tissue-restricted activity.",
   },
   "off-target-risk": {
-    title: "Off-Target Risk",
+    title: "Panel Off-Target Overlap (heuristic)",
     explanation:
-      "The chance this sequence could accidentally affect genes other than the intended one. Lower is better \u2014 you want minimal unintended side effects.",
+      "Similarity to a tiny built-in panel of repeats/oncogene snippets (k-mer overlap). Lower is better. Not genome-wide BLAST and not clinical off-target risk.",
   },
   novelty: {
-    title: "Novelty Score",
+    title: "Novelty Score (heuristic)",
     explanation:
-      "How different this sequence is from known natural sequences. Higher novelty means a more original design, but too high might mean untested territory.",
+      "How different this string looks from simple composition baselines. Higher means more unusual DNA — not validated inventiveness.",
   },
   "log-likelihood": {
-    title: "Log-Likelihood",
+    title: "Per-position Score",
     explanation:
-      "A score from the Evo 2 AI model that indicates how \u2018natural\u2019 each position in the sequence looks. More negative = less expected. Positions with unusual scores may be functionally important or errors.",
+      "Real Evo2 log-likelihoods only when a local forward pass is available. Under NIM generate-only mode these are calibrated heuristics of the same length — check the scoring note.",
   },
   "gc-content": {
     title: "GC Content",
@@ -49,9 +49,9 @@ export const SCIENCE_TERMS: Record<
       "The percentage of bases that are G or C (vs A or T). Most genes have 40\u201360% GC content. Extreme values can cause problems with gene expression or stability.",
   },
   "overall-viability": {
-    title: "Overall Viability",
+    title: "Combined Demo Score",
     explanation:
-      "A combined score weighing all factors \u2014 function, tissue targeting, safety, and novelty \u2014 to give a single number for how promising this sequence candidate is.",
+      "Weighted blend of the four heuristic dimensions for ranking inside this IDE. Research demo only — not assay-backed viability.",
   },
 
   // ── DNA / Genomics ───────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ export const SCIENCE_TERMS: Record<
   evo2: {
     title: "Evo 2",
     explanation:
-      "A 40-billion parameter AI model trained on 9 trillion DNA base pairs. It scores how \u2018natural\u2019 a DNA sequence looks \u2014 useful for finding mutations, designing genes, and predicting function.",
+      "A large DNA language model. This app may use it to generate bases (NIM) and/or score sequences (local forward). Generation and scoring are separate — always check which engine produced your numbers.",
   },
   esmfold: {
     title: "ESMFold",

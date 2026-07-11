@@ -48,6 +48,10 @@ export function useDesignPipeline() {
       setPipelineStatus("analyzing");
       setViewMode("pipeline");
       setPipelineStage("intent");
+      useEvoStore.getState().setSeedSource(null);
+      useEvoStore.getState().setScoringNote(
+        "Under NIM, generation uses Evo2 tokens; 4D scores are labeled heuristics until a forward LL endpoint exists. ClinVar/PubMed are context cards — they do not rewrite DNA."
+      );
       setRetrievalStatuses([
         { source: "ncbi", status: "pending" },
         { source: "pubmed", status: "pending" },
@@ -214,20 +218,25 @@ export function useDesignPipeline() {
         break;
       }
 
+      case "candidate_seeded":
       case "candidate_seed": {
         const candidateId = Number(msg.data.candidate_id ?? 0);
         const sequence = String(msg.data.sequence ?? "");
+        const source = typeof msg.data.source === "string" ? msg.data.source : null;
+        if (source) {
+          store.setSeedSource(source);
+        }
         if (sequence) {
           candidateSequenceRef.current[candidateId] = sequence;
           const existing = store.candidates.find((c) => c.id === candidateId);
           const next = existing
-            ? { ...existing, sequence }
+            ? { ...existing, sequence, status: existing.status === "queued" ? "seeded" : existing.status }
             : {
                 id: candidateId,
                 sequence,
                 scores: { functional: 0, tissue: 0, offTarget: 0, novelty: 0 },
                 overall: 0,
-                status: "queued",
+                status: "seeded",
                 perPositionScores: [],
                 error: null,
               };
@@ -406,7 +415,11 @@ export function useDesignPipeline() {
         store.addCompletedStage("structure");
         store.setPipelineStage("explanation");
         const pdbData = msg.data.pdb_data as string;
-        if (pdbData) store.setActivePdb(pdbData);
+        const model = typeof msg.data.model === "string" ? msg.data.model : "esmfold";
+        if (pdbData) {
+          store.setActivePdb(pdbData);
+          store.setStructureModel(model);
+        }
         break;
       }
 

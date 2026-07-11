@@ -137,10 +137,12 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
         # Fold the first ORF with ESMFold (or mock fallback) so Structure view is real.
         if idx == 0:
             try:
-                pdb_data, confidence, _model = await _predict_structure_snapshot(
+                pdb_data, confidence, model = await _predict_structure_snapshot(
                     sequence=sequence[orf.start : orf.end],
                     candidate_id=0,
                 )
+                if model == "unavailable" or not pdb_data:
+                    pdb_data, confidence = None, 0.0
             except Exception:
                 logger.warning("Structure fold during analyze failed", exc_info=True)
                 pdb_data, confidence = None, 0.0
@@ -150,6 +152,7 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
                 "region_end": orf.end,
                 "pdb_data": pdb_data,
                 "sequence_identity": float(confidence or 0.0),
+                "model": "esmfold" if pdb_data else None,
             }
         )
 
@@ -444,6 +447,11 @@ async def structure(request: StructureRequest) -> StructureResponse:
 
     region = sequence[request.region_start:request.region_end]
     pdb_data, confidence, model = await _predict_structure_snapshot(sequence=region, candidate_id=0)
+    if not pdb_data or model == "unavailable":
+        raise HTTPException(
+            status_code=503,
+            detail="ESMFold could not fold this region (ORF too short or API unavailable). No mock structure returned.",
+        )
     return StructureResponse(pdb_data=pdb_data, model=model, confidence=confidence)
 
 
@@ -797,10 +805,12 @@ async def pipeline_ws(websocket: WebSocket, session_id: str) -> None:
 
 
 async def _predict_structure_snapshot(*, sequence: str, candidate_id: int) -> tuple[str, float, str]:
+    """Return (pdb, confidence, model). Never disguises mock as ESMFold."""
     if settings.structure_mode == StructureMode.ESMFOLD:
         result = await predict_structure(sequence)
         if result is not None:
-            return result.pdb_data, result.confidence, result.model
+            return result.pdb_data, result.confidence, "esmfold"
+        return "", 0.0, "unavailable"
     pdb, confidence = build_mock_pdb_from_dna(sequence, candidate_id=candidate_id)
     return pdb, confidence, "mock"
 

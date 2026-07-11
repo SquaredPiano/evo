@@ -54,7 +54,8 @@ from ws.manager import WebSocketManager
 
 logger = logging.getLogger("evo")
 
-DEFAULT_SEED = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAAT"
+# Neutral coding scaffold — NOT a real gene fragment (avoids silent BRCA contamination).
+DEFAULT_SEED = "ATGGCTGCAGAAGCTAAAGCTGCTGGTAAAGCTGCTGCTAAAGCTGCTTAATAA"
 CandidateUpdateCallback = Callable[[int, str], Awaitable[None] | None]
 SpecUpdateCallback = Callable[[DesignSpec], Awaitable[None] | None]
 STAGE_ORDER = ["intent", "retrieval", "generation", "scoring", "structure", "explanation", "complete"]
@@ -228,14 +229,16 @@ async def _resolve_structure(
     candidate_id: int,
     timeout: float,
     use_fallback: bool,
-) -> tuple[str | None, float | None, str | None]:
-    """Predict structure, returning (pdb_data, confidence, error_reason).
+) -> tuple[str | None, float | None, str | None, str]:
+    """Predict structure, returning (pdb_data, confidence, error_reason, model).
 
-    Tries the configured structure mode, then falls back to mock PDB if allowed.
+    Never silently presents mock geometry as ESMFold. Mock is only used when
+    ``use_fallback`` is True (demo_fallback truth mode).
     """
     pdb_data: str | None = None
     confidence: float | None = None
     error: str | None = None
+    model = "unavailable"
 
     try:
         async with asyncio.timeout(timeout):
@@ -244,10 +247,14 @@ async def _resolve_structure(
                 if result is not None:
                     pdb_data = result.pdb_data
                     confidence = result.confidence
+                    model = "esmfold"
+                else:
+                    error = "esmfold_unavailable_or_orf_too_short"
             elif settings.structure_mode == StructureMode.MOCK:
                 pdb_data, confidence = build_mock_pdb_from_dna(
                     sequence, candidate_id=candidate_id
                 )
+                model = "mock"
     except TimeoutError:
         error = "structure_timeout"
     except Exception as exc:
@@ -257,9 +264,10 @@ async def _resolve_structure(
         pdb_data, confidence = build_mock_pdb_from_dna(
             sequence, candidate_id=candidate_id
         )
+        model = "mock"
         error = None
 
-    return pdb_data, confidence, error
+    return pdb_data, confidence, error, model
 
 
 async def _emit_structure(
@@ -270,12 +278,18 @@ async def _emit_structure(
     pdb_data: str,
     confidence: float | None,
     spec: DesignSpec,
+    model: str = "esmfold",
 ) -> dict[str, object] | None:
     """Emit structure + optional regulatory map events. Returns regulatory_map or None."""
     await manager.send_event(
         session_id,
         StructureReadyEvent(
-            data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=confidence)
+            data=StructureReadyData(
+                candidate_id=candidate_id,
+                pdb_data=pdb_data,
+                confidence=confidence,
+                model=model,
+            )
         ).to_json(),
     )
 
@@ -593,7 +607,7 @@ async def run_generation_pipeline(
                 await tracker.set("structure", "active", max(0.01, finished_structure / candidate_count))
 
             # --- Structure ---
-            pdb_data, confidence, structure_error = await _resolve_structure(
+            pdb_data, confidence, structure_error, structure_model = await _resolve_structure(
                 generated, candidate_id, profile.structure_timeout, profile.use_structure_fallback,
             )
 
@@ -608,6 +622,7 @@ async def run_generation_pipeline(
 
             regulatory_map = await _emit_structure(
                 manager, session_id, candidate_id, generated, pdb_data, confidence, spec,
+                model=structure_model,
             )
 
             candidate = CandidateRuntime(
@@ -780,7 +795,7 @@ async def run_followup_pipeline(
 
     # --- Structure ---
     await tracker.set("structure", "active", 0.2)
-    pdb_data, confidence, structure_error = await _resolve_structure(
+    pdb_data, confidence, structure_error, structure_model = await _resolve_structure(
         base, candidate_id, profile.structure_timeout, profile.use_structure_fallback,
     )
 
@@ -824,6 +839,7 @@ async def run_followup_pipeline(
 
     regulatory_map = await _emit_structure(
         manager, session_id, candidate_id, base, pdb_data, confidence, spec,
+        model=structure_model,
     )
     await tracker.set("structure", "done", 1.0)
 
@@ -914,6 +930,13 @@ async def _emit_retrieval(
                 result_dict = source_result.model_dump()
             else:
                 result_dict = {}
+            # Honesty: retrieval cards are context unless a scorer consumes them.
+            if source_name in {"clinvar", "pubmed"}:
+                result_dict["constrains_generation"] = False
+                result_dict["role"] = "context_only"
+            elif source_name == "ncbi":
+                result_dict["constrains_generation"] = bool(result_dict.get("reference_sequence"))
+                result_dict["role"] = "seed_context" if result_dict.get("reference_sequence") else "metadata_only"
             status = "complete"
         else:
             if allow_demo_fallback:
@@ -947,9 +970,11 @@ def _build_retrieval_fallback(source_name: str, spec: DesignSpec) -> dict[str, o
             "end": 420,
             "strand": "+",
             "summary": f"Demo fallback genomic context synthesized for {gene}.",
-            "reference_accession": "DEMO_REFSEQ",
+            "reference_accession": "NEUTRAL_SCAFFOLD",
             "reference_sequence": (DEFAULT_SEED * 8)[:420],
+            "sequence_kind": "neutral_scaffold",
             "fallback": True,
+            "note": "Demo fallback — not a real gene CDS. Live NCBI was unavailable.",
         }
     if source_name == "pubmed":
         return {
@@ -1192,9 +1217,15 @@ def _default_target_sequence_length(
 def _select_context_seed(retrieval_result: RetrievalResult | None, fallback_seed: str) -> tuple[str, str]:
     if retrieval_result and retrieval_result.ncbi and retrieval_result.ncbi.reference_sequence:
         reference = retrieval_result.ncbi.reference_sequence
-        if len(reference) >= 180:
-            return reference[: min(260, len(reference))], "retrieval_context"
-    return fallback_seed, "fallback_seed"
+        kind = getattr(retrieval_result.ncbi, "sequence_kind", "") or ""
+        min_len = 90 if kind == "cds" else 120
+        if len(reference) >= min_len:
+            # Keep enough identity signal for coding; regulatory stays shorter.
+            cap = 720 if kind == "cds" else 320
+            source = f"ncbi_{kind}" if kind else "retrieval_context"
+            return reference[: min(cap, len(reference))], source
+    # Never silently pretend the fallback is a named gene.
+    return fallback_seed, "neutral_scaffold"
 
 
 def _build_candidate_seeds(
@@ -1204,7 +1235,11 @@ def _build_candidate_seeds(
     candidate_count: int,
     enforce_foldable: bool = True,
 ) -> tuple[dict[int, str], str]:
-    base_seed, source = _select_context_seed(retrieval_result, seed_sequence)
+    # If caller passed an explicit seed that isn't the neutral default, respect it.
+    if seed_sequence and seed_sequence != DEFAULT_SEED and len(seed_sequence) >= 60:
+        base_seed, source = seed_sequence, "user_seed"
+    else:
+        base_seed, source = _select_context_seed(retrieval_result, seed_sequence or DEFAULT_SEED)
     seeds: dict[int, str] = {}
     for cid in range(candidate_count):
         varied = _vary_seed(base_seed, cid)

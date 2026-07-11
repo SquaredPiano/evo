@@ -409,12 +409,14 @@ class Evo2NIMService(Evo2Service):
             # Any NIM API failure (422, 429, 5xx, timeout) falls back to mock.
             # Never let an API error crash the pipeline.
             suffix = await self._fallback_generate(seed, n_tokens, temperature)
-        for base in suffix.upper():
-            if base not in ("A", "T", "C", "G", "N"):
-                continue
-            yield base
-            # Tiny yield to keep the event loop responsive without blowing timeouts.
-            await asyncio.sleep(0)
+            generated = ""
+            for base in suffix.upper():
+                if base not in ("A", "T", "C", "G", "N"):
+                    continue
+                generated += base
+                yield base
+                # Pace yields so the IDE can paint a visible base stream (NIM returns bulk).
+                await asyncio.sleep(0.004)
 
     async def health(self) -> dict[str, object]:
         try:

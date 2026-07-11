@@ -12,7 +12,7 @@
  * STUB STATUS:
  * - analyzeSequence:  Calls POST /api/analyze. Backend implemented.
  * - predictMutation:  Calls POST /api/mutations. Backend implemented.
- * - fetchStructure:   Calls POST /api/structure. Backend returns mock PDB.
+ * - fetchStructure:   Calls POST /api/structure. Returns live ESMFold when configured; errors instead of silent mock.
  * - submitDesign:     Calls POST /api/design. Backend implemented.
  *                     Returns session_id + ws_url for streaming.
  * - editBase:         Calls POST /api/edit/base. Backend implemented.
@@ -253,6 +253,9 @@ export async function checkHealth(): Promise<{
   model: string;
   gpu_available: boolean;
   inference_mode: string;
+  structure_mode?: string;
+  llm_available?: boolean;
+  evo2_mode?: string;
 }> {
   const res = await fetch(`${API_BASE}/api/health`);
   if (!res.ok) throw new Error(`Health check failed: ${res.status}`);

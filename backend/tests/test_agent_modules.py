@@ -270,6 +270,25 @@ class TestDeterministicPlan:
         opt_action = next(a for a in plan if a["tool"] == "optimize_candidate")
         assert opt_action["args"]["objective"] == "functional"
 
+    def test_explain_beginner_does_not_optimize(self):
+        """Guided 'explain for a beginner' must stay read-only (no mutate)."""
+        plan = deterministic_plan(
+            "Explain this candidate in plain English for a beginner. "
+            "What does each score mean? Do not edit or mutate the sequence."
+        )
+        tools = [a["tool"] for a in plan]
+        assert "optimize_candidate" not in tools
+        assert "edit_base" not in tools
+        assert "explain_candidate" in tools
+
+    def test_what_should_i_do_next_does_not_optimize(self):
+        plan = deterministic_plan(
+            "Explain this candidate. What should I do next?"
+        )
+        tools = [a["tool"] for a in plan]
+        assert "optimize_candidate" not in tools
+        assert is_default_explain_plan(plan) or "explain_candidate" in tools
+
     def test_ambiguous_defaults_to_explain(self):
         plan = deterministic_plan("what does this sequence do?")
         assert is_default_explain_plan(plan)

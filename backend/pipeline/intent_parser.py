@@ -79,6 +79,14 @@ def _coerce_spec(parsed: dict, goal: str) -> DesignSpec:
     )
 
 
+# Common gene symbols that appear in mixed-case prose (not ALLCAPS).
+_KNOWN_GENES = {
+    "brca1", "brca2", "brca", "bdnf", "tp53", "egfr", "kras", "myc", "pcsk9",
+    "cftr", "htt", "app", "snca", "lrk2", "park2", "ins", "glucagon",
+    "insulin", "p53", "her2", "alk", "braf", "pten", "rb1", "apc",
+}
+
+
 def _heuristic_intent(goal: str) -> DesignSpec:
     goal_lower = goal.lower()
     design_type = "regulatory_element"
@@ -86,7 +94,26 @@ def _heuristic_intent(goal: str) -> DesignSpec:
         design_type = "promoter"
     elif "enhancer" in goal_lower:
         design_type = "enhancer"
-    elif "coding" in goal_lower:
+    elif any(
+        token in goal_lower
+        for token in (
+            "coding",
+            "cds",
+            "orf",
+            "protein",
+            "peptide",
+            "tumor suppressor",
+            "tumour suppressor",
+            "tumor-suppressor",
+            "tumour-suppressor",
+            "enzyme",
+            "kinase",
+            "receptor",
+        )
+    ):
+        design_type = "coding_sequence"
+    elif any(g in goal_lower for g in ("brca1", "brca2", "brca", "tp53", "p53", "rb1", "pten")):
+        # Named tumor-suppressor genes without "promoter/enhancer" → coding fragment.
         design_type = "coding_sequence"
 
     constraints: list[str] = []
@@ -94,21 +121,50 @@ def _heuristic_intent(goal: str) -> DesignSpec:
         constraints.append("novel_sequence")
     if "pathogenic" in goal_lower:
         constraints.append("no_known_pathogenic_variants")
+    if design_type == "coding_sequence":
+        constraints.append("prefer_ncbi_cds_seed")
 
     return DesignSpec(
         design_type=design_type,
         target_gene=_extract_target_gene(goal),
+        organism=_extract_organism(goal_lower),
         tissue_specificity=_extract_tissue(goal_lower),
         constraints=constraints,
     )
 
 
 def _extract_target_gene(goal: str) -> str | None:
-    tokens = goal.replace(",", " ").replace(".", " ").split()
+    goal_lower = goal.lower()
+    for known in _KNOWN_GENES:
+        if known in goal_lower:
+            if known == "insulin":
+                return "INS"
+            if known == "p53":
+                return "TP53"
+            if known == "her2":
+                return "ERBB2"
+            if known == "brca":
+                return "BRCA1"
+            return known.upper()
+
+    tokens = goal.replace(",", " ").replace(".", " ").replace("-", " ").split()
     for token in tokens:
         cleaned = token.strip()
         if cleaned.isalpha() and 2 <= len(cleaned) <= 8 and cleaned.upper() == cleaned:
             return cleaned
+    return None
+
+
+def _extract_organism(goal_lower: str) -> str | None:
+    if "human" in goal_lower or "homo sapiens" in goal_lower:
+        return "human"
+    if "mouse" in goal_lower or "mus musculus" in goal_lower:
+        return "mouse"
+    if "e. coli" in goal_lower or "escherichia" in goal_lower:
+        return "Escherichia coli"
+    # Default organism for well-known human disease genes so NCBI prefers human CDS.
+    if any(g in goal_lower for g in ("brca", "tp53", "p53", "bdnf", "cftr", "htt")):
+        return "human"
     return None
 
 

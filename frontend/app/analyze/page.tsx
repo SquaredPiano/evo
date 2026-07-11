@@ -40,16 +40,15 @@ const ProteinViewer = dynamic(() => import("@/components/structure/ProteinViewer
 
 const SIDEBAR_ITEMS = [
   { icon: Dna, label: "Overview", viewMode: "analyze" as const },
-  { icon: Box, label: "Structure", viewMode: "structure" as const },
   { icon: Search, label: "Sequence", viewMode: "explorer" as const },
-  { icon: Pencil, label: "Edit", viewMode: "ide" as const },
-  { icon: BarChart3, label: "Results", viewMode: "leaderboard" as const },
+  { icon: Box, label: "Structure", viewMode: "structure" as const },
+  { icon: BarChart3, label: "Variants", viewMode: "leaderboard" as const },
 ];
 
 const VIEW_LABELS = {
   input: "Start", pipeline: "Working", analyze: "Overview",
-  structure: "Structure", leaderboard: "Results",
-  explorer: "Sequence", ide: "Edit", compare: "Compare",
+  structure: "Structure", leaderboard: "Variants",
+  explorer: "Sequence", ide: "Sequence", compare: "Compare",
 } as const;
 
 const VALID_VIEWS = ["input", "pipeline", "analyze", "structure", "leaderboard", "explorer", "ide", "compare"];
@@ -60,26 +59,26 @@ const springTransition = { type: "spring" as const, stiffness: 300, damping: 28,
 const smoothTransition = { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] };
 
 const fadeSlide = {
-  initial: { opacity: 0 },
+  initial: { opacity: 1 },
   animate: { opacity: 1 },
   exit: { opacity: 1 },
-  transition: { duration: 0.15, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
+  transition: { duration: 0.01 },
 };
 
 const staggerContainer = {
-  animate: { transition: { staggerChildren: 0.06, delayChildren: 0.08 } },
+  animate: { transition: { staggerChildren: 0.02, delayChildren: 0 } },
 };
 
 const staggerItem = {
-  initial: { opacity: 0, y: 16 },
+  initial: { opacity: 1, y: 0 },
   animate: { opacity: 1, y: 0 },
-  transition: springTransition,
+  transition: { duration: 0.01 },
 };
 
 const slideInRight = {
-  initial: { opacity: 0, x: 24 },
+  initial: { opacity: 1, x: 0 },
   animate: { opacity: 1, x: 0 },
-  transition: springTransition,
+  transition: { duration: 0.01 },
 };
 
 const scaleIn = {
@@ -134,18 +133,18 @@ function AnalyzePageInner() {
   const addEditEntry = useEvoStore((s) => s.addEditEntry);
   const saveVersion = useEvoStore((s) => s.saveVersion);
   const revertVersion = useEvoStore((s) => s.revertVersion);
-  const user = useEvoStore((s) => s.user);
-  const signIn = useEvoStore((s) => s.signIn);
-  const signOut = useEvoStore((s) => s.signOut);
   const candidates = useEvoStore((s) => s.candidates);
   const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
   const chatOpen = useEvoStore((s) => s.chatOpen);
   const toggleChat = useEvoStore((s) => s.toggleChat);
   const setChatOpen = useEvoStore((s) => s.setChatOpen);
   const setChatDraft = useEvoStore((s) => s.setChatDraft);
-  const theme = useEvoStore((s) => s.theme);
+  const setComposerPrefill = useEvoStore((s) => s.setComposerPrefill);
+  const theme = "light" as const;
   const wsStatus = useEvoStore((s) => s.wsStatus);
-  const toggleTheme = useEvoStore((s) => s.toggleTheme);
+  const seedSource = useEvoStore((s) => s.seedSource);
+  const scoringNote = useEvoStore((s) => s.scoringNote);
+  const structureModel = useEvoStore((s) => s.structureModel);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -159,42 +158,41 @@ function AnalyzePageInner() {
     }
   }, []);
 
+  // Collapse legacy Edit (ide) into Sequence (explorer).
+  useEffect(() => {
+    if (viewMode === "ide") setViewMode("explorer");
+  }, [viewMode, setViewMode]);
+
   // Structure fullscreen state
   const [structureFullscreen, setStructureFullscreen] = useState(false);
-  const syncingUrlRef = useRef(false);
+  const urlHydratedRef = useRef(false);
 
-  // One-way URL sync without fighting itself (bidirectional sync caused view flicker).
+  // Hydrate view from URL once on mount — never fight sidebar clicks afterward.
   useEffect(() => {
+    if (urlHydratedRef.current) return;
+    urlHydratedRef.current = true;
     const urlView = searchParams.get("view");
-    if (syncingUrlRef.current) return;
-    if (urlView && urlView !== viewMode && VALID_VIEWS.includes(urlView)) {
+    if (urlView && VALID_VIEWS.includes(urlView) && urlView !== viewMode) {
       setViewMode(urlView as typeof viewMode);
     }
-  }, [searchParams, setViewMode, viewMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Store → URL only (one direction).
   useEffect(() => {
     const current = searchParams.get("view");
-    const desired = viewMode === "input" ? null : viewMode;
-    if (desired === current) return;
-    if (viewMode === "input" && !current) return;
-    syncingUrlRef.current = true;
     if (viewMode === "input") {
-      router.replace("/analyze", { scroll: false });
-    } else {
+      if (current) router.replace("/analyze", { scroll: false });
+      return;
+    }
+    if (current !== viewMode) {
       router.replace(`/analyze?view=${viewMode}`, { scroll: false });
     }
-    const t = window.setTimeout(() => {
-      syncingUrlRef.current = false;
-    }, 50);
-    return () => window.clearTimeout(t);
   }, [viewMode, router, searchParams]);
 
   const { isLoading, error, analyze } = useSequenceAnalysis();
   const { startDesign } = useDesignPipeline();
   const { simulate } = useMutationSim();
-
-  // Auto sign-in for demo
-  useEffect(() => { if (!user) signIn(); }, []);
 
   useEffect(() => {
     if (analysisResult?.predictedProteins?.[0]?.pdbData && !activePdb) {
@@ -310,11 +308,17 @@ function AnalyzePageInner() {
         sidebarOpen={sidebarOpen}
         onNavigate={(v) => setViewMode(v as typeof viewMode)}
         onCloseMobile={() => setSidebarOpen(false)}
-        user={user}
-        onSignIn={signIn}
-        theme={theme}
-        onToggleTheme={toggleTheme}
         onShowTutorial={() => setShowTutorial(true)}
+        onNewDesign={() => {
+          setViewMode("input");
+        }}
+        onSelectSession={(session) => {
+          setComposerPrefill({
+            mode: session.kind,
+            value: session.payload,
+          });
+          setViewMode("input");
+        }}
         wsStatus={wsStatus}
         navItems={SIDEBAR_ITEMS}
       />
@@ -345,8 +349,8 @@ function AnalyzePageInner() {
           <div className="flex items-center gap-1 lg:gap-3 overflow-x-auto">
             {viewMode !== "input" && viewMode !== "pipeline" && (
               <>
-                <div className="hidden md:flex gap-1" role="tablist" aria-label="View tabs">
-                  {(["analyze", "structure", "leaderboard", "explorer", "ide", "compare"] as const).map((m) => (
+                <div className="hidden md:flex gap-1 lg:hidden" role="tablist" aria-label="View tabs">
+                  {(["analyze", "explorer", "structure", "ide", "leaderboard"] as const).map((m) => (
                     <motion.button key={m} onClick={() => setViewMode(m)}
                       role="tab"
                       aria-selected={viewMode === m}
@@ -363,14 +367,14 @@ function AnalyzePageInner() {
                   ))}
                 </div>
                 <button onClick={toggleChat}
-                  aria-label={chatOpen ? "Close Evo Copilot" : "Open Evo Copilot"}
+                  aria-label={chatOpen ? "Close Helio" : "Open Helio"}
                   aria-pressed={chatOpen}
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-all duration-300"
                   style={{
                     color: chatOpen ? "var(--ink)" : "var(--honey-700)",
                     background: chatOpen ? "var(--honey-100)" : "rgba(245,158,11,0.1)",
                   }}>
-                  <Sparkles size={13} /> Copilot
+                  <Sparkles size={13} /> Helio
                 </button>
               </>
             )}
@@ -414,10 +418,16 @@ function AnalyzePageInner() {
                   <motion.div {...staggerItem}>
                     <h2 className="text-xl font-semibold tracking-tight mb-1">Analysis Complete</h2>
                     <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-                      <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> scored with {scores.length} per-position likelihoods.
+                      <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> with {scores.length} per-position scores
+                      {seedSource ? <> · seed <span className="font-medium" style={{ color: "var(--ink)" }}>{seedSource.replace(/_/g, " ")}</span></> : null}.
                       {regions.length > 0 && <> {codingRegions.length} <ScienceTooltip term="exon">coding region{codingRegions.length !== 1 ? "s" : ""}</ScienceTooltip> identified.</>}
                       {analysisResult.predictedProteins.length > 0 && <> {analysisResult.predictedProteins.length} protein structure{analysisResult.predictedProteins.length !== 1 ? "s" : ""} predicted.</>}
                     </p>
+                    {scoringNote && (
+                      <p className="text-[12px] mt-2 max-w-2xl leading-relaxed" style={{ color: "var(--text-muted)" }}>
+                        {scoringNote}
+                      </p>
+                    )}
                   </motion.div>
                   <div className="flex gap-2">
                     <motion.button onClick={() => setViewMode("structure")}
@@ -615,10 +625,10 @@ function AnalyzePageInner() {
                 {/* Viewer */}
                 <motion.div
                   className="flex-1 relative"
-                  style={{ background: theme === "dark" ? "var(--surface-void)" : "var(--surface-base)" }}
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.15, ...springTransition }}
+                  style={{ background: "var(--surface-base)" }}
+                  initial={false}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.01 }}
                 >
                   <ProteinViewer
                     pdbData={activePdb || undefined}
@@ -627,6 +637,7 @@ function AnalyzePageInner() {
                     onResidueHover={handleResidueHover}
                     isFullscreen={structureFullscreen}
                     theme={theme}
+                    structureModel={structureModel}
                   />
 
                   {/* pLDDT legend overlay */}
@@ -748,8 +759,16 @@ function AnalyzePageInner() {
                       About this view
                     </span>
                     <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                      This 3D structure was predicted by <ScienceTooltip term="esmfold">ESMFold</ScienceTooltip> from the amino acid sequence encoded in your DNA.
-                      Each sphere is one <ScienceTooltip term="residue">amino acid residue</ScienceTooltip>. Colors indicate the AI&apos;s confidence (<ScienceTooltip term="plddt">pLDDT score</ScienceTooltip>).
+                      {structureModel === "esmfold" || (!structureModel && activePdb) ? (
+                        <>
+                          This fold is from live <ScienceTooltip term="esmfold">ESMFold</ScienceTooltip> (Meta ESM Atlas) of a coding ORF translated from your DNA.
+                          Colors are per-residue <ScienceTooltip term="plddt">pLDDT</ScienceTooltip>.
+                        </>
+                      ) : activePdb ? (
+                        <>Structure source: <strong>{structureModel ?? "unknown"}</strong>. Treat this as illustrative unless labeled ESMFold live.</>
+                      ) : (
+                        <>No structure yet. ESMFold needs an ORF of at least ~40 amino acids. Short or non-coding designs will not fold.</>
+                      )}
                     </p>
                   </div>
 
@@ -768,7 +787,7 @@ function AnalyzePageInner() {
                       return (
                         <>
                           <p className="text-[12px] leading-relaxed mb-3" style={{ color: "var(--text-primary)" }}>
-                            Candidate #{active.id}: likely-to-work <strong>{likely}</strong>, tissue-fit <strong>{tissueFit}</strong>, safety <strong>{safety}</strong>.
+                            Candidate #{active.id}: function heuristic <strong>{likely}</strong>, tissue-motif <strong>{tissueFit}</strong>, panel safety <strong>{safety}</strong>. Demo metrics only.
                           </p>
                           <div className="space-y-2">
                             <button
@@ -824,154 +843,16 @@ function AnalyzePageInner() {
             </motion.div>
           )}
 
-          {/* ═══ EXPLORER: inspect (read-only, navigational) ═══ */}
-          {viewMode === "explorer" && analysisResult && (
-            <motion.div key="explorer" className="flex-1 flex flex-col overflow-hidden"
-              {...fadeSlide}>
-              {/* Action bar */}
-              <motion.div className="shrink-0 flex items-center justify-between px-6 py-3"
-                style={{ background: "var(--surface-raised)" }}
-                initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
-                <div className="flex items-center gap-3">
-                  <Search size={14} style={{ color: "var(--accent)" }} />
-                  <span className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-                    Click any <ScienceTooltip term="adenine">base</ScienceTooltip> to inspect. This is a read-only view — edit in Design Studio.
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <motion.button onClick={() => setViewMode("structure")}
-                    whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium font-label tracking-wider uppercase transition-all"
-                    style={{ background: "var(--surface-elevated)", color: "var(--text-muted)" }}>
-                    <Box size={13} /> Structure
-                  </motion.button>
-                  <motion.button onClick={() => setViewMode("ide")}
-                    whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium font-label tracking-wider uppercase transition-all"
-                    style={{ background: "var(--accent)", color: "var(--ink)" }}>
-                    <Pencil size={13} /> Open Studio <ArrowRight size={13} />
-                  </motion.button>
-                </div>
-              </motion.div>
-              {/* Annotation track */}
-              <div className="px-5 py-3 shrink-0" style={{ background: "var(--surface-raised)" }}>
-                <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
-                <AnnotationLegend regions={regions} />
-              </div>
-              <div className="flex-1 flex overflow-hidden min-h-0">
-                {/* Sequence view (read-only focus) */}
-                <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-                  <div className="flex-1 overflow-auto px-5 py-4">
-                    <SequenceViewer bases={bases} regions={regions}
-                      highlightedPosition={selectedPosition ?? undefined} onBaseClick={handleBaseClick} />
-                  </div>
-                  <motion.div className="h-40 shrink-0 px-5 py-3" style={{ background: "var(--surface-raised)" }}
-                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, ...springTransition }}>
-                    <LikelihoodGraph scores={scores}
-                      highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
-                  </motion.div>
-                </div>
-                {/* Inspector panel */}
-                <motion.div className="hidden lg:flex w-[320px] shrink-0 flex-col overflow-y-auto"
-                  style={{ background: "var(--surface-elevated)" }}
-                  {...slideInRight}>
-                  <div className="p-5 pb-4">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--accent)" }}>Inspector</span>
-                    {selectedPosition !== null ? (
-                      <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={selectedPosition}>
-                        <div>
-                          <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Position</span>
-                          <div className="text-lg font-semibold font-mono" style={{ color: "var(--text-primary)" }}>{selectedPosition}</div>
-                        </div>
-                        <div>
-                          <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                            <ScienceTooltip term={
-                              bases[selectedPosition]?.nucleotide === "A" ? "adenine" :
-                              bases[selectedPosition]?.nucleotide === "T" ? "thymine" :
-                              bases[selectedPosition]?.nucleotide === "C" ? "cytosine" : "guanine"
-                            }>Base</ScienceTooltip>
-                          </span>
-                          <div className="text-lg font-semibold font-mono" style={{ color: bases[selectedPosition]?.nucleotide === "A" ? "var(--base-a)" : bases[selectedPosition]?.nucleotide === "T" ? "var(--base-t)" : bases[selectedPosition]?.nucleotide === "C" ? "var(--base-c)" : "var(--base-g)" }}>
-                            {bases[selectedPosition]?.nucleotide ?? "N"}
-                          </div>
-                        </div>
-                        {bases[selectedPosition]?.annotationType && (
-                          <div>
-                            <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Region</span>
-                            <div className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                              <ScienceTooltip term={bases[selectedPosition]?.annotationType ?? ""}>{bases[selectedPosition]?.annotationType}</ScienceTooltip>
-                            </div>
-                          </div>
-                        )}
-                        {bases[selectedPosition]?.likelihoodScore !== undefined && (
-                          <div>
-                            <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                              <ScienceTooltip term="log-likelihood">Likelihood</ScienceTooltip>
-                            </span>
-                            <div className="text-sm font-mono" style={{ color: "var(--text-secondary)" }}>{bases[selectedPosition]?.likelihoodScore?.toFixed(3)}</div>
-                          </div>
-                        )}
-                      </motion.div>
-                    ) : (
-                      <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                        Click a base in the sequence to inspect its position, <ScienceTooltip term="exon">annotation</ScienceTooltip>, and <ScienceTooltip term="log-likelihood">likelihood score</ScienceTooltip>.
-                      </p>
-                    )}
-                  </div>
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  {/* Region summary */}
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Regions ({regions.length})</span>
-                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                      {regions.slice(0, 6).map((r, i) => (
-                        <button key={i} onClick={() => setSelectedPosition(r.start)}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors hover:bg-white/[0.04]"
-                          style={{ fontSize: "12px" }}>
-                          <span style={{ color: "var(--text-muted)" }}>
-                            <ScienceTooltip term={r.type}>{r.type}</ScienceTooltip>
-                          </span>
-                          <span className="flex-1" />
-                          <span className="font-mono" style={{ color: "var(--text-faint)" }}>{r.start}-{r.end}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  {/* Structure preview */}
-                  <div className="p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                        <ScienceTooltip term="protein-structure">Structure</ScienceTooltip>
-                      </span>
-                      <button onClick={() => setViewMode("structure")} className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>
-                        Expand <Maximize2 size={10} className="inline ml-0.5" />
-                      </button>
-                    </div>
-                    <div className="rounded-lg overflow-hidden h-[100px] cursor-pointer flex items-center justify-center" style={{ background: "var(--surface-base)" }}
-                      onClick={() => setViewMode("structure")}>
-                      <div className="text-center">
-                        <Box size={28} style={{ color: "var(--accent)", margin: "0 auto 4px", opacity: 0.4 }} />
-                        <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>View 3D</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex-1" />
-                </motion.div>
-                {chatOpen && <ChatPanel />}
-              </div>
-            </motion.div>
-          )}
 
-          {/* ═══ IDE / DESIGN STUDIO: manipulate ═══ */}
-          {viewMode === "ide" && analysisResult && (
-            <motion.div key="ide" className="flex-1 flex flex-col overflow-hidden"
+          {/* ═══ SEQUENCE: inspect + edit (merged Sequence / Edit) ═══ */}
+          {(viewMode === "explorer" || viewMode === "ide") && analysisResult && (
+            <motion.div key="sequence-workspace" className="flex-1 flex flex-col overflow-hidden"
               {...fadeSlide}>
               {/* IDE toolbar */}
-              <motion.div className="h-10 shrink-0 flex items-center justify-between px-5"
-                style={{ background: "var(--surface-raised)" }}
-                initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+              <div className="h-10 shrink-0 flex items-center justify-between px-5"
+                style={{ background: "var(--surface-raised)" }}>
                 <div className="flex items-center gap-4">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>LIVE EDITING</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>SEQUENCE</span>
                   <span className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
                     <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> | {editHistory.length} <ScienceTooltip term="mutation">edit{editHistory.length !== 1 ? "s" : ""}</ScienceTooltip>
                   </span>
@@ -990,7 +871,7 @@ function AnalyzePageInner() {
                     {rescoring ? "Rescoring..." : "Rescore"}
                   </button>
                 </div>
-              </motion.div>
+              </div>
               <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Editable workspace */}
                 <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -1007,11 +888,10 @@ function AnalyzePageInner() {
                       onSelectPosition={setSelectedPosition}
                     />
                   </div>
-                  <motion.div className="h-36 shrink-0 px-5 py-3" style={{ background: "var(--surface-raised)" }}
-                    initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, ...springTransition }}>
+                  <div className="h-36 shrink-0 px-5 py-3" style={{ background: "var(--surface-raised)" }}>
                     <LikelihoodGraph scores={scores}
                       highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
-                  </motion.div>
+                  </div>
                 </div>
                 {/* IDE right panel */}
                 <motion.div className="hidden lg:flex w-[380px] shrink-0 flex-col overflow-y-auto"
@@ -1074,7 +954,7 @@ function AnalyzePageInner() {
                     </div>
                     <div className="rounded-lg overflow-hidden h-[200px]" style={{ background: "var(--surface-void)" }}>
                       <ProteinViewer pdbData={activePdb || undefined} highlightResidues={highlightResidues}
-                        onResidueClick={handleResidueClick} theme={theme} />
+                        onResidueClick={handleResidueClick} theme={theme} structureModel={structureModel} />
                     </div>
                     {mutationEffect && (
                       <div className="mt-2 text-center">
@@ -1121,21 +1001,7 @@ function AnalyzePageInner() {
         </AnimatePresence>
       </div>
 
-      {/* Floating Copilot button */}
-      {!chatOpen && viewMode !== "input" && viewMode !== "pipeline" && analysisResult && (
-        <button onClick={toggleChat}
-          aria-label="Open Evo Copilot"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3.5 text-sm font-medium rounded-full"
-          style={{
-            background: "var(--ink)",
-            color: "var(--cream)",
-            border: "none",
-            boxShadow: "0 12px 40px -10px rgba(15,15,15,0.35)",
-          }}
-        >
-          <Sparkles size={16} /> Ask Copilot
-        </button>
-      )}
+      {/* Helio opens from the header only — no duplicate floating button */}
     </div>
   );
 }

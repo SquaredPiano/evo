@@ -115,21 +115,31 @@ def deterministic_plan(
     if any(token in text for token in ("compare", "rank", "best candidate", "which candidate")):
         actions.append({"tool": "compare_candidates", "args": {}})
 
-    # Optimize / improve
-    if any(token in text for token in (
-        "tissue-specific", "tissue specific", "safer", "novel", "functional",
-        "improve", "better", "boost", "increase", "suggestion", "what should",
-    )):
-        if not any(a["tool"] == "optimize_candidate" for a in actions):
-            actions.append({"tool": "optimize_candidate", "args": {"objective": objective_from_prompt(text)}})
-            actions.append({"tool": "explain_candidate", "args": {}})
-
-    # Explain / interpret scores — still default explain, but ensure LLM responder runs
-    if any(token in text for token in (
+    explain_only = any(token in text for token in (
         "what do", "what does", "explain", "mean", "beginner", "plain english",
-        "scores mean", "interpret", "why is", "how good",
-    )) and not actions:
-        actions.append({"tool": "explain_candidate", "args": {}})
+        "scores mean", "interpret", "why is", "how good", "what should i do",
+        "for a beginner", "in plain english",
+    ))
+    explicit_mutate = any(token in text for token in (
+        "optim", "mutate", "mutation", "edit base", "change base",
+        "make it safer", "make safer", "safer", "improve score", "boost score",
+        "hill climb", "redesign", "improve the", "boost the",
+    ))
+
+    # Optimize / improve — NEVER on explain/beginner prompts (even if they say "what should I do next")
+    if explicit_mutate and not explain_only:
+        if any(token in text for token in (
+            "tissue-specific", "tissue specific", "safer", "novel", "functional",
+            "improve", "better", "boost", "increase", "optimize", "optimise",
+        )) or any(token in text for token in ("mutate", "mutation", "edit base", "change base")):
+            if not any(a["tool"] == "optimize_candidate" for a in actions):
+                actions.append({"tool": "optimize_candidate", "args": {"objective": objective_from_prompt(text)}})
+                actions.append({"tool": "explain_candidate", "args": {}})
+
+    # Explain / interpret scores — read-only
+    if explain_only and not any(a["tool"] in {"edit_base", "optimize_candidate", "transform_sequence"} for a in actions):
+        if not any(a["tool"] == "explain_candidate" for a in actions):
+            actions.append({"tool": "explain_candidate", "args": {}})
 
     # Codon optimize
     if any(token in text for token in ("codon", "codon optim", "expression optim", "cai")):

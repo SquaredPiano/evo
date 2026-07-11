@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { normalizeSequence, isValidSequence, gcContent } from "@/lib/sequenceUtils";
-import { ArrowRight, Upload, Dna, FileText, Sparkles, Cpu, CheckCircle, Wand2 } from "lucide-react";
+import { pushSessionEntry } from "@/lib/sessionHistory";
+import { useEvoStore } from "@/lib/store";
+import { ArrowRight, Upload, Dna, Sparkles, Clock } from "lucide-react";
 
 interface SequenceInputProps {
   onSubmit: (sequence: string) => void;
@@ -11,40 +13,32 @@ interface SequenceInputProps {
   error: string | null;
 }
 
-type InputMode = "paste" | "design";
-
-const EXAMPLES = [
-  { name: "BRCA1 (Human)", desc: "Breast cancer gene, 200bp coding region", len: "200 bp",
-    seq: "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCCATCTGTCTGGAGTTGATCAAGGAACCTGTCTCCACAAAGTGTGACCACATATTTTGCAAATTTTGCATGCTGAAACTTCTCAACCAGAAGAAAGGGCCTTCACAGTGTCCTTTATGTAAGAATGA" },
-  { name: "E. coli lacZ", desc: "Beta-galactosidase, 500bp", len: "500 bp",
-    seq: "ATGACCATGATTACGCCAAGCTATTTAGGTGACACTATAGAATACTCAAGCTATGCATCCAACGCGTTGGGAGCTCTCCCATATGGTCGACCTGCAGGCGGCCGCACTAGTGATTACCCTGTTATCCCTACAGCTCTTCTAGGTGCCCAGAGCTTCACCATACATCTCAATCTAAGTCAAATGGACCCTCACTCAACCCCTATCTCCCCCCTAATGCCTTAACTCAAATCTGGACTATTGGCCATTGCATTGCTGATTTGTGATAGCTTTTTTCCCAGGATGCCAGTCTTCTGAAGCAAACTTTTTCAAAATGTCCACTGCACAGGCCAGATGGTAAGTGAAGAAATCAACTCCAGCAGCAGCTACTATGGGATCCGGTTCTTGTCAAGTTCACAGATTTTAGATGCCAGTCGCCCACCAGCCAACCTTTAGCTACAATGGCATTGACAACTCACAACGTGGC" },
-  { name: "T4 Phage", desc: "Bacteriophage structural gene, 288bp", len: "288 bp",
-    seq: "ATGGCTAACGTAATTAAAACCGACAAACCATCTATCGTATTCTTAGACAATGGTTCTTGTCAGTACAAATATGGTATCAAAGAGTATAACAAAGCGGTTTCTGATGCAACTTTAATTTCACCACATGTTAAAGAGTTGAGCAAAGAAACTTTCAAGGCTATCGTTAACGGTCAAGAATACAAATACAAAGATAGTGAAGCTATCATCGATGCTGTTAAGTTAGACGGAAGCATCCGTATTAAATTAAGTTCTGTTAACTTCGATACAGCGAACTATAAATACGATATC" },
-];
-
-const PASTE_STEPS = [
-  { step: "1", label: "Region annotation", desc: "Exons, introns, ORFs, regulatory elements" },
-  { step: "2", label: "Likelihood scoring", desc: "Per-position Evo 2 log-likelihood scores" },
-  { step: "3", label: "Mutation analysis", desc: "Click any base to predict variant effects" },
-  { step: "4", label: "Structure prediction", desc: "ESMFold protein folding for top regions" },
-];
-
-const DESIGN_STEPS = [
-  { step: "1", label: "Intent parsing", desc: "Extract design parameters from your goal" },
-  { step: "2", label: "Context retrieval", desc: "Search NCBI, PubMed, ClinVar in parallel" },
-  { step: "3", label: "Candidate generation", desc: "Evo 2 generates sequences token by token" },
-  { step: "4", label: "4D scoring", desc: "Functional, tissue, off-target, novelty" },
-  { step: "5", label: "Structure prediction", desc: "Fold top candidates with ESMFold" },
-  { step: "6", label: "Explanation", desc: "Mechanistic rationale for each candidate" },
-];
+type InputMode = "design" | "paste";
 
 const DESIGN_EXAMPLES = [
-  { name: "BDNF Enhancer", desc: "Neural growth factor enhancer for hippocampal neurons",
-    goal: "Design a BDNF enhancer sequence optimized for high expression in hippocampal neurons with minimal off-target activity" },
-  { name: "Insulin Promoter", desc: "Pancreatic beta-cell specific promoter",
-    goal: "Design a synthetic insulin promoter for targeted expression in pancreatic beta cells" },
-  { name: "Phage Therapy", desc: "Lytic gene for antibiotic-resistant bacteria",
-    goal: "Design a lytic cassette targeting antibiotic-resistant Staphylococcus aureus with high specificity" },
+  {
+    name: "BRCA1 coding fragment",
+    desc: "Short human tumor-suppressor CDS seed",
+    goal: "Design a short human BRCA1 coding sequence fragment for a tumor suppressor research demo",
+  },
+  {
+    name: "BDNF enhancer",
+    desc: "Regulatory element for hippocampal expression",
+    goal: "Design a BDNF enhancer sequence optimized for high expression in hippocampal neurons",
+  },
+  {
+    name: "Insulin promoter",
+    desc: "Pancreatic beta-cell promoter sketch",
+    goal: "Design a synthetic insulin promoter for targeted expression in pancreatic beta cells",
+  },
+];
+
+const PASTE_EXAMPLES = [
+  {
+    name: "BRCA1 (200 bp)",
+    desc: "Human coding-region sample",
+    seq: "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCCATCTGTCTGGAGTTGATCAAGGAACCTGTCTCCACAAAGTGTGACCACATATTTTGCAAATTTTGCATGCTGAAACTTCTCAACCAGAAGAAAGGGCCTTCACAGTGTCCTTTATGTAAGAATGA",
+  },
 ];
 
 export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: SequenceInputProps) {
@@ -53,45 +47,90 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
   const [designGoal, setDesignGoal] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const composerPrefill = useEvoStore((s) => s.composerPrefill);
+  const setComposerPrefill = useEvoStore((s) => s.setComposerPrefill);
+
+  useEffect(() => {
+    if (!composerPrefill) return;
+    if (composerPrefill.mode === "design") {
+      setMode("design");
+      setDesignGoal(composerPrefill.value);
+      setInput("");
+    } else {
+      setMode("paste");
+      setInput(composerPrefill.value);
+      setDesignGoal("");
+    }
+    setValidationError(null);
+    setComposerPrefill(null);
+  }, [composerPrefill, setComposerPrefill]);
 
   const normalized = normalizeSequence(input);
   const charCount = normalized.length;
   const gc = charCount > 0 ? gcContent(normalized) : 0;
 
   const handlePasteSubmit = useCallback(() => {
-    if (charCount === 0) { setValidationError("Please enter a DNA sequence"); return; }
-    if (!isValidSequence(normalized)) { setValidationError("Invalid characters. Use only A, T, C, G, N."); return; }
-    if (charCount < 10) { setValidationError("Sequence must be at least 10 nucleotides"); return; }
+    if (charCount === 0) {
+      setValidationError("Please enter a DNA sequence");
+      return;
+    }
+    if (!isValidSequence(normalized)) {
+      setValidationError("Invalid characters. Use only A, T, C, G, N.");
+      return;
+    }
+    if (charCount < 10) {
+      setValidationError("Sequence must be at least 10 nucleotides");
+      return;
+    }
     setValidationError(null);
+    pushSessionEntry({
+      kind: "paste",
+      title: `Analyze · ${charCount} bp`,
+      payload: normalized,
+    });
     onSubmit(normalized);
   }, [charCount, normalized, onSubmit]);
 
   const handleDesignSubmit = useCallback(() => {
-    if (!designGoal.trim()) { setValidationError("Describe what you want to design"); return; }
-    if (designGoal.trim().length < 10) { setValidationError("Please provide a more detailed description"); return; }
+    if (!designGoal.trim()) {
+      setValidationError("Describe what you want to design");
+      return;
+    }
+    if (designGoal.trim().length < 10) {
+      setValidationError("Please provide a more detailed description");
+      return;
+    }
     setValidationError(null);
-    onDesign?.(designGoal.trim());
+    const goal = designGoal.trim();
+    pushSessionEntry({
+      kind: "design",
+      title: goal.length > 64 ? `${goal.slice(0, 64)}…` : goal,
+      payload: goal,
+    });
+    onDesign?.(goal);
   }, [designGoal, onDesign]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      mode === "paste" ? handlePasteSubmit() : handleDesignSubmit();
-    }
-  }, [mode, handlePasteSubmit, handleDesignSubmit]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        mode === "paste" ? handlePasteSubmit() : handleDesignSubmit();
+      }
+    },
+    [mode, handlePasteSubmit, handleDesignSubmit]
+  );
 
   const handleFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const name = file.name.toLowerCase();
     const isGenBank = name.endsWith(".gb") || name.endsWith(".gbk") || name.endsWith(".genbank");
-    // GenBank carries feature tables the browser can't parse — let the backend
-    // handle it; fall back to local FASTA header-stripping for plain sequences.
     if (isGenBank) {
       try {
         const { importSequenceFile } = await import("@/lib/api");
         const res = await importSequenceFile(file);
         if (res.sequences[0]?.sequence) {
           setInput(res.sequences[0].sequence);
+          setMode("paste");
           setValidationError(null);
           return;
         }
@@ -102,260 +141,201 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
     const reader = new FileReader();
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
-      const cleaned = text.split("\n").filter(l => !l.startsWith(">")).join("");
+      const cleaned = text
+        .split("\n")
+        .filter((l) => !l.startsWith(">"))
+        .join("");
       setInput(cleaned);
+      setMode("paste");
       setValidationError(null);
     };
     reader.readAsText(file);
   }, []);
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* ── PRIMARY: Intake area ── */}
-      <div className="flex-1 overflow-auto px-10 py-10">
-        <div className="max-w-2xl">
-          {/* Header */}
-          <div className="mb-8">
-            <div className="flex items-center gap-2 mb-3">
-              <Dna size={18} style={{ color: "var(--accent)" }} />
-              <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--accent)" }}>
-                {mode === "paste" ? "Analyze Sequence" : "Design Pipeline"}
-              </span>
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight mb-2" style={{ color: "var(--text-primary)" }}>
-              {mode === "paste" ? "Paste a sequence" : "Describe your design"}
-            </h1>
-            <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-              {mode === "paste"
-                ? "Enter a DNA sequence to analyze with Evo 2. The model will annotate functional regions, compute per-position likelihood scores, and predict protein structures."
-                : "Describe the genomic element you want to design. Evo 2 will generate, score, and fold candidates in real time."}
-            </p>
-          </div>
+    <div className="flex-1 overflow-auto" style={{ background: "var(--cream)" }}>
+      <div className="max-w-2xl mx-auto px-6 md:px-10 py-14 md:py-20">
+        <div className="mb-10 text-center">
+          <h1
+            className="text-[2rem] md:text-[2.5rem] font-semibold tracking-tight mb-3"
+            style={{ color: "var(--ink)" }}
+          >
+            What do you want to design?
+          </h1>
+          <p className="text-[15px] leading-relaxed max-w-lg mx-auto" style={{ color: "var(--text-muted)" }}>
+            Describe a genomic goal, or paste DNA. Recent runs live in the sidebar.
+          </p>
+        </div>
 
-          {/* Mode toggle */}
-          {onDesign && (
-            <div className="flex rounded-full overflow-hidden mb-6 p-1" style={{ background: "var(--wax)" }}>
-              <button onClick={() => { setMode("paste"); setValidationError(null); }}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-full transition-colors"
-                style={{
-                  background: mode === "paste" ? "var(--ink)" : "transparent",
-                  color: mode === "paste" ? "var(--cream)" : "var(--text-muted)",
-                }}>
-                <Dna size={14} /> Paste sequence
-              </button>
-              <button onClick={() => { setMode("design"); setValidationError(null); }}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-full transition-colors"
+        {onDesign && (
+          <div className="flex justify-center mb-5">
+            <div className="inline-flex rounded-full p-1" style={{ background: "var(--wax)" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("design");
+                  setValidationError(null);
+                }}
+                className="px-4 py-2 text-[13px] font-medium rounded-full"
                 style={{
                   background: mode === "design" ? "var(--ink)" : "transparent",
                   color: mode === "design" ? "var(--cream)" : "var(--text-muted)",
-                }}>
-                <Wand2 size={14} /> Design new
+                }}
+              >
+                Design
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("paste");
+                  setValidationError(null);
+                }}
+                className="px-4 py-2 text-[13px] font-medium rounded-full"
+                style={{
+                  background: mode === "paste" ? "var(--ink)" : "transparent",
+                  color: mode === "paste" ? "var(--cream)" : "var(--text-muted)",
+                }}
+              >
+                Paste DNA
               </button>
             </div>
-          )}
-
-          {mode === "paste" ? (
-            <>
-              {/* Input surface */}
-              <div className="rounded-xl overflow-hidden mb-4" style={{ background: "var(--surface-raised)" }}>
-                <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
-                  <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Sequence Editor</span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => fileRef.current?.click()}
-                      className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full transition-colors hover:bg-white/[0.04]"
-                      style={{ color: "var(--text-muted)" }}>
-                      <Upload size={12} /> Upload FASTA / GenBank
-                    </button>
-                    <input ref={fileRef} type="file" accept=".fasta,.fa,.txt,.gb,.gbk,.genbank" onChange={handleFile} className="hidden" />
-                  </div>
-                </div>
-                <textarea
-                  value={input}
-                  onChange={(e) => { setInput(e.target.value); setValidationError(null); }}
-                  onKeyDown={handleKeyDown}
-                  placeholder=">sequence_id&#10;ATGGATTTATCTGCTCTTCGCGTT..."
-                  spellCheck={false}
-                  className="w-full h-48 px-4 py-3 text-[13px] resize-none outline-none font-mono"
-                  style={{ background: "transparent", color: "var(--text-primary)", lineHeight: "1.7" }}
-                />
-                <div className="flex items-center justify-between px-4 py-2" style={{ borderTop: "1px solid var(--ghost-border)" }}>
-                  <div className="flex items-center gap-4">
-                    {charCount > 0 && (
-                      <>
-                        <span className="text-[11px] font-mono" style={{ color: "var(--text-secondary)" }}>{charCount} bp</span>
-                        <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>GC: {(gc * 100).toFixed(1)}%</span>
-                      </>
-                    )}
-                  </div>
-                  <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>Cmd+Enter to analyze</span>
-                </div>
-              </div>
-
-              {(validationError ?? error) && (
-                <p className="text-[13px] mb-4" style={{ color: "var(--base-t)" }}>{validationError ?? error}</p>
-              )}
-
-              <button onClick={handlePasteSubmit} disabled={isLoading || charCount === 0}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-full text-[14px] font-medium transition-all disabled:opacity-50"
-                style={{ background: charCount > 0 ? "var(--ink)" : "var(--wax)", color: charCount > 0 ? "var(--cream)" : "var(--text-faint)", border: "none", boxShadow: charCount > 0 ? "0 12px 30px -10px rgba(15,15,15,0.3)" : "none" }}>
-                {isLoading ? (
-                  <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Analyzing...</>
-                ) : (
-                  <><Sparkles size={16} /> Analyze sequence</>
-                )}
-              </button>
-
-              {/* Example sequences */}
-              <div className="mt-8">
-                <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Example sequences</span>
-                <div className="space-y-2">
-                  {EXAMPLES.map(({ name, desc, len, seq }) => (
-                    <button key={name} onClick={() => { setInput(seq); setValidationError(null); }}
-                      className="w-full flex items-center gap-4 px-4 py-3 rounded-full text-left transition-colors hover:bg-black/[0.03]"
-                      style={{ background: "rgba(255,255,255,0.55)" }}>
-                      <FileText size={16} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{name}</span>
-                        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{desc}</span>
-                      </div>
-                      <span className="text-[11px] font-mono shrink-0" style={{ color: "var(--text-faint)" }}>{len}</span>
-                      <ArrowRight size={14} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              {/* Design goal input */}
-              <div className="rounded-xl overflow-hidden mb-4" style={{ background: "var(--surface-raised)" }}>
-                <div className="flex items-center px-4 py-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
-                  <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Design Goal</span>
-                </div>
-                <textarea
-                  value={designGoal}
-                  onChange={(e) => { setDesignGoal(e.target.value); setValidationError(null); }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Design a BDNF enhancer sequence optimized for hippocampal neurons..."
-                  spellCheck={false}
-                  className="w-full h-32 px-4 py-3 text-[13px] resize-none outline-none"
-                  style={{ background: "transparent", color: "var(--text-primary)", lineHeight: "1.7" }}
-                />
-                <div className="flex items-center justify-between px-4 py-2" style={{ borderTop: "1px solid var(--ghost-border)" }}>
-                  <span className="text-[11px] font-mono" style={{ color: "var(--text-faint)" }}>
-                    {designGoal.trim().length > 0 ? `${designGoal.trim().length} chars` : ""}
-                  </span>
-                  <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>Cmd+Enter to design</span>
-                </div>
-              </div>
-
-              {(validationError ?? error) && (
-                <p className="text-[13px] mb-4" style={{ color: "var(--base-t)" }}>{validationError ?? error}</p>
-              )}
-
-              <button onClick={handleDesignSubmit} disabled={isLoading || designGoal.trim().length === 0}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-full text-[14px] font-medium transition-all disabled:opacity-50"
-                style={{ background: designGoal.trim() ? "var(--ink)" : "var(--wax)", color: designGoal.trim() ? "var(--cream)" : "var(--text-faint)", border: "none", boxShadow: designGoal.trim() ? "0 12px 30px -10px rgba(15,15,15,0.3)" : "none" }}>
-                {isLoading ? (
-                  <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Designing...</>
-                ) : (
-                  <><Wand2 size={16} /> Start design</>
-                )}
-              </button>
-
-              {/* Design examples */}
-              <div className="mt-8">
-                <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Example goals</span>
-                <div className="space-y-2">
-                  {DESIGN_EXAMPLES.map(({ name, desc, goal }) => (
-                    <button key={name} onClick={() => { setDesignGoal(goal); setValidationError(null); }}
-                      className="w-full flex items-center gap-4 px-4 py-3 rounded-full text-left transition-colors hover:bg-black/[0.03]"
-                      style={{ background: "rgba(255,255,255,0.55)" }}>
-                      <Wand2 size={16} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{name}</span>
-                        <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{desc}</span>
-                      </div>
-                      <ArrowRight size={14} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ── SECONDARY: Context panel ── */}
-      <div className="w-[300px] shrink-0 overflow-y-auto px-6 py-10"
-        style={{ background: "var(--surface-raised)" }}>
-
-        {/* What happens next */}
-        <div className="mb-8">
-          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
-            {mode === "paste" ? "What happens next" : "Pipeline stages"}
-          </span>
-          <div className="space-y-3">
-            {(mode === "paste" ? PASTE_STEPS : DESIGN_STEPS).map(({ step, label, desc }) => (
-              <div key={step} className="flex gap-3">
-                <span className="text-[11px] font-mono font-semibold shrink-0 w-5 h-5 rounded flex items-center justify-center"
-                  style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>{step}</span>
-                <div>
-                  <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{label}</span>
-                  <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{desc}</span>
-                </div>
-              </div>
-            ))}
           </div>
-        </div>
-
-        {mode === "paste" && (
-          <>
-            {/* Accepted formats */}
-            <div className="mb-8">
-              <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Accepted formats</span>
-              <div className="space-y-2">
-                {["Raw ATCGN sequence", "FASTA format (headers auto-stripped)", "Single or multi-line input"].map((f) => (
-                  <div key={f} className="flex items-center gap-2">
-                    <CheckCircle size={12} style={{ color: "var(--accent)" }} />
-                    <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{f}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
         )}
 
-        {/* Model status */}
-        <div className="mb-8">
-          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Engine status</span>
-          <div className="p-4 rounded-lg space-y-2" style={{ background: "var(--surface-elevated)" }}>
-            <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Evo 2 (sequence + scoring)</span>
-              <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>hosted API</span>
+        <div
+          className="rounded-3xl overflow-hidden mb-4"
+          style={{
+            background: "#fff",
+            border: "1px solid var(--ghost-border)",
+            boxShadow: "0 24px 60px -36px rgba(15,15,15,0.35)",
+          }}
+        >
+          {mode === "design" ? (
+            <textarea
+              value={designGoal}
+              onChange={(e) => {
+                setDesignGoal(e.target.value);
+                setValidationError(null);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask Evo to design…"
+              spellCheck={false}
+              className="w-full min-h-[132px] px-5 py-4 text-[15px] resize-none outline-none leading-relaxed"
+              style={{ background: "transparent", color: "var(--ink)" }}
+            />
+          ) : (
+            <textarea
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setValidationError(null);
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={">my_sequence\nATGGCT…"}
+              spellCheck={false}
+              className="w-full min-h-[132px] px-5 py-4 text-[14px] font-mono resize-none outline-none leading-relaxed"
+              style={{ background: "transparent", color: "var(--ink)" }}
+            />
+          )}
+
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+            style={{ borderTop: "1px solid var(--ghost-border)", background: "rgba(250,249,246,0.85)" }}
+          >
+            <div className="flex items-center gap-3 text-[12px]" style={{ color: "var(--text-muted)" }}>
+              {mode === "paste" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full hover:bg-black/[0.04]"
+                  >
+                    <Upload size={12} /> Upload
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".fasta,.fa,.txt,.gb,.gbk,.genbank"
+                    onChange={handleFile}
+                    className="hidden"
+                  />
+                  {charCount > 0 && (
+                    <span className="font-mono">
+                      {charCount} bp · GC {(gc * 100).toFixed(0)}%
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock size={12} /> ⌘ Enter to run
+                </span>
+              )}
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>ESMFold (structure)</span>
-              <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>live API</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>NCBI / PubMed / ClinVar</span>
-              <span className="text-[11px] font-mono" style={{ color: "var(--accent)" }}>live</span>
-            </div>
+            <button
+              type="button"
+              onClick={mode === "design" ? handleDesignSubmit : handlePasteSubmit}
+              disabled={isLoading || (mode === "design" ? !designGoal.trim() : charCount === 0)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[13px] font-medium disabled:opacity-45"
+              style={{
+                background: "var(--ink)",
+                color: "var(--cream)",
+              }}
+            >
+              {isLoading ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  Working…
+                </>
+              ) : mode === "design" ? (
+                <>
+                  <Sparkles size={14} /> Start design
+                </>
+              ) : (
+                <>
+                  <Dna size={14} /> Analyze
+                </>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Provenance / honesty */}
-        <div>
-          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>What&apos;s real</span>
-          <div className="flex items-start gap-2 mb-2">
-            <Cpu size={14} style={{ color: "var(--text-muted)", marginTop: 2 }} />
-            <span className="text-[11px] leading-relaxed" style={{ color: "var(--text-faint)" }}>
-              Retrieval, translation, and ESMFold structure prediction are live.
-              Evo 2 uses the hosted endpoint when a key is configured, and a
-              deterministic local model otherwise — the sidebar pill shows which
-              is active so nothing is presented as more than it is.
-            </span>
+        {(validationError ?? error) && (
+          <p className="text-[13px] mb-6 text-center" style={{ color: "#B91C1C" }}>
+            {validationError ?? error}
+          </p>
+        )}
+
+        <div className="mt-10">
+          <p className="text-[11px] font-semibold uppercase tracking-wider mb-3 text-center" style={{ color: "var(--text-faint)" }}>
+            Try one
+          </p>
+          <div className="grid gap-2">
+            {(mode === "design" ? DESIGN_EXAMPLES : PASTE_EXAMPLES).map((ex) => (
+              <button
+                key={ex.name}
+                type="button"
+                onClick={() => {
+                  if (mode === "design" && "goal" in ex) {
+                    setDesignGoal(ex.goal);
+                  } else if ("seq" in ex) {
+                    setInput(ex.seq);
+                  }
+                  setValidationError(null);
+                }}
+                className="flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-colors hover:bg-white"
+                style={{ border: "1px solid var(--ghost-border)", background: "rgba(255,255,255,0.55)" }}
+              >
+                <div className="flex-1 min-w-0">
+                  <span className="text-[13px] font-medium block" style={{ color: "var(--ink)" }}>
+                    {ex.name}
+                  </span>
+                  <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>
+                    {ex.desc}
+                  </span>
+                </div>
+                <ArrowRight size={14} style={{ color: "var(--text-faint)" }} />
+              </button>
+            ))}
           </div>
         </div>
       </div>

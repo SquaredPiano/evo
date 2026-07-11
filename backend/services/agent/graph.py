@@ -315,7 +315,14 @@ class AgenticCopilot:
         )
         wants_optimization = any(
             kw in message_lc
-            for kw in ("optim", "improve", "better", "safer", "boost", "stronger", "fix score", "make it")
+            for kw in (
+                "optim", "mutate", "make it safer", "make safer", "safer",
+                "boost score", "improve score", "redesign", "improve the",
+            )
+        )
+        explain_only = any(
+            kw in message_lc
+            for kw in ("explain", "plain english", "beginner", "what does", "scores mean", "what should i do")
         )
 
         if has_failures and iteration < MAX_AGENT_ITERATIONS:
@@ -330,6 +337,7 @@ class AgenticCopilot:
             and not already_optimized
             and wants_optimization
             and not explicit_transform
+            and not explain_only
         ):
             objective = _weakest_objective(scores)
             new_steps.append(

@@ -58,6 +58,14 @@ class TestDesignSpec:
 
 
 class TestParseIntent:
+    def test_brca_tumor_suppressor_maps_to_coding(self):
+        from pipeline.intent_parser import _heuristic_intent
+        spec = _heuristic_intent("Design a BRCA tumor suppressor gene")
+        assert spec.design_type == "coding_sequence"
+        assert spec.target_gene == "BRCA1"
+        assert spec.organism == "human"
+        assert "prefer_ncbi_cds_seed" in spec.constraints
+
     def test_full_design_goal(self):
         result = asyncio.run(
             parse_intent(

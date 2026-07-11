@@ -63,8 +63,8 @@ const STEPS: TutorialStep[] = [
   },
   {
     id: "copilot",
-    title: "Ask Evo Copilot",
-    description: "Click the Copilot button (bottom-right) anytime to edit sequences, optimize scores, or get plain-English explanations.",
+    title: "Ask Helio",
+    description: "Open Helio from the header anytime to edit sequences, optimize scores, or get plain-English explanations.",
     icon: Sparkles,
   },
 ];

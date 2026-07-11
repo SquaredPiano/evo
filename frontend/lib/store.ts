@@ -68,6 +68,8 @@ interface EvoState {
   selectedRegionIndex: number | null;
   activePdb: string | null;
   originalPdb: string | null;
+  /** Provenance: esmfold | mock | unavailable | null */
+  structureModel: string | null;
   highlightResidues: number[];
 
   mutationEffect: MutationEffect | null;
@@ -77,6 +79,8 @@ interface EvoState {
   chatMessages: ChatMessage[];
   chatOpen: boolean;
   chatDraft: string | null;
+  /** Prefill the home composer when restoring a recent session. */
+  composerPrefill: { mode: "design" | "paste"; value: string } | null;
   candidates: Candidate[];
   activeCandidateId: number | null;
 
@@ -87,6 +91,10 @@ interface EvoState {
   retrievalStatuses: RetrievalStatus[];
   generationTokenCount: number;
   completedStages: string[];
+  /** Where generation seeds came from: ncbi_cds | retrieval_context | fallback_seed | … */
+  seedSource: string | null;
+  /** Honest note about score provenance (heuristic vs real Evo2 LL). */
+  scoringNote: string | null;
 
   // Connection
   wsStatus: "disconnected" | "connecting" | "connected";
@@ -109,6 +117,7 @@ interface EvoState {
   setSelectedPosition: (pos: number | null) => void;
   setSelectedRegionIndex: (idx: number | null) => void;
   setActivePdb: (pdb: string | null) => void;
+  setStructureModel: (model: string | null) => void;
   setHighlightResidues: (residues: number[]) => void;
   setMutationEffect: (effect: MutationEffect | null) => void;
   setMutationLoading: (loading: boolean) => void;
@@ -120,6 +129,7 @@ interface EvoState {
   toggleChat: () => void;
   setChatOpen: (open: boolean) => void;
   setChatDraft: (draft: string | null) => void;
+  setComposerPrefill: (prefill: { mode: "design" | "paste"; value: string } | null) => void;
   setCandidates: (candidates: Candidate[]) => void;
   setActiveCandidateId: (id: number | null) => void;
   setSessionId: (id: string | null) => void;
@@ -128,6 +138,8 @@ interface EvoState {
   setRetrievalStatuses: (statuses: RetrievalStatus[]) => void;
   updateRetrievalStatus: (source: string, status: RetrievalStatus["status"]) => void;
   addCompletedStage: (stage: string) => void;
+  setSeedSource: (source: string | null) => void;
+  setScoringNote: (note: string | null) => void;
   savedSnapshot: { sequence: string; editHistory: EditEntry[]; pdb?: string | null } | null;
   saveVersion: () => void;
   revertVersion: () => void;
@@ -148,13 +160,15 @@ const initialState = {
   selectedRegionIndex: null as number | null,
   activePdb: null as string | null,
   originalPdb: null as string | null,
+  structureModel: null as string | null,
   highlightResidues: [] as number[],
   mutationEffect: null as MutationEffect | null,
   mutationLoading: false,
   editHistory: [] as EditEntry[],
   chatMessages: [] as ChatMessage[],
-  chatOpen: true,
+  chatOpen: false,
   chatDraft: null as string | null,
+  composerPrefill: null as { mode: "design" | "paste"; value: string } | null,
   candidates: [] as Candidate[],
   activeCandidateId: null as number | null,
   sessionId: null as string | null,
@@ -163,6 +177,8 @@ const initialState = {
   retrievalStatuses: [] as RetrievalStatus[],
   generationTokenCount: 0,
   completedStages: [] as string[],
+  seedSource: null as string | null,
+  scoringNote: null as string | null,
   wsStatus: "disconnected" as "disconnected" | "connecting" | "connected",
   theme: "light" as "dark" | "light",
   savedSnapshot: null as { sequence: string; editHistory: EditEntry[]; pdb?: string | null } | null,
@@ -173,10 +189,10 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   ...initialState,
 
   toggleTheme: () => {
-    const next = get().theme === "dark" ? "light" : "dark";
-    set({ theme: next });
+    // Light-only product — ignore dark mode requests.
+    set({ theme: "light" });
     if (typeof document !== "undefined") {
-      document.documentElement.classList.toggle("dark", next === "dark");
+      document.documentElement.classList.remove("dark");
     }
   },
   setViewMode: (mode) => set({ viewMode: mode }),
@@ -238,13 +254,19 @@ export const useEvoStore = create<EvoState>((set, get) => ({
 
     const activeCandidateId = state.activeCandidateId ?? candidates[0]?.id ?? null;
 
+    // Only leave the pipeline/input screens — never yank Sequence/Edit → Structure.
+    const nextView =
+      state.viewMode === "pipeline" || state.viewMode === "input"
+        ? "analyze"
+        : state.viewMode;
+
     set({
       analysisResult: result,
       rawSequence: result.rawSequence,
       regions, bases,
       scores: result.perPositionScores,
       pipelineStatus: "complete",
-      viewMode: "structure",
+      viewMode: nextView,
       candidates,
       activeCandidateId,
       error: null,
@@ -262,6 +284,7 @@ export const useEvoStore = create<EvoState>((set, get) => ({
       set({ activePdb: pdb });
     }
   },
+  setStructureModel: (model) => set({ structureModel: model }),
   setHighlightResidues: (residues) => set({ highlightResidues: residues }),
   setMutationEffect: (effect) => set({ mutationEffect: effect }),
   setMutationLoading: (loading) => set({ mutationLoading: loading }),
@@ -273,6 +296,7 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   toggleChat: () => set({ chatOpen: !get().chatOpen }),
   setChatOpen: (open) => set({ chatOpen: open }),
   setChatDraft: (draft) => set({ chatDraft: draft }),
+  setComposerPrefill: (prefill) => set({ composerPrefill: prefill }),
   setCandidates: (candidates) => set({ candidates }),
   setActiveCandidateId: (id) => {
     const state = get();
@@ -310,7 +334,9 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   addCompletedStage: (stage) => set((s) => ({
     completedStages: s.completedStages.includes(stage) ? s.completedStages : [...s.completedStages, stage],
   })),
-  signIn: () => set({ user: { id: "user_1", name: "Demo User", email: "demo@evo.bio" } }),
+  setSeedSource: (source) => set({ seedSource: source }),
+  setScoringNote: (note) => set({ scoringNote: note }),
+  signIn: () => set({}),
   signOut: () => set({ user: null }),
   saveVersion: () => set((s) => ({
     savedSnapshot: { sequence: s.rawSequence, editHistory: [...s.editHistory], pdb: s.activePdb },

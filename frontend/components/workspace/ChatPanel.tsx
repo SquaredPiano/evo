@@ -89,7 +89,7 @@ export default function ChatPanel() {
     if (active) {
       items.push({
         label: "Explain Like I’m New",
-        prompt: "Explain this candidate in plain English for a beginner. What does each score mean and what should I do next?",
+        prompt: "Explain this candidate in plain English for a beginner. What does each score mean? Do not edit or mutate the sequence.",
         why: "Fast orientation for first-time users",
       });
       if (active.scores.offTarget > 0.02) {
@@ -369,13 +369,22 @@ export default function ChatPanel() {
       const data = await res.json();
       if (data.tool_calls && Array.isArray(data.tool_calls)) {
         setAgentPhase("executing");
-        setActiveToolCalls(
-          data.tool_calls.map((tc: ToolCallEntry) => ({
-            tool: tc.tool,
-            status: tc.status,
-            summary: tc.summary,
-          }))
-        );
+        // Progressive tool trail so the wait feels alive (API is still one JSON response).
+        setActiveToolCalls([]);
+        for (const tc of data.tool_calls as ToolCallEntry[]) {
+          setActiveToolCalls((prev) => [
+            ...prev,
+            { tool: tc.tool, status: "running", summary: "Running…" },
+          ]);
+          await new Promise((r) => setTimeout(r, 120));
+          setActiveToolCalls((prev) =>
+            prev.map((row) =>
+              row.tool === tc.tool && row.status === "running"
+                ? { tool: tc.tool, status: tc.status, summary: tc.summary }
+                : row
+            )
+          );
+        }
       }
 
       if (data.reasoning_steps && Array.isArray(data.reasoning_steps)) {
@@ -400,6 +409,14 @@ export default function ChatPanel() {
       }
 
       const assistantText = data.assistant_message ?? "I couldn't process that.";
+      // Stream the reply into the transcript so it doesn't appear as a cold dump.
+      setStreamingText("");
+      const chunk = 12;
+      for (let i = 0; i < assistantText.length; i += chunk) {
+        setStreamingText(assistantText.slice(0, i + chunk));
+        await new Promise((r) => setTimeout(r, 16));
+      }
+      setStreamingText("");
       addChatMessage({ role: "assistant", content: assistantText });
     } catch (err) {
       addChatMessage({
@@ -430,7 +447,7 @@ export default function ChatPanel() {
             <Sparkles size={14} aria-hidden="true" />
           </span>
           <div className="leading-tight">
-            <span className="text-sm font-bold block" style={{ color: "var(--text-primary)" }}>Evo Copilot</span>
+            <span className="text-sm font-bold block" style={{ color: "var(--text-primary)" }}>Helio</span>
             <span className="label-caps" style={{ fontSize: "8px" }}>Agent · tools · explain</span>
           </div>
           {iterations > 1 && (
@@ -620,8 +637,8 @@ export default function ChatPanel() {
           style={{ background: "rgba(255,255,255,0.7)", borderColor: "var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}>
           <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Ask Evo Copilot to edit, optimize, or explain..."
-            aria-label="Message Evo Copilot"
+            placeholder="Ask Helio to edit, optimize, or explain..."
+            aria-label="Message Helio"
             className="flex-1 text-[13px] outline-none bg-transparent"
             style={{ color: "var(--text-primary)" }}
             disabled={isTyping} />

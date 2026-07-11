@@ -28,13 +28,27 @@ def test_followup_returns_423_when_candidate_locked(monkeypatch: pytest.MonkeyPa
     assert res.json()["detail"] == "candidate is busy; retry shortly"
 
 
-def test_structure_uses_mock_when_predict_structure_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_structure_fails_closed_when_esmfold_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With STRUCTURE_MODE=esmfold, never return a silent mock spiral."""
     client = TestClient(app)
 
     async def fake_predict(*_args, **_kwargs):
         return None
 
     monkeypatch.setattr(main, "predict_structure", fake_predict)
+    monkeypatch.setattr(main.settings, "structure_mode", main.StructureMode.ESMFOLD)
+
+    res = client.post(
+        "/api/structure",
+        json={"sequence": "ATGGATTTATCTGCTCTTCGCGTTGAAGAAG", "region_start": 0, "region_end": 12},
+    )
+    assert res.status_code == 503
+    assert "mock" not in res.json()["detail"].lower() or "No mock" in res.json()["detail"]
+
+
+def test_structure_uses_mock_only_when_mode_is_mock(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(app)
+    monkeypatch.setattr(main.settings, "structure_mode", main.StructureMode.MOCK)
 
     res = client.post(
         "/api/structure",
@@ -43,8 +57,6 @@ def test_structure_uses_mock_when_predict_structure_returns_none(monkeypatch: py
     assert res.status_code == 200
     body = res.json()
     assert body["model"] == "mock"
-    # Confidence comes from synthetic fallback pLDDT proxy and may vary slightly
-    # as mock geometry evolves. Keep this bounded, not hard-coded.
     assert 0.7 <= body["confidence"] <= 0.95
     assert body["pdb_data"].startswith("HEADER")
 

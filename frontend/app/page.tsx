@@ -29,8 +29,8 @@ const STEPS = [
   {
     icon: <Gauge size={22} strokeWidth={2.5} />,
     kicker: "02 / Score",
-    title: "Four honest dimensions",
-    body: "Functional plausibility, tissue specificity, off-target risk and novelty — with a real ClinVar AUROC readout so you know what the numbers are worth.",
+    title: "Four labeled heuristics",
+    body: "Composition/motif scores for function, tissue motifs, panel off-target overlap, and novelty — clearly marked as demo metrics, not clinical predictions.",
   },
   {
     icon: <Boxes size={22} strokeWidth={2.5} />,
@@ -217,7 +217,7 @@ export default function Home() {
             The interface layer genomic design has been missing.
           </h2>
           <p className="text-[16px] mb-10" style={{ color: "var(--rail-muted)" }}>
-            Real Evo 2 generation, live ESMFold folding, ClinVar-calibrated scoring, and a copilot that actually runs tools.
+            Evo 2 can generate DNA (NIM), ESMFold folds coding ORFs when live, NCBI/ClinVar supply context cards, and the copilot runs real tools — scores stay labeled as heuristics until a forward endpoint exists.
           </p>
           <Link
             href="/analyze"

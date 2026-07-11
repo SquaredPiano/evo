@@ -32,12 +32,27 @@ async def tool_explain(
     scores, per_position = await score_candidate(service, sequence)
     score_dict = scores.to_dict()
     gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
+    health = {}
+    try:
+        health = await service.health()
+    except Exception:
+        health = {}
+    scoring_note = str(health.get("scoring_note") or "")
+    heuristic = "mock" in scoring_note.lower() or "heuristic" in scoring_note.lower()
+    engine = str(health.get("inference_mode") or health.get("model") or "unknown")
+    caveat = (
+        f" Scores are composition/motif heuristics under {engine} (not real Evo2 log-likelihoods)."
+        if heuristic or "nim" in engine.lower()
+        else f" Scored with {engine}."
+    )
     note = (
         f"Candidate #{candidate_id} ({len(sequence)} bp, GC {gc:.0%}) is {band(score_dict['combined'])} "
         f"(combined {score_dict['combined']:.3f}). "
-        f"Functional plausibility {score_dict['functional']:.3f}, tissue specificity "
-        f"{score_dict['tissue_specificity']:.3f}, off-target risk {score_dict['off_target']:.3f} "
-        f"(lower is better), novelty {score_dict['novelty']:.3f}."
+        f"Functional heuristic {score_dict['functional']:.3f}, tissue-motif score "
+        f"{score_dict['tissue_specificity']:.3f}, panel off-target {score_dict['off_target']:.3f} "
+        f"(lower is better), novelty heuristic {score_dict['novelty']:.3f}."
+        f"{caveat} "
+        "These are research demo metrics — not clinical predictions."
     )
     return ToolExecution(
         call=AgentToolCall(tool="explain_candidate", status="ok", summary="Scored and summarized active candidate."),
@@ -76,10 +91,11 @@ async def tool_edit_base(
     _, per_position = await score_candidate(service, mutated)
 
     score_dict = updated_scores.to_dict()
-    impact = "benign" if abs(delta) < 0.001 else "moderate" if abs(delta) < 0.005 else "deleterious"
+    impact = "small_delta" if abs(delta) < 0.001 else "moderate_delta" if abs(delta) < 0.005 else "large_delta"
     note = (
         f"Applied edit on candidate #{candidate_id}: base {position}->{new_base}. "
-        f"Delta likelihood {delta:.5f} ({impact}). New combined {score_dict['combined']:.3f}."
+        f"Heuristic delta {delta:.5f} ({impact}). New combined {score_dict['combined']:.3f}. "
+        "Delta is not a ClinVar pathogenicity call."
     )
     return ToolExecution(
         call=AgentToolCall(tool="edit_base", status="ok", summary=f"Mutated position {position} to {new_base}."),

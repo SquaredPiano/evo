@@ -27,10 +27,10 @@ export default function CandidateLeaderboard() {
 
   const topCandidate = candidates[0];
   const laySummary = topCandidate
-    ? `Top candidate #${topCandidate.id}: likely-to-work ${strengthLabel(topCandidate.scores.functional)}, tissue-fit ${strengthLabel(topCandidate.scores.tissue)}, safety ${safetyLabel(topCandidate.scores.offTarget)}.`
-    : "No candidates have completed scoring yet.";
+    ? `Best variant #${topCandidate.id}: function ${strengthLabel(topCandidate.scores.functional)}, tissue-motif ${strengthLabel(topCandidate.scores.tissue)}, panel safety ${safetyLabel(topCandidate.scores.offTarget)}. These are demo heuristics, not clinical scores.`
+    : "No design variants have finished scoring yet.";
   const expertSummary = topCandidate
-    ? `Functional ${topCandidate.scores.functional.toFixed(3)}, tissue specificity ${topCandidate.scores.tissue.toFixed(3)}, off-target ${topCandidate.scores.offTarget.toFixed(3)}, novelty ${topCandidate.scores.novelty.toFixed(3)}.`
+    ? `Functional ${topCandidate.scores.functional.toFixed(3)}, tissue ${topCandidate.scores.tissue.toFixed(3)}, panel off-target ${topCandidate.scores.offTarget.toFixed(3)}, novelty ${topCandidate.scores.novelty.toFixed(3)}.`
     : "";
 
   const queuePrompt = (prompt: string) => {
@@ -40,17 +40,19 @@ export default function CandidateLeaderboard() {
 
   return (
     <div className="flex-1 overflow-auto px-4 lg:px-8 py-6" style={{ background: "var(--surface-base)" }}
-      role="region" aria-label="Candidate leaderboard">
+      role="region" aria-label="Design variants">
       <div className="max-w-5xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight mb-1">Candidate Ranking</h2>
-            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>{candidates.length} candidates scored and ranked by <ScienceTooltip term="overall-viability">composite viability</ScienceTooltip></p>
+            <h2 className="text-xl font-semibold tracking-tight mb-1">Design variants</h2>
+            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+              {candidates.length} alternative DNA sequences from this run, ranked by a <ScienceTooltip term="overall-viability">combined demo score</ScienceTooltip>. Pick one to inspect or edit.
+            </p>
           </div>
           <button onClick={() => setViewMode("explorer")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02]"
             style={{ background: "var(--accent)", color: "var(--ink)" }}>
-            Inspect top candidate <ArrowRight size={14} aria-hidden="true" />
+            Inspect top variant <ArrowRight size={14} aria-hidden="true" />
           </button>
         </div>
 

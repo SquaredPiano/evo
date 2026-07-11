@@ -45,9 +45,13 @@ async def retrieve_context(spec: DesignSpec) -> RetrievalResult:
     organism = spec.organism
     therapeutic_context = spec.therapeutic_context
     design_type = spec.design_type
+    prefer_cds = any(
+        token in (design_type or "").lower()
+        for token in ("coding", "protein", "peptide", "orf")
+    ) or "prefer_ncbi_cds_seed" in (spec.constraints or [])
 
     ncbi_result, pubmed_result, clinvar_result = await asyncio.gather(
-        _safe_fetch(fetch_gene_info(gene, organism), "NCBI"),
+        _safe_fetch(fetch_gene_info(gene, organism, prefer_cds=prefer_cds), "NCBI"),
         _safe_fetch(search_literature(gene, therapeutic_context, design_type), "PubMed"),
         _safe_fetch(lookup_variants(gene), "ClinVar"),
     )

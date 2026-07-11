@@ -68,8 +68,22 @@ function load3DMol(): Promise<void> {
   return molScriptPromise;
 }
 
-function confidenceColor(bFactor?: number): string {
-  const score = Number.isFinite(bFactor as number) ? Number(bFactor) : 70;
+function resolvePlddt(atom: any): number {
+  // 3Dmol: occupancy is often on `.b` (~1.0); real B-factor/pLDDT is `.bfactor`.
+  const raw = atom?.bfactor ?? atom?.tempfactor ?? atom?.b;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 70;
+  // Match backend: values in [0, 1.5] are treated as normalized pLDDT.
+  return n <= 1.5 ? n * 100 : n;
+}
+
+function confidenceColor(atomOrScore?: any): string {
+  const score =
+    typeof atomOrScore === "number"
+      ? atomOrScore <= 1.5
+        ? atomOrScore * 100
+        : atomOrScore
+      : resolvePlddt(atomOrScore);
   if (score >= 90) return "#5bb5a2";
   if (score >= 70) return "#6b9fd4";
   if (score >= 50) return "#c9a855";
@@ -79,18 +93,18 @@ function confidenceColor(bFactor?: number): string {
 function applyViewerStyle(viewer: any, mode: RenderMode) {
   if (!viewer) return;
   if (mode === "sticks") {
-    viewer.setStyle({}, { stick: { radius: 0.2, colorfunc: (atom: any) => confidenceColor(atom?.b) } });
+    viewer.setStyle({}, { stick: { radius: 0.2, colorfunc: (atom: any) => confidenceColor(atom) } });
     return;
   }
   if (mode === "cartoon") {
-    viewer.setStyle({}, { cartoon: { colorfunc: (atom: any) => confidenceColor(atom?.b), opacity: 1.0 } });
+    viewer.setStyle({}, { cartoon: { colorfunc: (atom: any) => confidenceColor(atom), opacity: 1.0 } });
     return;
   }
   viewer.setStyle(
     {},
     {
-      cartoon: { colorfunc: (atom: any) => confidenceColor(atom?.b), opacity: 1.0 },
-      stick: { radius: 0.1, opacity: 0.35, colorfunc: (atom: any) => confidenceColor(atom?.b) },
+      cartoon: { colorfunc: (atom: any) => confidenceColor(atom), opacity: 1.0 },
+      stick: { radius: 0.1, opacity: 0.35, colorfunc: (atom: any) => confidenceColor(atom) },
     }
   );
 }

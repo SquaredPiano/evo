@@ -138,7 +138,7 @@ class CandidateStatusEvent(BaseModel):
 class CandidateSeedData(BaseModel):
     candidate_id: int
     sequence: str
-    source: Literal["retrieval_context", "fallback_seed"] = "fallback_seed"
+    source: str = "neutral_scaffold"
 
 
 class CandidateSeedEvent(BaseModel):
@@ -153,6 +153,7 @@ class StructureReadyData(BaseModel):
     candidate_id: int
     pdb_data: str
     confidence: float | None = None
+    model: str = "esmfold"
 
 
 class StructureReadyEvent(BaseModel):
