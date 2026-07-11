@@ -66,7 +66,7 @@ export default function CompareView() {
             </p>
           </div>
           <button onClick={() => setViewMode("ide")}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-[1.02]"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02]"
             style={{ background: "var(--accent)", color: "var(--ink)" }}>
             Edit in Studio <ArrowRight size={14} />
           </button>
@@ -77,7 +77,7 @@ export default function CompareView() {
           {/* Candidate headers */}
           <div className="grid grid-cols-[1fr_80px_1fr]" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
             <div className="px-5 py-3 flex items-center gap-3">
-              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>#1</span>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>#1</span>
               <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Candidate_{candA.id.toString().padStart(3, "0")}</span>
               <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>Overall: {candA.overall.toFixed(1)}</span>
             </div>
@@ -85,7 +85,7 @@ export default function CompareView() {
               <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--text-muted)" }}>Diff</span>
             </div>
             <div className="px-5 py-3 flex items-center gap-3">
-              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded" style={{ background: "rgba(107,159,212,0.1)", color: "var(--base-c)" }}>#2</span>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(107,159,212,0.1)", color: "var(--base-c)" }}>#2</span>
               <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Candidate_{candB.id.toString().padStart(3, "0")}</span>
               <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>Overall: {candB.overall.toFixed(1)}</span>
             </div>

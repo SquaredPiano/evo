@@ -127,7 +127,7 @@ export default function ToolsPanel() {
     { id: "export", label: "Export" },
   ];
 
-  const btn = "text-[11px] px-2.5 py-1.5 rounded font-medium transition-colors disabled:opacity-40";
+  const btn = "text-[11px] px-3 py-1.5 rounded-full font-medium transition-colors disabled:opacity-40";
 
   return (
     <div className="p-5">
@@ -137,7 +137,7 @@ export default function ToolsPanel() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className="text-[10px] px-2 py-1 rounded transition-colors"
+            className="text-[10px] px-3 py-1.5 rounded-full transition-colors"
             style={{
               background: tab === t.id ? "color-mix(in oklch, var(--accent), transparent 85%)" : "transparent",
               color: tab === t.id ? "var(--accent)" : "var(--text-muted)",
@@ -181,7 +181,7 @@ export default function ToolsPanel() {
           <select
             value={organism}
             onChange={(e) => setOrganism(e.target.value)}
-            className="w-full text-[11px] px-2 py-1.5 rounded bg-transparent"
+            className="w-full text-[11px] px-3 py-2 rounded-full bg-transparent"
             style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
           >
             {ORGANISMS.map((o) => (
@@ -215,7 +215,7 @@ export default function ToolsPanel() {
               value={gene}
               onChange={(e) => setGene(e.target.value)}
               placeholder="Gene symbol (e.g. BRCA1)"
-              className="flex-1 text-[11px] px-2 py-1.5 rounded bg-transparent"
+              className="flex-1 text-[11px] px-3 py-2 rounded-full bg-transparent"
               style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
             />
             <button onClick={runVariants} disabled={busy || !gene.trim()} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
@@ -247,7 +247,7 @@ export default function ToolsPanel() {
               value={calGene}
               onChange={(e) => setCalGene(e.target.value)}
               placeholder="Gene (e.g. BRCA1)"
-              className="flex-1 text-[11px] px-2 py-1.5 rounded bg-transparent"
+              className="flex-1 text-[11px] px-3 py-2 rounded-full bg-transparent"
               style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
             />
             <button onClick={runCalibrate} disabled={busy || !calGene.trim() || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>

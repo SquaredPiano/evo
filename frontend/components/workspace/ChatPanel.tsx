@@ -439,7 +439,7 @@ export default function ChatPanel() {
             </span>
           )}
         </div>
-        <button onClick={toggleChat} className="p-1.5 rounded-md transition-colors" style={{ color: "var(--text-muted)" }} aria-label="Close chat panel">
+        <button onClick={toggleChat} className="p-1.5 rounded-full transition-colors" style={{ color: "var(--text-muted)" }} aria-label="Close chat panel">
           <X size={16} aria-hidden="true" />
         </button>
       </div>
@@ -454,7 +454,7 @@ export default function ChatPanel() {
             <div className="space-y-1.5">
               {prompts.map((q) => (
                 <button key={q} onClick={() => handleSend(q)}
-                  className="block w-full text-left text-[12px] px-3 py-2.5 rounded-lg transition-colors hover:bg-white/[0.04]"
+                  className="block w-full text-left text-[12px] px-3 py-2.5 rounded-full transition-colors hover:bg-white/[0.04]"
                   style={{ color: "var(--text-secondary)", lineHeight: 1.4 }}>
                   {q}
                 </button>
@@ -472,7 +472,7 @@ export default function ChatPanel() {
                 key={item.label}
                 onClick={() => handleSend(item.prompt)}
                 disabled={isTyping}
-                className="w-full text-left px-3 py-2 rounded-lg transition-colors hover:bg-white/[0.04] disabled:opacity-50"
+                className="w-full text-left px-3 py-2 rounded-full transition-colors hover:bg-white/[0.04] disabled:opacity-50"
                 style={{ background: "var(--surface-base)" }}
               >
                 <div className="text-[12px] font-medium" style={{ color: "var(--text-primary)" }}>{item.label}</div>
@@ -526,7 +526,7 @@ export default function ChatPanel() {
           <div>
             <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: "var(--accent)" }}>Evo</div>
             {agentPhase === "thinking" && (
-              <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg text-[12px]"
+              <div className="flex items-center gap-2 py-1.5 px-3 rounded-full text-[12px]"
                 style={{ background: "rgba(var(--accent-rgb, 9,212,156), 0.08)", border: "1px solid rgba(var(--accent-rgb, 9,212,156), 0.2)", color: "var(--accent)" }}>
                 <div className="flex gap-1">
                   {[0, 1, 2].map(i => (
@@ -537,14 +537,14 @@ export default function ChatPanel() {
               </div>
             )}
             {agentPhase === "executing" && (
-              <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg text-[12px]"
+              <div className="flex items-center gap-2 py-1.5 px-3 rounded-full text-[12px]"
                 style={{ background: "rgba(246,193,77, 0.08)", border: "1px solid rgba(246,193,77, 0.2)", color: "#ffd990" }}>
                 <Loader2 size={12} className="animate-spin" />
                 <span>Executing tools...</span>
               </div>
             )}
             {agentPhase === "reflecting" && (
-              <div className="flex items-center gap-2 py-1.5 px-3 rounded-lg text-[12px]"
+              <div className="flex items-center gap-2 py-1.5 px-3 rounded-full text-[12px]"
                 style={{ background: "rgba(114,182,255, 0.08)", border: "1px solid rgba(114,182,255, 0.2)", color: "#72b6ff" }}>
                 <Sparkles size={12} />
                 <span>Reflecting on results...</span>
@@ -552,7 +552,7 @@ export default function ChatPanel() {
             )}
             {streamingText && (
               <div
-                className="mt-2 text-[13px] leading-relaxed px-3 py-2 rounded-lg"
+                className="mt-2 text-[13px] leading-relaxed px-3 py-2 rounded-full"
                 style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}
               >
                 {streamingText}
@@ -571,7 +571,7 @@ export default function ChatPanel() {
             </div>
             {activeToolCalls.map((tc, i) => (
               <div key={`tc-${i}`}
-                className="flex items-start gap-2 px-3 py-2 rounded-lg text-[11px] transition-all"
+                className="flex items-start gap-2 px-3 py-2 rounded-full text-[11px] transition-all"
                 style={{
                   background: "var(--surface-base)",
                   border: `1px solid ${tc.status === "ok" ? "rgba(var(--accent-rgb, 9,212,156), 0.3)" : tc.status === "failed" ? "rgba(255,90,111, 0.3)" : "rgba(246,193,77, 0.3)"}`,

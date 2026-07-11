@@ -67,16 +67,16 @@ class TestDesignRequestTargetLength:
 
 class TestDefaultTargetSequenceLength:
     def test_demo_coding_default(self):
-        assert _default_target_sequence_length("coding", "demo") == 3200
+        assert _default_target_sequence_length("coding", "demo") == 420
 
     def test_demo_enhancer_default(self):
-        assert _default_target_sequence_length("enhancer", "demo") == 2200
+        assert _default_target_sequence_length("enhancer", "demo") == 280
 
     def test_live_coding_default(self):
-        assert _default_target_sequence_length("coding", "live") == 16000
+        assert _default_target_sequence_length("coding", "live") == 720
 
     def test_live_enhancer_default(self):
-        assert _default_target_sequence_length("enhancer", "live") == 12000
+        assert _default_target_sequence_length("enhancer", "live") == 480
 
     def test_override_replaces_default(self):
         result = _default_target_sequence_length("coding", "demo", target_length_override=50_000)
@@ -124,20 +124,20 @@ class TestProfileScaling:
 
     def test_live_50k_scales_generation(self):
         profile = _profile("live", "demo_fallback", target_length=50_000)
-        assert profile.generation_timeout == 125.0  # 25.0 * 5.0
-        assert profile.candidate_workers == 2
+        assert profile.generation_timeout == 450.0  # 90.0 * 5.0
+        assert profile.candidate_workers == 1
 
     def test_live_default_workers(self):
         profile = _profile("live", "demo_fallback")
-        assert profile.candidate_workers == 3
+        assert profile.candidate_workers == 2
 
-    def test_live_20k_keeps_3_workers(self):
+    def test_live_20k_keeps_2_workers(self):
         profile = _profile("live", "demo_fallback", target_length=20_000)
-        assert profile.candidate_workers == 3
+        assert profile.candidate_workers == 2
 
     def test_live_30k_reduces_workers(self):
         profile = _profile("live", "demo_fallback", target_length=30_000)
-        assert profile.candidate_workers == 2
+        assert profile.candidate_workers == 1
 
 
 # -------------------------------------------------------------------------

@@ -99,7 +99,7 @@ export default function MutationPanel({
           placeholder="0"
           min={0}
           max={sequence.length - 1}
-          className="w-full h-9 px-3 rounded-lg bg-[var(--surface-raised)] text-[var(--text-primary)] text-sm font-mono placeholder:text-[var(--text-faint)] outline-none transition-colors focus:bg-[var(--surface-elevated)]"
+          className="w-full h-9 px-3 rounded-full bg-[var(--surface-raised)] text-[var(--text-primary)] text-sm font-mono placeholder:text-[var(--text-faint)] outline-none transition-colors focus:bg-[var(--surface-elevated)]"
         />
       </div>
 
@@ -120,7 +120,7 @@ export default function MutationPanel({
                 disabled={isCurrentBase}
                 whileTap={!isCurrentBase ? { scale: 0.95 } : undefined}
                 className={`
-                  h-10 rounded-lg font-mono text-sm font-semibold transition-all duration-150
+                  h-10 rounded-full font-mono text-sm font-semibold transition-all duration-150
                   ${isCurrentBase ? "bg-[var(--surface-base)] cursor-not-allowed opacity-25" : ""}
                   ${isSelected && !isCurrentBase ? "bg-[var(--surface-overlay)]" : ""}
                   ${!isSelected && !isCurrentBase ? "bg-[var(--surface-raised)] hover:bg-[var(--surface-elevated)]" : ""}
@@ -149,7 +149,7 @@ export default function MutationPanel({
         disabled={!canSubmit}
         whileTap={canSubmit ? { scale: 0.98 } : undefined}
         className={`
-          h-10 rounded-lg text-sm font-medium transition-all duration-200
+          h-10 rounded-full text-sm font-medium transition-all duration-200
           ${
             canSubmit
               ? "bg-[var(--text-primary)] text-[var(--surface-void)] hover:bg-[var(--text-secondary)]"
@@ -180,7 +180,7 @@ export default function MutationPanel({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            className="rounded-lg bg-[var(--surface-raised)] p-4"
+            className="rounded-[1.5rem] bg-[var(--surface-raised)] p-4"
           >
             {/* Delta score */}
             <div className="flex items-baseline justify-between mb-3">

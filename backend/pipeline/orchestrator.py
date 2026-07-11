@@ -318,12 +318,12 @@ def _profile(
         return PipelineProfile(
             run_profile="live",
             truth_mode=truth_mode,
-            candidate_workers=max(1, 3 if (target_length or 0) <= 20_000 else 2),
+            candidate_workers=max(1, 2 if (target_length or 0) <= 20_000 else 1),
             retrieval_timeout=20.0,
-            generation_timeout=25.0 * length_scale,
-            scoring_timeout=20.0 * length_scale,
-            structure_timeout=65.0,
-            explanation_timeout=20.0,
+            generation_timeout=90.0 * length_scale,
+            scoring_timeout=30.0 * length_scale,
+            structure_timeout=90.0,
+            explanation_timeout=25.0,
             use_structure_fallback=use_structure_fallback,
         )
     return PipelineProfile(
@@ -524,6 +524,8 @@ async def run_generation_pipeline(
                                 ).to_json(),
                             )
             except Exception as gen_exc:
+                # Keep any partial progress; only hard-fail if nothing beyond the seed.
+                partial = generated if len(generated) > len(varied_seed) else ""
                 if profile.truth_mode == "demo_fallback":
                     generated = await _fill_with_demo_tokens(
                         manager=manager,
@@ -535,6 +537,14 @@ async def run_generation_pipeline(
                         temperature=temperature,
                         fallback_service=fallback_service,
                     )
+                elif partial:
+                    logger.warning(
+                        "Generation timed out/errored for candidate %s after %s bp; keeping partial",
+                        candidate_id,
+                        len(partial),
+                        exc_info=True,
+                    )
+                    generated = partial
                 else:
                     candidate = await _mark_failed(
                         candidate_id, varied_seed, f"generation_error:{gen_exc}", "generation"
@@ -1168,11 +1178,15 @@ def _default_target_sequence_length(
     run_profile: str,
     target_length_override: int | None = None,
 ) -> int:
+    """Practical lengths for interactive design — not genome-scale.
+
+    Longer runs belong in batch jobs; the IDE needs candidates in tens of seconds.
+    """
     if target_length_override is not None:
         return max(100, min(target_length_override, 100_000))
     if run_profile == "live":
-        return 16000 if _uses_protein_structure(design_type) else 12000
-    return 3200 if _uses_protein_structure(design_type) else 2200
+        return 720 if _uses_protein_structure(design_type) else 480
+    return 420 if _uses_protein_structure(design_type) else 280
 
 
 def _select_context_seed(retrieval_result: RetrievalResult | None, fallback_seed: str) -> tuple[str, str]:

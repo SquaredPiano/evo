@@ -261,7 +261,7 @@ export default function SequenceEditor({
     <div className="flex flex-col gap-2">
       {selRange && (
         <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-md text-[11px] sticky top-0 z-10"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] sticky top-0 z-10"
           style={{ background: "var(--surface-elevated)", color: "var(--text-secondary)" }}
         >
           <span style={{ color: "var(--accent)" }}>
@@ -269,18 +269,18 @@ export default function SequenceEditor({
           </span>
           <span>({selRange.end - selRange.start} bp selected)</span>
           <div className="flex-1" />
-          <button onClick={copySelection} className="px-2 py-0.5 rounded hover:bg-white/[0.06]" style={{ color: "var(--text-muted)" }}>
+          <button onClick={copySelection} className="px-2 py-0.5 rounded-full hover:bg-white/[0.06]" style={{ color: "var(--text-muted)" }}>
             Copy
           </button>
-          <button onClick={revcompSelection} className="px-2 py-0.5 rounded hover:bg-white/[0.06]" style={{ color: "var(--text-muted)" }}>
+          <button onClick={revcompSelection} className="px-2 py-0.5 rounded-full hover:bg-white/[0.06]" style={{ color: "var(--text-muted)" }}>
             Rev-comp
           </button>
           {onRescoreBase && selRange.end - selRange.start === 1 && (
-            <button onClick={mutateAndRescore} className="px-2 py-0.5 rounded" style={{ background: "var(--accent)", color: "var(--ink)" }}>
+            <button onClick={mutateAndRescore} className="px-2 py-0.5 rounded-full" style={{ background: "var(--accent)", color: "var(--ink)" }}>
               Mutate + rescore
             </button>
           )}
-          <button onClick={() => deleteRange(selRange.start, selRange.end)} className="px-2 py-0.5 rounded hover:bg-white/[0.06]" style={{ color: "var(--base-t)" }}>
+          <button onClick={() => deleteRange(selRange.start, selRange.end)} className="px-2 py-0.5 rounded-full hover:bg-white/[0.06]" style={{ color: "var(--base-t)" }}>
             Delete
           </button>
         </div>

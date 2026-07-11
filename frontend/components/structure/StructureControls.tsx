@@ -22,7 +22,7 @@ function IconButton({
     <button
       onClick={onClick}
       title={label}
-      className="w-8 h-8 rounded-lg bg-[var(--surface-raised)] hover:bg-[var(--surface-elevated)] flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-muted)] transition-colors"
+      className="w-8 h-8 rounded-full bg-[var(--surface-raised)] hover:bg-[var(--surface-elevated)] flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-muted)] transition-colors"
     >
       {children}
     </button>

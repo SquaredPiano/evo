@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
@@ -41,15 +41,15 @@ const ProteinViewer = dynamic(() => import("@/components/structure/ProteinViewer
 const SIDEBAR_ITEMS = [
   { icon: Dna, label: "Overview", viewMode: "analyze" as const },
   { icon: Box, label: "Structure", viewMode: "structure" as const },
-  { icon: Search, label: "Explorer", viewMode: "explorer" as const },
-  { icon: Pencil, label: "Studio", viewMode: "ide" as const },
-  { icon: BarChart3, label: "Candidates", viewMode: "leaderboard" as const },
+  { icon: Search, label: "Sequence", viewMode: "explorer" as const },
+  { icon: Pencil, label: "Edit", viewMode: "ide" as const },
+  { icon: BarChart3, label: "Results", viewMode: "leaderboard" as const },
 ];
 
 const VIEW_LABELS = {
-  input: "New Analysis", pipeline: "Running", analyze: "Overview",
-  structure: "3D Structure", leaderboard: "Candidates",
-  explorer: "Explorer", ide: "Design Studio", compare: "Compare",
+  input: "Start", pipeline: "Working", analyze: "Overview",
+  structure: "Structure", leaderboard: "Results",
+  explorer: "Sequence", ide: "Edit", compare: "Compare",
 } as const;
 
 const VALID_VIEWS = ["input", "pipeline", "analyze", "structure", "leaderboard", "explorer", "ide", "compare"];
@@ -60,10 +60,10 @@ const springTransition = { type: "spring" as const, stiffness: 300, damping: 28,
 const smoothTransition = { duration: 0.35, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] };
 
 const fadeSlide = {
-  initial: { opacity: 0, y: 14 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -8 },
-  transition: smoothTransition,
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 1 },
+  transition: { duration: 0.15, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
 };
 
 const staggerContainer = {
@@ -161,24 +161,33 @@ function AnalyzePageInner() {
 
   // Structure fullscreen state
   const [structureFullscreen, setStructureFullscreen] = useState(false);
+  const syncingUrlRef = useRef(false);
 
-  // Sync viewMode with URL search params
+  // One-way URL sync without fighting itself (bidirectional sync caused view flicker).
   useEffect(() => {
     const urlView = searchParams.get("view");
+    if (syncingUrlRef.current) return;
     if (urlView && urlView !== viewMode && VALID_VIEWS.includes(urlView)) {
       setViewMode(urlView as typeof viewMode);
     }
-  }, [searchParams]);
+  }, [searchParams, setViewMode, viewMode]);
 
-  // Push viewMode changes to URL
   useEffect(() => {
     const current = searchParams.get("view");
-    if (viewMode !== "input" && viewMode !== current) {
-      router.replace(`/analyze?view=${viewMode}`, { scroll: false });
-    } else if (viewMode === "input" && current) {
+    const desired = viewMode === "input" ? null : viewMode;
+    if (desired === current) return;
+    if (viewMode === "input" && !current) return;
+    syncingUrlRef.current = true;
+    if (viewMode === "input") {
       router.replace("/analyze", { scroll: false });
+    } else {
+      router.replace(`/analyze?view=${viewMode}`, { scroll: false });
     }
-  }, [viewMode]);
+    const t = window.setTimeout(() => {
+      syncingUrlRef.current = false;
+    }, 50);
+    return () => window.clearTimeout(t);
+  }, [viewMode, router, searchParams]);
 
   const { isLoading, error, analyze } = useSequenceAnalysis();
   const { startDesign } = useDesignPipeline();
@@ -276,7 +285,7 @@ function AnalyzePageInner() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="grain h-screen flex overflow-hidden" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
+    <div className="h-screen flex overflow-hidden" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
 
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
@@ -313,16 +322,14 @@ function AnalyzePageInner() {
       <div className="flex-1 flex flex-col overflow-hidden" id="main-content">
         {/* ── HEADER (glassmorphic) ── */}
         <motion.header
-          className="h-16 shrink-0 flex items-center justify-between px-4 lg:px-6"
-          style={{ background: "color-mix(in srgb, var(--surface-base) 82%, transparent)", backdropFilter: "blur(20px)", borderBottom: "1px solid var(--ghost-border)" }}
-          initial={{ y: -56, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ ...smoothTransition, delay: 0.15 }}
+          className="h-14 shrink-0 flex items-center justify-between px-4 lg:px-6"
+          style={{ background: "rgba(250,249,246,0.9)", backdropFilter: "blur(12px)", borderBottom: "1px solid var(--ghost-border)" }}
+          initial={false}
         >
           <div className="flex items-center gap-3">
             {/* Mobile menu toggle */}
             <button
-              className="lg:hidden p-2 -ml-2 rounded-md transition-colors hover:bg-white/[0.06]"
+              className="lg:hidden p-2 -ml-2 rounded-full transition-colors hover:bg-white/[0.06]"
               onClick={() => setSidebarOpen(!sidebarOpen)}
               aria-label={sidebarOpen ? "Close navigation menu" : "Open navigation menu"}
               aria-expanded={sidebarOpen}
@@ -330,10 +337,9 @@ function AnalyzePageInner() {
               {sidebarOpen ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
             </button>
             {viewMode !== "input" && viewMode !== "pipeline" && (
-              <motion.span className="text-[13px]" style={{ color: "var(--text-secondary)" }}
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <span className="text-[13px] font-medium" style={{ color: "var(--text-secondary)" }}>
                 {VIEW_LABELS[viewMode]}
-              </motion.span>
+              </span>
             )}
           </div>
           <div className="flex items-center gap-1 lg:gap-3 overflow-x-auto">
@@ -345,7 +351,7 @@ function AnalyzePageInner() {
                       role="tab"
                       aria-selected={viewMode === m}
                       whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
-                      className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-colors font-label"
+                      className="px-3.5 py-1.5 text-[12px] font-medium transition-colors"
                       style={{
                         background: viewMode === m ? "var(--ink)" : "transparent",
                         color: viewMode === m ? "var(--cream)" : "var(--text-muted)",
@@ -359,20 +365,19 @@ function AnalyzePageInner() {
                 <button onClick={toggleChat}
                   aria-label={chatOpen ? "Close Evo Copilot" : "Open Evo Copilot"}
                   aria-pressed={chatOpen}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all duration-500 font-label"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-all duration-300"
                   style={{
-                    color: chatOpen ? "var(--ink)" : "var(--honey-600)",
+                    color: chatOpen ? "var(--ink)" : "var(--honey-700)",
                     background: chatOpen ? "var(--honey-100)" : "rgba(245,158,11,0.1)",
-                    border: "1px solid rgba(245,158,11,0.25)",
                   }}>
-                  <Sparkles size={12} /> Copilot
+                  <Sparkles size={13} /> Copilot
                 </button>
               </>
             )}
           </div>
         </motion.header>
 
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="popLayout" initial={false}>
           {/* ═══ INPUT ═══ */}
           {viewMode === "input" && (
             <motion.div key="input" className="flex-1 flex overflow-hidden" data-tutorial="sequence-input"
@@ -417,13 +422,13 @@ function AnalyzePageInner() {
                   <div className="flex gap-2">
                     <motion.button onClick={() => setViewMode("structure")}
                       whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all"
                       style={{ background: "var(--surface-elevated)", color: "var(--text-primary)" }}>
                       <Box size={15} /> View Structure
                     </motion.button>
                     <motion.button onClick={() => setViewMode("explorer")}
                       whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all"
                       style={{ background: "var(--accent)", color: "var(--ink)" }}>
                       Open Explorer <ArrowRight size={15} />
                     </motion.button>
@@ -460,7 +465,7 @@ function AnalyzePageInner() {
                       </div>
                       <div className="p-3">
                         <button onClick={() => setViewMode("structure")}
-                          className="w-full text-xs font-medium flex items-center justify-center gap-1 py-2 rounded-lg transition-colors hover:bg-white/[0.04]"
+                          className="w-full text-xs font-medium flex items-center justify-center gap-1 py-2.5 rounded-full transition-colors hover:bg-white/[0.04]"
                           style={{ color: "var(--accent)" }}>
                           Explore in 3D <ArrowRight size={12} />
                         </button>
@@ -586,7 +591,7 @@ function AnalyzePageInner() {
                     <motion.button
                       whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                       onClick={() => setStructureFullscreen(!structureFullscreen)}
-                      className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all font-label flex items-center gap-1.5"
+                      className="px-3 py-1.5 rounded-full text-[10px] font-medium uppercase tracking-wider transition-all font-label flex items-center gap-1.5"
                       style={{ color: "var(--text-muted)" }}>
                       {structureFullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
                       {structureFullscreen ? "Exit fullscreen" : "Fullscreen"}
@@ -594,13 +599,13 @@ function AnalyzePageInner() {
                     <motion.button
                       whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                       onClick={() => setHighlightResidues([])}
-                      className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all font-label flex items-center gap-1.5"
+                      className="px-3 py-1.5 rounded-full text-[10px] font-medium uppercase tracking-wider transition-all font-label flex items-center gap-1.5"
                       style={{ color: "var(--text-muted)" }}>
                       <RotateCcw size={12} /> Reset
                     </motion.button>
                     <motion.button onClick={() => setViewMode("explorer")}
                       whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider font-label transition-all"
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[10px] font-medium uppercase tracking-wider font-label transition-all"
                       style={{ background: "var(--accent)", color: "var(--ink)" }}>
                       <Search size={12} /> Explore Sequence
                     </motion.button>
@@ -768,21 +773,21 @@ function AnalyzePageInner() {
                           <div className="space-y-2">
                             <button
                               onClick={() => queueGuidedPrompt("Explain this structure and candidate in plain English for a patient-facing clinician and for a biotech researcher.")}
-                              className="w-full text-left px-3 py-2 rounded-lg text-[11px] transition-colors hover:bg-white/[0.05]"
+                              className="w-full text-left px-3 py-2 rounded-full text-[11px] transition-colors hover:bg-white/[0.05]"
                               style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
                             >
                               Explain this candidate for layman + clinician
                             </button>
                             <button
                               onClick={() => queueGuidedPrompt("Improve this candidate for tissue specificity and show exact score changes.")}
-                              className="w-full text-left px-3 py-2 rounded-lg text-[11px] transition-colors hover:bg-white/[0.05]"
+                              className="w-full text-left px-3 py-2 rounded-full text-[11px] transition-colors hover:bg-white/[0.05]"
                               style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
                             >
                               Improve tissue specificity
                             </button>
                             <button
                               onClick={() => queueGuidedPrompt("Reduce off-target risk and explain the tradeoffs in one concise paragraph.")}
-                              className="w-full text-left px-3 py-2 rounded-lg text-[11px] transition-colors hover:bg-white/[0.05]"
+                              className="w-full text-left px-3 py-2 rounded-full text-[11px] transition-colors hover:bg-white/[0.05]"
                               style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
                             >
                               Make it safer
@@ -836,13 +841,13 @@ function AnalyzePageInner() {
                 <div className="flex items-center gap-2">
                   <motion.button onClick={() => setViewMode("structure")}
                     whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[12px] font-medium font-label tracking-wider uppercase transition-all"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium font-label tracking-wider uppercase transition-all"
                     style={{ background: "var(--surface-elevated)", color: "var(--text-muted)" }}>
                     <Box size={13} /> Structure
                   </motion.button>
                   <motion.button onClick={() => setViewMode("ide")}
                     whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[12px] font-medium font-label tracking-wider uppercase transition-all"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium font-label tracking-wider uppercase transition-all"
                     style={{ background: "var(--accent)", color: "var(--ink)" }}>
                     <Pencil size={13} /> Open Studio <ArrowRight size={13} />
                   </motion.button>
@@ -966,21 +971,21 @@ function AnalyzePageInner() {
                 style={{ background: "var(--surface-raised)" }}
                 initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
                 <div className="flex items-center gap-4">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>LIVE EDITING</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>LIVE EDITING</span>
                   <span className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
                     <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> | {editHistory.length} <ScienceTooltip term="mutation">edit{editHistory.length !== 1 ? "s" : ""}</ScienceTooltip>
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={saveVersion} className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                  <button onClick={saveVersion} className="text-[10px] px-2.5 py-1 rounded-full font-medium transition-colors hover:bg-white/[0.04]"
                     style={{ color: "var(--text-muted)" }}>Save version</button>
-                  <button onClick={() => { revertVersion(); setClickedResidue(null); }} className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                  <button onClick={() => { revertVersion(); setClickedResidue(null); }} className="text-[10px] px-2.5 py-1 rounded-full font-medium transition-colors hover:bg-white/[0.04]"
                     style={{ color: "var(--text-muted)" }}>Revert</button>
                   <button onClick={() => setViewMode("compare")}
-                    className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                    className="text-[10px] px-2.5 py-1 rounded-full font-medium transition-colors hover:bg-white/[0.04]"
                     style={{ color: "var(--text-muted)" }}>Compare</button>
                   <button onClick={handleRescore} disabled={rescoring}
-                    className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors disabled:opacity-50"
+                    className="text-[10px] px-2.5 py-1 rounded-full font-medium transition-colors disabled:opacity-50"
                     style={{ background: "var(--accent)", color: "var(--ink)" }}>
                     {rescoring ? "Rescoring..." : "Rescore"}
                   </button>
@@ -1118,23 +1123,18 @@ function AnalyzePageInner() {
 
       {/* Floating Copilot button */}
       {!chatOpen && viewMode !== "input" && viewMode !== "pipeline" && analysisResult && (
-        <motion.button onClick={toggleChat}
+        <button onClick={toggleChat}
           aria-label="Open Evo Copilot"
-          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3.5 text-sm font-bold uppercase tracking-wider rounded-2xl"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-5 py-3.5 text-sm font-medium rounded-full"
           style={{
             background: "var(--ink)",
             color: "var(--cream)",
             border: "none",
             boxShadow: "0 12px 40px -10px rgba(15,15,15,0.35)",
           }}
-          initial={{ opacity: 0, y: 20, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          whileHover={{ scale: 1.06 }}
-          whileTap={{ scale: 0.95 }}
-          transition={springTransition}
         >
           <Sparkles size={16} /> Ask Copilot
-        </motion.button>
+        </button>
       )}
     </div>
   );

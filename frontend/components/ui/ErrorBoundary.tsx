@@ -61,7 +61,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           </div>
           <button
             onClick={this.handleReset}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-white/[0.06]"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-colors hover:bg-white/[0.06]"
             style={{
               background: "var(--surface-elevated)",
               color: "var(--accent)",

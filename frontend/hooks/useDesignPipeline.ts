@@ -60,10 +60,11 @@ export function useDesignPipeline() {
         candidateSequenceRef.current = {};
         candidateScoresRef.current = {};
         const { sessionId, wsUrl } = await submitDesign(goal, {
-          numCandidates: 10,
+          numCandidates: 4,
           runProfile: "live",
           truthMode: "real_only",
           seedSequence: useEvoStore.getState().rawSequence || undefined,
+          targetLength: 480,
         });
         setSessionId(sessionId);
 
@@ -210,6 +211,29 @@ export function useDesignPipeline() {
         }));
         store.setCandidates(placeholders);
         store.setActiveCandidateId(candidateIds[0] ?? 0);
+        break;
+      }
+
+      case "candidate_seed": {
+        const candidateId = Number(msg.data.candidate_id ?? 0);
+        const sequence = String(msg.data.sequence ?? "");
+        if (sequence) {
+          candidateSequenceRef.current[candidateId] = sequence;
+          const existing = store.candidates.find((c) => c.id === candidateId);
+          const next = existing
+            ? { ...existing, sequence }
+            : {
+                id: candidateId,
+                sequence,
+                scores: { functional: 0, tissue: 0, offTarget: 0, novelty: 0 },
+                overall: 0,
+                status: "queued",
+                perPositionScores: [],
+                error: null,
+              };
+          const remaining = store.candidates.filter((c) => c.id !== candidateId);
+          store.setCandidates([...remaining, next].sort((a, b) => b.overall - a.overall));
+        }
         break;
       }
 

@@ -134,23 +134,22 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
 
           {/* Mode toggle */}
           {onDesign && (
-            <div className="flex rounded-lg overflow-hidden mb-6" style={{ background: "var(--surface-raised)" }}>
+            <div className="flex rounded-full overflow-hidden mb-6 p-1" style={{ background: "var(--wax)" }}>
               <button onClick={() => { setMode("paste"); setValidationError(null); }}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-wider transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-full transition-colors"
                 style={{
-                  background: mode === "paste" ? "var(--honey-500)" : "transparent",
-                  color: mode === "paste" ? "var(--ink)" : "var(--text-muted)",
+                  background: mode === "paste" ? "var(--ink)" : "transparent",
+                  color: mode === "paste" ? "var(--cream)" : "var(--text-muted)",
                 }}>
-                <Dna size={14} /> Paste Sequence
+                <Dna size={14} /> Paste sequence
               </button>
               <button onClick={() => { setMode("design"); setValidationError(null); }}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-bold uppercase tracking-wider transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[13px] font-medium rounded-full transition-colors"
                 style={{
-                  background: mode === "design" ? "var(--honey-500)" : "transparent",
-                  color: mode === "design" ? "var(--ink)" : "var(--text-muted)",
-                  borderLeft: "1px solid var(--ghost-border)",
+                  background: mode === "design" ? "var(--ink)" : "transparent",
+                  color: mode === "design" ? "var(--cream)" : "var(--text-muted)",
                 }}>
-                <Wand2 size={14} /> Design New
+                <Wand2 size={14} /> Design new
               </button>
             </div>
           )}
@@ -163,7 +162,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                   <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Sequence Editor</span>
                   <div className="flex items-center gap-2">
                     <button onClick={() => fileRef.current?.click()}
-                      className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md transition-colors hover:bg-white/[0.04]"
+                      className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full transition-colors hover:bg-white/[0.04]"
                       style={{ color: "var(--text-muted)" }}>
                       <Upload size={12} /> Upload FASTA / GenBank
                     </button>
@@ -197,12 +196,12 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
               )}
 
               <button onClick={handlePasteSubmit} disabled={isLoading || charCount === 0}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
+                className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-full text-[14px] font-medium transition-all disabled:opacity-50"
                 style={{ background: charCount > 0 ? "var(--ink)" : "var(--wax)", color: charCount > 0 ? "var(--cream)" : "var(--text-faint)", border: "none", boxShadow: charCount > 0 ? "0 12px 30px -10px rgba(15,15,15,0.3)" : "none" }}>
                 {isLoading ? (
                   <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Analyzing...</>
                 ) : (
-                  <><Sparkles size={16} /> Run Analysis</>
+                  <><Sparkles size={16} /> Analyze sequence</>
                 )}
               </button>
 
@@ -212,8 +211,8 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                 <div className="space-y-2">
                   {EXAMPLES.map(({ name, desc, len, seq }) => (
                     <button key={name} onClick={() => { setInput(seq); setValidationError(null); }}
-                      className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-colors hover:bg-white/[0.04]"
-                      style={{ border: "1px solid var(--ghost-border)" }}>
+                      className="w-full flex items-center gap-4 px-4 py-3 rounded-full text-left transition-colors hover:bg-black/[0.03]"
+                      style={{ background: "rgba(255,255,255,0.55)" }}>
                       <FileText size={16} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
                       <div className="flex-1 min-w-0">
                         <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{name}</span>
@@ -255,12 +254,12 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
               )}
 
               <button onClick={handleDesignSubmit} disabled={isLoading || designGoal.trim().length === 0}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
+                className="w-full flex items-center justify-center gap-2 px-5 py-3.5 rounded-full text-[14px] font-medium transition-all disabled:opacity-50"
                 style={{ background: designGoal.trim() ? "var(--ink)" : "var(--wax)", color: designGoal.trim() ? "var(--cream)" : "var(--text-faint)", border: "none", boxShadow: designGoal.trim() ? "0 12px 30px -10px rgba(15,15,15,0.3)" : "none" }}>
                 {isLoading ? (
                   <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Designing...</>
                 ) : (
-                  <><Wand2 size={16} /> Start Design Pipeline</>
+                  <><Wand2 size={16} /> Start design</>
                 )}
               </button>
 
@@ -270,8 +269,8 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                 <div className="space-y-2">
                   {DESIGN_EXAMPLES.map(({ name, desc, goal }) => (
                     <button key={name} onClick={() => { setDesignGoal(goal); setValidationError(null); }}
-                      className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-colors hover:bg-white/[0.04]"
-                      style={{ border: "1px solid var(--ghost-border)" }}>
+                      className="w-full flex items-center gap-4 px-4 py-3 rounded-full text-left transition-colors hover:bg-black/[0.03]"
+                      style={{ background: "rgba(255,255,255,0.55)" }}>
                       <Wand2 size={16} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
                       <div className="flex-1 min-w-0">
                         <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{name}</span>

@@ -8,13 +8,13 @@ import "./globals.css";
 const instrumentSans = Instrument_Sans({
   subsets: ["latin"],
   variable: "--font-sans",
-  display: "swap",
+  display: "optional",
 });
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
-  display: "swap",
+  display: "optional",
 });
 
 const instrumentSerif = Instrument_Serif({
@@ -22,7 +22,7 @@ const instrumentSerif = Instrument_Serif({
   variable: "--font-display",
   weight: "400",
   style: ["normal", "italic"],
-  display: "swap",
+  display: "optional",
 });
 
 export const metadata: Metadata = {

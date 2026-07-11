@@ -163,7 +163,7 @@ export default function TutorialOverlay({ isOpen, onClose, onViewChange }: Tutor
           }}>
           {/* Header */}
           <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-1.5">
-            <div className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center"
+            <div className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
               style={{ background: "color-mix(in oklch, var(--accent), transparent 85%)", color: "var(--accent)" }}>
               <IconComp size={14} />
             </div>
@@ -175,7 +175,7 @@ export default function TutorialOverlay({ isOpen, onClose, onViewChange }: Tutor
                 {step.title}
               </h3>
             </div>
-            <button onClick={finish} className="p-1 rounded hover:bg-white/5">
+            <button onClick={finish} className="p-1 rounded-full hover:bg-white/5">
               <X size={13} style={{ color: "var(--text-faint)" }} />
             </button>
           </div>
@@ -201,12 +201,12 @@ export default function TutorialOverlay({ isOpen, onClose, onViewChange }: Tutor
             <div className="flex items-center gap-1">
               <button onClick={finish} className="text-[10px] px-1.5 py-0.5 hover:underline" style={{ color: "var(--text-faint)" }}>Skip</button>
               {currentStep > 0 && (
-                <button onClick={back} className="text-[10px] px-1.5 py-0.5 rounded hover:bg-white/5" style={{ color: "var(--text-secondary)" }}>
+                <button onClick={back} className="text-[10px] px-1.5 py-0.5 rounded-full hover:bg-white/5" style={{ color: "var(--text-secondary)" }}>
                   <ChevronLeft size={11} className="inline" /> Back
                 </button>
               )}
               <button onClick={next}
-                className="inline-flex items-center gap-0.5 px-2.5 py-1 rounded text-[10px] font-semibold hover:brightness-110"
+                className="inline-flex items-center gap-0.5 px-3 py-1.5 rounded-full text-[10px] font-semibold hover:brightness-110"
                 style={{ background: "var(--accent)", color: "var(--surface-void)" }}>
                 {currentStep === STEPS.length - 1 ? "Done" : "Next"} {currentStep < STEPS.length - 1 && <ChevronRight size={10} />}
               </button>

@@ -48,7 +48,7 @@ export default function CandidateLeaderboard() {
             <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>{candidates.length} candidates scored and ranked by <ScienceTooltip term="overall-viability">composite viability</ScienceTooltip></p>
           </div>
           <button onClick={() => setViewMode("explorer")}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-[1.02]"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02]"
             style={{ background: "var(--accent)", color: "var(--ink)" }}>
             Inspect top candidate <ArrowRight size={14} aria-hidden="true" />
           </button>
@@ -69,21 +69,21 @@ export default function CandidateLeaderboard() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => queuePrompt("Explain the top candidate for a clinician and a layman in 5 bullet points.")}
-              className="px-3 py-1.5 rounded-md text-[11px] transition-colors hover:bg-white/[0.06]"
+              className="px-3 py-1.5 rounded-full text-[11px] transition-colors hover:bg-white/[0.06]"
               style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
             >
               Explain Top Candidate
             </button>
             <button
               onClick={() => queuePrompt("Compare top 3 candidates and recommend one for safety-sensitive use.")}
-              className="px-3 py-1.5 rounded-md text-[11px] transition-colors hover:bg-white/[0.06]"
+              className="px-3 py-1.5 rounded-full text-[11px] transition-colors hover:bg-white/[0.06]"
               style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
             >
               Compare Top 3
             </button>
             <button
               onClick={() => queuePrompt("Improve the active candidate for tissue specificity and explain tradeoffs.")}
-              className="px-3 py-1.5 rounded-md text-[11px] transition-colors hover:bg-white/[0.06]"
+              className="px-3 py-1.5 rounded-full text-[11px] transition-colors hover:bg-white/[0.06]"
               style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
             >
               Improve Tissue Fit
@@ -111,10 +111,9 @@ export default function CandidateLeaderboard() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08 + i * 0.06, type: "spring" as const, stiffness: 300, damping: 26 }}
               whileHover={{ scale: 1.005, x: 2 }}
-              className="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-white/[0.04]"
+              className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-black/[0.03] rounded-full mx-1"
               style={{
-                borderBottom: i < candidates.length - 1 ? "1px solid var(--ghost-border)" : "none",
-                borderLeft: activeCandidateId === c.id ? "2px solid var(--accent)" : "2px solid transparent",
+                background: activeCandidateId === c.id ? "rgba(245,158,11,0.12)" : "transparent",
               }}>
               <span className="text-base font-semibold w-10 font-mono" style={{ color: i === 0 ? "var(--accent)" : "var(--text-muted)" }}>
                 #{i + 1}

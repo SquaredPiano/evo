@@ -89,7 +89,7 @@ export default function Home() {
   );
 
   return (
-    <div ref={main} className="grain overflow-x-hidden font-sans" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
+    <div ref={main} className="overflow-x-hidden font-sans" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
       {/* ── NAV ── */}
       <nav
         className="fixed top-0 w-full z-50 flex justify-between items-center px-6 md:px-10 h-16"
@@ -101,14 +101,14 @@ export default function Home() {
             href="https://github.com/evo-genomics/evo"
             target="_blank"
             rel="noopener noreferrer"
-            className="hidden sm:inline-flex items-center gap-2 px-4 py-2 text-[13px] font-semibold transition-smooth"
+            className="rounded-full hidden sm:inline-flex items-center gap-2 px-4 py-2 text-[13px] font-semibold transition-smooth"
             style={{ color: "var(--text-secondary)" }}
           >
             GitHub
           </a>
           <Link
             href="/analyze"
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-[12px] font-bold uppercase tracking-[0.14em] transition-smooth"
+            className="inline-flex rounded-full items-center gap-2 px-5 py-2.5 text-[12px] font-medium tracking-tight transition-smooth"
             style={{ background: "var(--honey-500)", color: "var(--ink)", border: "none", boxShadow: "0 8px 24px -8px rgba(245,158,11,0.45)" }}
           >
             Open IDE
@@ -131,14 +131,14 @@ export default function Home() {
         <div className="h-cta flex flex-wrap gap-3 justify-center mb-16">
           <Link
             href="/analyze"
-            className="inline-flex items-center gap-2 px-8 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-smooth hover:-translate-x-0.5 hover:-translate-y-0.5"
+            className="inline-flex rounded-full items-center gap-2 px-8 py-4 text-[13px] font-medium tracking-tight transition-smooth hover:-translate-x-0.5 hover:-translate-y-0.5"
             style={{ background: "var(--ink)", color: "var(--cream)", border: "none", boxShadow: "0 16px 40px -12px rgba(15,15,15,0.35)" }}
           >
             Start designing <ArrowRight size={16} />
           </Link>
           <Link
             href="/analyze?view=input"
-            className="inline-flex items-center gap-2 px-8 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-smooth"
+            className="inline-flex rounded-full items-center gap-2 px-8 py-4 text-[13px] font-medium tracking-tight transition-smooth"
             style={{ background: "var(--surface-raised)", color: "var(--text-primary)", border: "1px solid var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}
           >
             Paste a sequence
@@ -158,7 +158,7 @@ export default function Home() {
             {HERO_STRIP.map((b, i) => (
               <span
                 key={i}
-                className="h-base font-mono text-[15px] md:text-[18px] font-bold w-[20px] md:w-[24px] h-[26px] md:h-[30px] flex items-center justify-center rounded"
+                className="h-base font-mono text-[15px] md:text-[18px] font-bold w-[20px] md:w-[24px] h-[26px] md:h-[30px] flex items-center justify-center rounded-full"
                 style={{ color: BASE_COLOR[b], background: `color-mix(in srgb, ${BASE_COLOR[b]} ${8 + (i % 5) * 6}%, transparent)` }}
               >
                 {b}
@@ -221,7 +221,7 @@ export default function Home() {
           </p>
           <Link
             href="/analyze"
-            className="inline-flex items-center gap-2 px-9 py-4 text-[13px] font-bold uppercase tracking-[0.14em] transition-smooth hover:-translate-x-0.5 hover:-translate-y-0.5"
+            className="inline-flex rounded-full items-center gap-2 px-9 py-4 text-[13px] font-medium tracking-tight transition-smooth hover:-translate-x-0.5 hover:-translate-y-0.5"
             style={{ background: "var(--honey-500)", color: "var(--ink)", border: "none", boxShadow: "0 12px 30px -10px rgba(245,158,11,0.4)" }}
           >
             Open Evo IDE <ArrowRight size={18} />

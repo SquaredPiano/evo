@@ -413,7 +413,8 @@ class Evo2NIMService(Evo2Service):
             if base not in ("A", "T", "C", "G", "N"):
                 continue
             yield base
-            await asyncio.sleep(0.01)
+            # Tiny yield to keep the event loop responsive without blowing timeouts.
+            await asyncio.sleep(0)
 
     async def health(self) -> dict[str, object]:
         try:
