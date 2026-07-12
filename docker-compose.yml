@@ -29,6 +29,9 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
       - NCBI_API_KEY=${NCBI_API_KEY:-}
+      # Optional durable persistence. Empty = Redis-only (persistence no-ops).
+      - MONGODB_URI=${MONGODB_URI:-}
+      - MONGODB_DB_NAME=${MONGODB_DB_NAME:-evo}
     depends_on:
       redis:
         condition: service_healthy

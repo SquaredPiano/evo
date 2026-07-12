@@ -72,6 +72,17 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
     port: int = 8000
 
+    # --- Durable persistence (MongoDB Atlas) ---
+    # Redis stays the hot store (fast, TTL'd). Mongo is the durable store for
+    # prompt/design-run history so a session survives restarts and the reprompt
+    # feature can build on prior runs. Persistence is OPTIONAL: if no URI is set
+    # or Atlas is unreachable, the app runs exactly as before (Redis-only) and
+    # every persistence call becomes a logged no-op — never a request failure.
+    mongodb_uri: str = ""
+    mongodb_db_name: str = "evo"
+    # Fail-fast connection budget so a bad/blocked URI never hangs startup.
+    mongodb_connect_timeout_ms: int = 5000
+
     # Hugging Face
     hugging_face_token: str = ""
 

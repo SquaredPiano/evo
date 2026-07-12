@@ -31,6 +31,10 @@ class DesignRequest(BaseModel):
     goal: str
     session_id: str | None = None
     user_id: str | None = None
+    # Reprompt lineage: when a user refines a goal within an existing session,
+    # the client sends the prior run's id so the new run is chained to it in the
+    # durable history (design_runs.parent_run_id). None for a first/fresh run.
+    parent_run_id: str | None = None
     num_candidates: int = Field(4, ge=1, le=10, description="Number of candidates to generate (1–10)")
     run_profile: Literal["demo", "live"] = "live"
     truth_mode: Literal["demo_fallback", "real_only"] = "real_only"

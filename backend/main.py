@@ -44,6 +44,7 @@ from models.responses import (
     MutationResponse,
     StructureResponse,
 )
+from models.sessions import SessionSnapshot
 from config import SessionStoreMode, StructureMode, settings
 from pipeline.evo2_score import rescore_mutation_detailed, score_candidate
 from pipeline.orchestrator import (
@@ -68,6 +69,7 @@ from services.experiment_tracker import (
     ExperimentTracker,
     ExperimentVersionNotFoundError,
 )
+from services.mongo_store import create_mongo_store
 from ws.manager import WebSocketManager
 from ws.events import (
     CandidateStatusData,
@@ -102,9 +104,13 @@ async def _lifespan(app: FastAPI) -> _AsyncIterator[None]:
         redis_ok = await session_store.ping()
         if not redis_ok:
             raise RuntimeError("Redis session store is enabled but unreachable.")
+    # Durable persistence is optional — a failure here is logged and the app
+    # continues Redis-only (see MongoStore.connect). Never fatal.
+    await mongo_store.connect()
     yield
     # Shutdown
     await session_store.close()
+    await mongo_store.close()
 
 app = FastAPI(title="Evo Backend", version="1.0.0", lifespan=_lifespan)
 app.add_middleware(
@@ -119,7 +125,10 @@ ws_manager = WebSocketManager()
 evo2_service = create_evo2_service()
 session_store = create_session_store(settings, DEFAULT_SEED)
 copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
-experiment_tracker = ExperimentTracker(session_store)
+# Durable store (MongoDB Atlas). Optional: stays disabled until connect() succeeds
+# in the lifespan handler, so importing/instantiating here is always safe.
+mongo_store = create_mongo_store(settings)
+experiment_tracker = ExperimentTracker(session_store, mongo_store=mongo_store)
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 MAX_SESSION_CONTEXT_ENTRIES = 512
 
@@ -167,6 +176,7 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
+    run_id = uuid.uuid4().hex
     num_candidates = request.num_candidates
     # Agent memory should only live within the active chat lifecycle for this run.
     await copilot.clear_session_memory(session_id=session_id)
@@ -179,6 +189,22 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
             "design_type": "regulatory_element",
         },
     )
+
+    # Durable record of the prompt + config at submit time. Best-effort: when
+    # persistence is disabled this is a fast no-op and the run still proceeds.
+    await mongo_store.save_design_run(
+        run_id=run_id,
+        session_id=session_id,
+        goal=request.goal,
+        user_id=request.user_id,
+        parent_run_id=request.parent_run_id,
+        run_profile=request.run_profile,
+        truth_mode=request.truth_mode,
+        num_candidates=num_candidates,
+        target_length=request.target_length,
+        seed_sequence=request.seed_sequence or DEFAULT_SEED,
+    )
+
     asyncio.create_task(
         run_generation_pipeline(
             manager=ws_manager,
@@ -194,10 +220,14 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
                 session_id, candidate_id, sequence
             ),
             on_spec_ready=lambda spec: _set_session_design_type(session_id, spec.design_type),
+            on_pipeline_complete=lambda candidates, completed, failed: _persist_run_completion(
+                run_id, session_id, candidates, completed, failed
+            ),
         )
     )
     return DesignAcceptedResponse(
         session_id=session_id,
+        run_id=run_id,
         ws_url=_build_ws_url(http_request, session_id),
     )
 
@@ -802,11 +832,71 @@ async def experiment_lineage(session_id: str, version_id: str) -> dict[str, obje
     }
 
 
-@app.get("/api/sessions/{user_id}")
-async def list_sessions(user_id: str) -> dict[str, object]:
-    """List all sessions owned by a user."""
+@app.get("/api/users/{user_id}/sessions")
+async def list_user_session_ids(user_id: str) -> dict[str, object]:
+    """Session IDs owned by a user, from the Redis hot store.
+
+    Relocated from GET /api/sessions/{user_id} so the session-snapshot API can
+    own the /api/sessions/{session_id} route (see docs/session_persistence_interface.md).
+    """
     session_ids = await session_store.list_user_sessions(user_id)
     return {"user_id": user_id, "sessions": session_ids, "count": len(session_ids)}
+
+
+# ── Resumable session snapshots (durable, MongoDB) ───────────────────────────
+# Contract from docs/session_persistence_interface.md: store/restore full store
+# state so a session is resumable, not just re-runnable. All four degrade to
+# safe no-ops (empty list / 404 / persisted:false) when Mongo is unavailable.
+@app.get("/api/sessions")
+async def list_session_snapshots(user_id: str | None = None) -> dict[str, object]:
+    """Session summaries for the home/resume list, newest first."""
+    summaries = await mongo_store.list_session_summaries(user_id)
+    return {
+        "persistence_enabled": mongo_store.ready,
+        "sessions": summaries,
+        "count": len(summaries),
+    }
+
+
+@app.get("/api/sessions/{session_id}")
+async def get_session_snapshot(session_id: str) -> dict[str, object]:
+    """Full resumable snapshot for a session (404 if none / persistence off)."""
+    snapshot = await mongo_store.get_session_snapshot(session_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="session snapshot not found")
+    return snapshot
+
+
+@app.put("/api/sessions/{session_id}")
+async def put_session_snapshot(session_id: str, snapshot: SessionSnapshot) -> dict[str, object]:
+    """Upsert a session snapshot (debounced autosave from the client)."""
+    payload = snapshot.model_dump(exclude_none=True)
+    payload["sessionId"] = session_id  # path id is authoritative
+    persisted = await mongo_store.put_session_snapshot(payload)
+    return {"session_id": session_id, "persisted": persisted}
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session_snapshot(session_id: str) -> dict[str, object]:
+    """Delete a stored session snapshot."""
+    deleted = await mongo_store.delete_session_snapshot(session_id)
+    return {"session_id": session_id, "deleted": deleted}
+
+
+@app.get("/api/history/{session_id}")
+async def session_history(session_id: str) -> dict[str, object]:
+    """Prompt/run history for a session, oldest first — powers the reprompt thread.
+
+    Returns an empty list (not an error) when durable persistence is disabled or
+    the session predates it, so the client can treat it as 'no history yet'.
+    """
+    runs = await mongo_store.get_session_runs(session_id)
+    return {
+        "session_id": session_id,
+        "persistence_enabled": mongo_store.ready,
+        "runs": runs,
+        "count": len(runs),
+    }
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -884,3 +974,36 @@ def _build_ws_url(http_request: Request, session_id: str) -> str:
 async def _persist_candidate_sequence(session_id: str, candidate_id: int, sequence: str) -> None:
     async with session_store.candidate_guard(session_id, candidate_id):
         await session_store.set_candidate_sequence(session_id, candidate_id, sequence)
+
+
+async def _persist_run_completion(
+    run_id: str,
+    session_id: str,
+    candidates: list[dict[str, Any]],
+    completed: int,
+    failed: int,
+) -> None:
+    """Snapshot a finished run into durable storage (best-effort).
+
+    Trims heavy fields (pdb_data / regulatory_map): the history thread only needs
+    sequence + scores + confidence, and PDB strings would bloat the document.
+    """
+    slim = [
+        {
+            "id": c.get("id"),
+            "status": c.get("status"),
+            "sequence": c.get("sequence"),
+            "scores": c.get("scores"),
+            "confidence": c.get("confidence"),
+            "error": c.get("error"),
+        }
+        for c in candidates
+    ]
+    design_type = SESSION_CONTEXT.get(session_id, {}).get("design_type")
+    await mongo_store.complete_design_run(
+        run_id,
+        candidates=slim,
+        completed_candidates=completed,
+        failed_candidates=failed,
+        design_type=design_type,
+    )
