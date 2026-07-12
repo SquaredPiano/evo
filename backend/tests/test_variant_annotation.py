@@ -200,6 +200,82 @@ class TestAnnotateVariants:
         assert result.unmapped_variants == 2  # one has no HGVS, one out of range
 
 
+class TestCoordinateFrame:
+    """Honest coordinate-frame handling: HGVS positions are reference
+    coordinates, not candidate indices, unless lifted via alignment."""
+
+    @pytest.mark.asyncio
+    async def test_no_reference_is_reference_frame(self, mock_clinvar):
+        """Without a reference sequence, variants stay in the reference frame
+        and carry their 1-based HGVS coordinate - never claimed as candidate."""
+        result = await annotate_variants("BRCA1")
+        assert result.annotations, "expected at least one parseable variant"
+        for ann in result.annotations:
+            assert ann.coordinate_frame == "reference"
+            assert ann.reference_position == ann.position + 1
+
+    @pytest.mark.asyncio
+    async def test_reference_sequence_lifts_into_candidate_frame(self):
+        """With a reference sequence, the reference coordinate is lifted onto
+        the candidate frame across an indel and tagged coordinate_frame."""
+        clin = ClinVarResult(
+            gene="GENE",
+            total_count=1,
+            variants=[ClinVarVariant(
+                uid="777",
+                title="NM_1.1(GENE):c.5C>G",
+                clinical_significance="Pathogenic",
+                condition="X",
+                variation_type="single nucleotide variant",
+            )],
+        )
+        reference = "AAACCCGGG"          # c.5 -> 0-based ref index 4 ('C')
+        candidate = "AAACCCTTGGG"        # "TT" inserted after the C-run
+        with patch("services.variant_annotation.lookup_variants",
+                   new_callable=AsyncMock, return_value=clin), \
+             patch("services.variant_annotation._fetch_variant_details",
+                   new_callable=AsyncMock, return_value={"777": {"review_stars": 2}}):
+            result = await annotate_variants(
+                "GENE", sequence=candidate, reference_sequence=reference,
+            )
+        assert len(result.annotations) == 1
+        ann = result.annotations[0]
+        assert ann.coordinate_frame == "candidate"
+        assert ann.reference_position == 5
+        # Reference index 4 lies before the insertion -> candidate index 4.
+        assert ann.position == 4
+
+    @pytest.mark.asyncio
+    async def test_reference_coordinate_in_gap_is_unmapped(self):
+        """A reference coordinate that lands in a candidate deletion cannot be
+        lifted and is honestly counted unmapped, not painted anywhere."""
+        clin = ClinVarResult(
+            gene="GENE", total_count=1,
+            variants=[ClinVarVariant(
+                uid="778", title="NM_1.1(GENE):c.5A>G",
+                clinical_significance="Pathogenic", condition="X",
+                variation_type="single nucleotide variant",
+            )],
+        )
+        reference = "AAACCTTGGG"    # c.5 -> ref index 4 ('C'), part of deleted "TT"? build gap
+        candidate = "AAACCGGG"     # "TT" deleted -> ref indices 5,6 have no candidate base
+        # Move the variant onto a deleted base: c.6 -> ref index 5 (first 'T').
+        clin.variants[0] = ClinVarVariant(
+            uid="778", title="NM_1.1(GENE):c.6T>G",
+            clinical_significance="Pathogenic", condition="X",
+            variation_type="single nucleotide variant",
+        )
+        with patch("services.variant_annotation.lookup_variants",
+                   new_callable=AsyncMock, return_value=clin), \
+             patch("services.variant_annotation._fetch_variant_details",
+                   new_callable=AsyncMock, return_value={"778": {"review_stars": 0}}):
+            result = await annotate_variants(
+                "GENE", sequence=candidate, reference_sequence=reference,
+            )
+        assert result.annotations == []
+        assert result.unmapped_variants == 1
+
+
 class TestAnnotateSequenceRegion:
     @pytest.mark.asyncio
     async def test_region_filter(self, mock_clinvar):

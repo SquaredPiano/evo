@@ -99,18 +99,33 @@ async def _clinvar_evidence(
     region_end: int,
     max_variants: int,
     significance: str,
+    reference_sequence: str | None = None,
 ) -> list[RegionEvidence]:
-    """Known gene variants overlapping [region_start, region_end)."""
+    """Known gene variants overlapping [region_start, region_end).
+
+    A ClinVar HGVS coordinate is an offset into the REFERENCE transcript, not
+    into this candidate. It only earns a candidate-frame ``start``/``end`` when
+    ``annotate_variants`` was able to LIFT it onto the candidate (via alignment
+    against ``reference_sequence``) - i.e. ``coordinate_frame == "candidate"``.
+    Reference-frame variants are gene-locus context with no honest per-base
+    candidate position, so they are NOT painted here (their reference coordinate
+    is still carried on the VariantAnnotation for the /api/variants list). This
+    is the fix for variants being dropped onto meaningless candidate positions.
+    """
     result = await annotate_variants(
         gene=gene,
         sequence=sequence,
         max_variants=max_variants,
         significance=significance,
+        reference_sequence=reference_sequence,
     )
 
     out: list[RegionEvidence] = []
     for ann in result.annotations:
-        # annotate_variants returns positions in the FULL-sequence frame.
+        # Only paint variants that were actually lifted into the candidate
+        # frame. Without a successful lift there is no honest per-base position.
+        if ann.coordinate_frame != "candidate":
+            continue
         if not (region_start <= ann.position < region_end):
             continue
 
@@ -126,6 +141,11 @@ async def _clinvar_evidence(
             f"position - context for the region, not a pathogenicity claim "
             f"about the generated sequence."
         )
+        if ann.reference_position is not None:
+            detail += (
+                f" Lifted from reference coordinate {ann.reference_position} "
+                f"onto the candidate frame."
+            )
         if ann.condition:
             detail += f" Reported condition: {ann.condition}."
 
@@ -221,6 +241,7 @@ async def assemble_region_evidence(
     significance: str = "pathogenic",
     include_clinvar: bool = True,
     regulatory_map: dict[str, object] | None = None,
+    reference_sequence: str | None = None,
 ) -> list[RegionEvidence]:
     """Assemble coordinate-bound evidence for a sequence from existing sources.
 
@@ -237,6 +258,10 @@ async def assemble_region_evidence(
             offline, or when only local regulatory evidence is wanted).
         regulatory_map: Pre-computed map from ``build_regulatory_map`` to reuse
             (the pipeline already builds one). Built on demand if None.
+        reference_sequence: Optional gene reference sequence. When supplied,
+            ClinVar reference coordinates are lifted onto the candidate frame via
+            alignment; without it, ClinVar variants stay gene-locus context and
+            are not painted on candidate coordinates (no fabricated positions).
 
     Returns:
         A flat list of RegionEvidence, sorted by (start, source). Empty list is
@@ -270,6 +295,7 @@ async def assemble_region_evidence(
                     region_end=region_end,
                     max_variants=max_variants,
                     significance=significance,
+                    reference_sequence=reference_sequence,
                 )
             )
         except Exception:

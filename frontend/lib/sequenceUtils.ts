@@ -1,16 +1,27 @@
 import type { Base, Nucleotide, AnnotationType, SequenceRegion } from "@/types";
 
-const VALID_BASES = new Set(["A", "T", "C", "G", "N"]);
+// Full IUPAC nucleotide alphabet: the four bases, U (RNA), and the ambiguity
+// codes (R Y S W K M B D H V) plus N. Pasting a sequence that uses these is
+// valid input - it must not be silently dropped.
+export const IUPAC_BASES = new Set([
+  "A", "C", "G", "T", "U",
+  "R", "Y", "S", "W", "K", "M", "B", "D", "H", "V", "N",
+]);
 
 export function isValidSequence(seq: string): boolean {
-  return seq.split("").every((ch) => VALID_BASES.has(ch.toUpperCase()));
+  return seq
+    .replace(/\s+/g, "")
+    .split("")
+    .every((ch) => IUPAC_BASES.has(ch.toUpperCase()));
 }
 
 export function normalizeSequence(raw: string): string {
-  return raw
-    .replace(/\s+/g, "")
-    .replace(/[^ATCGNatcgn]/g, "")
-    .toUpperCase();
+  // Strip whitespace and uppercase - nothing else. Deliberately does NOT delete
+  // "invalid" characters: dropping a base (e.g. an IUPAC ambiguity code like R
+  // or Y) shifts every downstream coordinate silently. Anything that is not a
+  // valid base is preserved here so isValidSequence can reject it LOUDLY at the
+  // input boundary, rather than being erased and corrupting positions.
+  return raw.replace(/\s+/g, "").toUpperCase();
 }
 
 export function parseSequence(

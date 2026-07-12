@@ -3,10 +3,11 @@
  * comparison between two DNA candidate sequences.
  *
  * Semantics mirror the backend primitive `_diff_sequences`
- * (backend/services/experiment_tracker.py): position-level substitutions over
- * the common prefix, then a length tail reported as insertions/deletions. This
- * is intentionally NOT a full gap-aware alignment - it matches what the backend
- * `/api/experiments/diff` endpoint reports, so the two never disagree.
+ * (backend/services/experiment_tracker.py): a Needleman-Wunsch global alignment
+ * with a linear gap penalty, so an indel shifts coordinates correctly instead
+ * of turning every downstream base into a spurious mismatch. The scoring
+ * (match +1 / mismatch -1 / gap -2) matches the backend aligner so the two
+ * never disagree on candidates of differing length.
  *
  * Per-position score deltas are computed ONLY when both candidates carry
  * per-position likelihood scores. When they are absent, `scoreDelta` is left
@@ -59,10 +60,90 @@ function scoreMap(scores?: ScorePoint[]): Map<number, number> | null {
   return m;
 }
 
+// Linear alignment scoring. Chosen so a single substitution (one mismatch)
+// always beats an insertion+deletion pair (two gaps): mismatch (-1) > 2*gap
+// (-4). Matches services/alignment.py so the two diffs never disagree.
+const MATCH = 1;
+const MISMATCH = -1;
+const GAP = -2;
+
+// Guard: skip the O(n*m) alignment for very large inputs and fall back to a
+// prefix/tail positional diff, mirroring the backend length guard.
+const MAX_ALIGN_CELLS = 4_000_000;
+
+type AlignCol = { a: number; b: number }; // -1 marks a gap on that side
+
 /**
- * Compute the list of differing positions between two sequences.
+ * Needleman-Wunsch global alignment. Returns the aligned column list where each
+ * column carries the 0-based index consumed from A (`a`) and B (`b`); `-1`
+ * means a gap on that side.
+ */
+function alignGlobal(seqA: string, seqB: string): AlignCol[] {
+  const n = seqA.length;
+  const m = seqB.length;
+  // score[i][j] flattened; ptr encodes traceback: 1 diag, 2 up (gap in B), 3 left (gap in A)
+  const width = m + 1;
+  const score = new Int32Array((n + 1) * width);
+  const ptr = new Uint8Array((n + 1) * width);
+  for (let i = 1; i <= n; i++) {
+    score[i * width] = i * GAP;
+    ptr[i * width] = 2;
+  }
+  for (let j = 1; j <= m; j++) {
+    score[j] = j * GAP;
+    ptr[j] = 3;
+  }
+  for (let i = 1; i <= n; i++) {
+    const ai = seqA[i - 1];
+    const rowBase = i * width;
+    const prevBase = (i - 1) * width;
+    for (let j = 1; j <= m; j++) {
+      const diag =
+        score[prevBase + j - 1] + (ai === seqB[j - 1] ? MATCH : MISMATCH);
+      const up = score[prevBase + j] + GAP;
+      const left = score[rowBase + j - 1] + GAP;
+      let best = diag;
+      let d = 1;
+      if (up > best) {
+        best = up;
+        d = 2;
+      }
+      if (left > best) {
+        best = left;
+        d = 3;
+      }
+      score[rowBase + j] = best;
+      ptr[rowBase + j] = d;
+    }
+  }
+  const cols: AlignCol[] = [];
+  let i = n;
+  let j = m;
+  while (i > 0 || j > 0) {
+    const d = ptr[i * width + j];
+    if (i > 0 && j > 0 && d === 1) {
+      cols.push({ a: i - 1, b: j - 1 });
+      i--;
+      j--;
+    } else if (i > 0 && (j === 0 || d === 2)) {
+      cols.push({ a: i - 1, b: -1 });
+      i--;
+    } else {
+      cols.push({ a: -1, b: j - 1 });
+      j--;
+    }
+  }
+  cols.reverse();
+  return cols;
+}
+
+/**
+ * Compute the list of differing positions between two sequences (gap-aware).
  * `scoresA`/`scoresB` are optional per-position likelihood arrays; when both
  * are present a real `scoreDelta` (B - A) is attached to substitution rows.
+ *
+ * Position semantics mirror the backend `_diff_sequences`: substitutions and
+ * deletions carry the index in A; insertions carry the index in B.
  */
 export function computeDiff(
   seqA: string,
@@ -74,9 +155,56 @@ export function computeDiff(
   const mapB = scoreMap(scoresB);
   const haveScores = mapA !== null && mapB !== null;
 
-  const minLen = Math.min(seqA.length, seqB.length);
   const out: DiffPosition[] = [];
 
+  // Length guard: fall back to a cheap prefix/tail diff for huge inputs.
+  if (seqA.length * seqB.length > MAX_ALIGN_CELLS) {
+    return computeDiffPositional(seqA, seqB, mapA, mapB, haveScores);
+  }
+
+  const cols = alignGlobal(seqA, seqB);
+  for (const col of cols) {
+    if (col.a >= 0 && col.b >= 0) {
+      if (seqA[col.a] !== seqB[col.b]) {
+        let scoreDelta: number | undefined;
+        if (haveScores) {
+          const a = mapA!.get(col.a);
+          const b = mapB!.get(col.b);
+          if (a !== undefined && b !== undefined) scoreDelta = b - a;
+        }
+        out.push({
+          position: col.a,
+          ref: seqA[col.a],
+          alt: seqB[col.b],
+          kind: "snp",
+          scoreDelta,
+        });
+      }
+    } else if (col.a < 0) {
+      // gap in A -> base present in B only -> insertion (indexed in B).
+      out.push({ position: col.b, ref: "-", alt: seqB[col.b], kind: "ins" });
+    } else {
+      // gap in B -> base present in A only -> deletion (indexed in A).
+      out.push({ position: col.a, ref: seqA[col.a], alt: "-", kind: "del" });
+    }
+  }
+  return out;
+}
+
+/**
+ * Prefix/tail positional diff. Fallback for over-long inputs only - NOT
+ * gap-aware. Retained so very large sequences still produce a diff without an
+ * O(n*m) alignment matrix.
+ */
+function computeDiffPositional(
+  seqA: string,
+  seqB: string,
+  mapA: Map<number, number> | null,
+  mapB: Map<number, number> | null,
+  haveScores: boolean,
+): DiffPosition[] {
+  const minLen = Math.min(seqA.length, seqB.length);
+  const out: DiffPosition[] = [];
   for (let i = 0; i < minLen; i++) {
     if (seqA[i] !== seqB[i]) {
       let scoreDelta: number | undefined;
@@ -88,7 +216,6 @@ export function computeDiff(
       out.push({ position: i, ref: seqA[i], alt: seqB[i], kind: "snp", scoreDelta });
     }
   }
-  // Length tail → insertions (B longer) or deletions (A longer).
   if (seqB.length > seqA.length) {
     for (let i = minLen; i < seqB.length; i++) {
       out.push({ position: i, ref: "-", alt: seqB[i], kind: "ins" });

@@ -12,6 +12,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from services.alignment import lift_position
 from services.clinvar import ClinVarVariant, lookup_variants
 from services.eutils import (
     EUTILS_BASE,
@@ -30,8 +31,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class VariantAnnotation:
-    """A single variant mapped to a sequence position."""
-    position: int  # 0-indexed position in the query sequence
+    """A single variant with an explicit coordinate frame.
+
+    IMPORTANT: a ClinVar ``c.``/``g.`` HGVS coordinate is an offset into a
+    *reference* transcript/chromosome, NOT into a user's de-novo candidate. This
+    record keeps the two frames separate so a reference coordinate is never
+    silently painted as a candidate base position:
+
+    - ``reference_position``: the 1-based HGVS/transcript coordinate the variant
+      is actually defined on (``None`` when it could not be parsed).
+    - ``coordinate_frame``: ``"candidate"`` only when ``position`` was *lifted*
+      onto the candidate via alignment (``annotate_variants(reference_sequence=...)``);
+      otherwise ``"reference"`` - meaning ``position`` is the reference/transcript
+      0-based index and is only a valid index into the query when that query is
+      itself the reference (e.g. a CDS-aligned sequence, as in calibration).
+
+    ``position`` stays a non-optional int (0-based) so existing scoring callers
+    keep working; consumers that place variants on a candidate MUST check
+    ``coordinate_frame`` first (see services.region_evidence).
+    """
+    position: int  # 0-based index in the frame named by ``coordinate_frame``
     ref_base: str
     alt_base: str
     clinical_significance: str  # pathogenic, likely_pathogenic, benign, uncertain, etc.
@@ -41,6 +60,8 @@ class VariantAnnotation:
     variation_type: str  # single nucleotide variant, deletion, etc.
     review_stars: int  # 0-4 ClinVar review status stars
     allele_frequency: float | None  # population allele frequency if available
+    reference_position: int | None = None  # 1-based HGVS/transcript coordinate
+    coordinate_frame: str = "reference"    # "candidate" (lifted) | "reference"
 
 
 @dataclass
@@ -179,20 +200,36 @@ async def annotate_variants(
     sequence: str | None = None,
     max_variants: int = 25,
     significance: str = "pathogenic",
+    reference_sequence: str | None = None,
 ) -> AnnotationResult:
-    """Fetch ClinVar variants for a gene and map them to sequence positions.
+    """Fetch ClinVar variants for a gene and resolve their coordinate frame.
 
-    If `sequence` is provided, attempts to map variant positions onto the
-    sequence using HGVS nomenclature. Otherwise returns positional data
-    from HGVS parsing alone.
+    HGVS ``c.``/``g.`` coordinates index a reference transcript/chromosome, not a
+    de-novo candidate, so they are NOT dropped onto the candidate index blindly:
+
+    - When ``reference_sequence`` is provided, the candidate ``sequence`` is
+      aligned to it (services.alignment) and each reference coordinate is
+      *lifted* into the candidate frame. Only variants that land inside an
+      aligned block get a candidate-frame ``position`` (``coordinate_frame ==
+      "candidate"``); ones that fall in an indel/gap are counted as unmapped.
+    - Without a reference, each variant keeps its reference coordinate
+      (``reference_position``) with ``coordinate_frame == "reference"``. Its
+      ``position`` is the 0-based reference index - a valid query index only when
+      the caller's sequence is itself the reference frame (e.g. calibration's
+      CDS-aligned sequence). It must NOT be painted as a candidate base; that
+      gating lives in services.region_evidence.
 
     Args:
         gene: Gene symbol (e.g. "BRCA1")
-        sequence: Optional DNA sequence for position mapping
-        max_variants: Maximum number of variants to fetch
+        sequence: Optional DNA sequence (the candidate, or a reference-aligned
+            sequence for calibration).
+        max_variants: Maximum number of variants to fetch.
+        significance: ClinVar significance filter.
+        reference_sequence: Optional gene reference sequence to align the
+            candidate against and lift reference coordinates through.
 
     Returns:
-        AnnotationResult with position-level variant annotations
+        AnnotationResult with coordinate-frame-tagged variant annotations.
     """
     if not gene:
         return AnnotationResult(gene="", total_variants_in_gene=0)
@@ -223,11 +260,26 @@ async def annotate_variants(
         stars = detail.get("review_stars", 0)
 
         if position_1based is not None:
-            # Convert 1-based HGVS position to 0-based
+            # The HGVS coordinate is a REFERENCE coordinate. 0-based reference
+            # index; frame defaults to "reference" (see VariantAnnotation).
+            reference_position = position_1based
             pos_0 = position_1based - 1
+            frame = "reference"
 
-            # If we have a sequence, validate the position is in range
-            if sequence and (pos_0 < 0 or pos_0 >= seq_len):
+            if reference_sequence and sequence:
+                # Approach (a): lift the reference coordinate into the candidate
+                # frame by aligning candidate <-> reference. Only emit a
+                # candidate-frame position when it lands inside an aligned block.
+                lifted = lift_position(reference_sequence, sequence, pos_0)
+                if lifted is None or not (0 <= lifted < len(sequence)):
+                    unmapped += 1
+                    continue
+                pos_0 = lifted
+                frame = "candidate"
+            elif sequence and (pos_0 < 0 or pos_0 >= seq_len):
+                # No reference to lift against. The reference index still has to
+                # fall within the provided (reference-frame) sequence to be
+                # usable; otherwise it is genuinely unmapped.
                 unmapped += 1
                 continue
 
@@ -242,6 +294,8 @@ async def annotate_variants(
                 variation_type=variant.variation_type,
                 review_stars=stars,
                 allele_frequency=None,  # ClinVar esummary doesn't provide AF
+                reference_position=reference_position,
+                coordinate_frame=frame,
             ))
         else:
             unmapped += 1
@@ -263,11 +317,13 @@ async def annotate_sequence_region(
     region_start: int = 0,
     region_end: int | None = None,
     max_variants: int = 25,
+    reference_sequence: str | None = None,
 ) -> AnnotationResult:
     """Annotate a specific region of a sequence with variants.
 
     Filters annotations to only include those within [region_start, region_end).
-    Adjusts positions to be relative to region_start.
+    Adjusts positions to be relative to region_start. The coordinate frame of
+    each annotation is preserved (see :class:`VariantAnnotation`).
     """
     if region_end is None:
         region_end = len(sequence)
@@ -277,7 +333,9 @@ async def annotate_sequence_region(
             f"Invalid region [{region_start}, {region_end}) for sequence of length {len(sequence)}"
         )
 
-    result = await annotate_variants(gene, sequence, max_variants=max_variants)
+    result = await annotate_variants(
+        gene, sequence, max_variants=max_variants, reference_sequence=reference_sequence
+    )
 
     # Filter to region and adjust positions
     region_annotations = []
@@ -294,6 +352,8 @@ async def annotate_sequence_region(
                 variation_type=ann.variation_type,
                 review_stars=ann.review_stars,
                 allele_frequency=ann.allele_frequency,
+                reference_position=ann.reference_position,
+                coordinate_frame=ann.coordinate_frame,
             ))
 
     return AnnotationResult(

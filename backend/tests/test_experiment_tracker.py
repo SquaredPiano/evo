@@ -110,6 +110,28 @@ class TestDiffSequences:
         assert mutations[1] == {"position": 4, "ref": "-", "alt": "A"}
         assert mutations[2] == {"position": 5, "ref": "-", "alt": "A"}
 
+    def test_internal_insertion_is_gap_aware(self):
+        """An indel in the MIDDLE must not turn the whole tail into mismatches.
+
+        seq2 inserts "TT" between the C-run and G-run of seq1. A gap-aware diff
+        reports exactly one insertion (two bases) and zero substitutions - the
+        old prefix/tail diff would have reported the entire suffix as changed.
+        """
+        seq1 = "AAACCCGGGTTTAAA"
+        seq2 = "AAACCCTTGGGTTTAAA"  # "TT" inserted after CCC
+        mutations = _diff_sequences(seq1, seq2)
+        assert all(m["ref"] == "-" for m in mutations)  # pure insertion
+        assert len(mutations) == 2
+        # Downstream bases stay aligned - no spurious substitutions.
+        assert not any(m["ref"] != "-" and m["alt"] != "-" for m in mutations)
+
+    def test_internal_deletion_is_gap_aware(self):
+        seq1 = "AAACCCTTGGGTTTAAA"
+        seq2 = "AAACCCGGGTTTAAA"  # "TT" deleted after CCC
+        mutations = _diff_sequences(seq1, seq2)
+        assert all(m["alt"] == "-" for m in mutations)  # pure deletion
+        assert len(mutations) == 2
+
     def test_empty_sequences(self):
         assert _diff_sequences("", "") == []
 
