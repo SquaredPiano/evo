@@ -6,7 +6,7 @@ import type { SuggestedAction } from "@/lib/agentTypes";
 /**
  * A prominent one-click chip for Helio's proactive `suggested_action`. Clicking
  * it fires the follow-up that triggers the underlying tool (regenerate_region /
- * optimize_candidate) via the existing agent send path — this is the
+ * optimize_candidate) via the existing agent send path - this is the
  * proactivity that makes Helio feel alive.
  */
 export default function SuggestedActionButton({

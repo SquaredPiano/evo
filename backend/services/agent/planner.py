@@ -1,4 +1,4 @@
-"""Agent planner — routes user messages to tool invocations.
+"""Agent planner - routes user messages to tool invocations.
 
 Two strategies, tried in order:
 1. Deterministic regex/keyword fast path (reliable for demo-critical commands)
@@ -30,27 +30,27 @@ Return ONLY strict JSON with this exact shape:
 {"actions":[{"tool":"<tool_name>","args":{...}}]}
 
 Allowed tools:
-0) explain_region — args: {"start": <int>, "end": <int>}
+0) explain_region - args: {"start": <int>, "end": <int>}
     Explain ONE region for a (possibly non-biologist) scientist: what it likely
-    does, why it matters, and how confident the model is — using real per-position
+    does, why it matters, and how confident the model is - using real per-position
     Evo2 signal + region evidence. Route here whenever the user asks about, or
     references, a SPECIFIC region or their current selection ("what does the
     middle do?", "is this chunk risky?", "explain the selected region", "why is
     the score high here?"). If the user has a selection and gives no numbers,
-    still emit explain_region — the backend fills start/end from the selection
+    still emit explain_region - the backend fills start/end from the selection
     (you MAY pass the selection's start/end shown in context).
-1) explain_candidate — args: {}   (WHOLE-sequence summary; use only when NO region/selection is in focus)
-2) edit_base — args: {"position": <int>, "new_base": "A|T|C|G"}
-3) optimize_candidate — args: {"objective": "safety|tissue_specificity|functional|novelty", "rounds": <int 1-5, optional>}
-4) compare_candidates — args: {}
-5) transform_sequence — args: {"mode": "all_t|all_a|all_c|all_g|reverse_complement|replace_base", "from_base": "A|T|C|G (only for replace_base)", "to_base": "A|T|C|G (only for replace_base)"}
-6) restore_sequence — args: {"sequence": "<ATCG...>"}
-7) codon_optimize — args: {"organism": "homo_sapiens|e_coli|yeast|mouse|drosophila"}
-8) offtarget_scan — args: {"k": <int 8-20, default 12>}
-9) insert_bases — args: {"position": <int>, "bases": "<ATCG...>"}
-10) delete_bases — args: {"start": <int>, "end": <int>}
-11) restriction_sites — args: {"enzymes": ["EcoRI", ...] (optional)}
-12) regenerate_region — args: {"start": <int, optional>, "end": <int, optional>, "gc_target": <float 0-1, optional>, "length_delta": <int, optional>, "avoid_motifs": ["GAATTC" or "EcoRI", ...] (optional), "temperature": <float, optional>}
+1) explain_candidate - args: {}   (WHOLE-sequence summary; use only when NO region/selection is in focus)
+2) edit_base - args: {"position": <int>, "new_base": "A|T|C|G"}
+3) optimize_candidate - args: {"objective": "safety|tissue_specificity|functional|novelty", "rounds": <int 1-5, optional>}
+4) compare_candidates - args: {}
+5) transform_sequence - args: {"mode": "all_t|all_a|all_c|all_g|reverse_complement|replace_base", "from_base": "A|T|C|G (only for replace_base)", "to_base": "A|T|C|G (only for replace_base)"}
+6) restore_sequence - args: {"sequence": "<ATCG...>"}
+7) codon_optimize - args: {"organism": "homo_sapiens|e_coli|yeast|mouse|drosophila"}
+8) offtarget_scan - args: {"k": <int 8-20, default 12>}
+9) insert_bases - args: {"position": <int>, "bases": "<ATCG...>"}
+10) delete_bases - args: {"start": <int>, "end": <int>}
+11) restriction_sites - args: {"enzymes": ["EcoRI", ...] (optional)}
+12) regenerate_region - args: {"start": <int, optional>, "end": <int, optional>, "gc_target": <float 0-1, optional>, "length_delta": <int, optional>, "avoid_motifs": ["GAATTC" or "EcoRI", ...] (optional), "temperature": <float, optional>}
     Use this for TRUE re-generation: the model actually resamples a region and splices it back
     (NOT a single-base edit). Route here for "regenerate positions 40-80", "redo/resample this
     region", "raise GC in this region", "avoid EcoRI here". If no start/end given, it regenerates
@@ -90,13 +90,13 @@ def deterministic_fast_path(
     structure (undo/redo, explicit single-base edits, deterministic transforms,
     and region regeneration with a resolvable range). Returns ``None`` for
     everything intent-like ("is this risky?", "make it safer", "why is the
-    off-target score high?"), which routes to the LLM planner instead — killing
+    off-target score high?"), which routes to the LLM planner instead - killing
     the keyword false-positives.
     """
     text = message.lower()
     memory_entries = memory_entries or []
 
-    # Undo / revert — explicit, structural.
+    # Undo / revert - explicit, structural.
     if any(token in text for token in ("undo", "revert", "roll back", "rollback")):
         undo_action = derive_undo_action(memory_entries)
         if undo_action is not None:
@@ -105,7 +105,7 @@ def deterministic_fast_path(
                 actions.append({"tool": "explain_candidate", "args": {}})
             return actions
 
-    # Repeat last action — explicit reference to a prior structural edit.
+    # Repeat last action - explicit reference to a prior structural edit.
     if "again" in text or "same change" in text or "do that" in text:
         repeat_action = derive_repeat_action(memory_entries)
         if repeat_action is not None:
@@ -114,7 +114,7 @@ def deterministic_fast_path(
                 actions.append({"tool": "explain_candidate", "args": {}})
             return actions
 
-    # Region regeneration — only fast-path when start/end are actually resolvable
+    # Region regeneration - only fast-path when start/end are actually resolvable
     # (explicit numeric range or a live selection). Keyword-only / whole-sequence
     # regen flows to the LLM so it can reason with full context.
     regen_args = parse_region_regeneration(
@@ -191,7 +191,7 @@ def deterministic_plan(
                 actions.append({"tool": "explain_candidate", "args": {}})
             return actions
 
-    # Region regeneration — TRUE model re-invocation (regenerate/resample/redo a
+    # Region regeneration - TRUE model re-invocation (regenerate/resample/redo a
     # region, raise GC in a region, avoid a restriction site here). Checked before
     # single-base edit / optimize so "regenerate positions 40-80" doesn't fall
     # through to hill-climbing.
@@ -242,7 +242,7 @@ def deterministic_plan(
         "hill climb", "redesign", "improve the", "boost the",
     ))
 
-    # Optimize / improve — NEVER on explain/beginner prompts (even if they say "what should I do next")
+    # Optimize / improve - NEVER on explain/beginner prompts (even if they say "what should I do next")
     if explicit_mutate and not explain_only:
         if any(token in text for token in (
             "tissue-specific", "tissue specific", "safer", "novel", "functional",
@@ -252,7 +252,7 @@ def deterministic_plan(
                 actions.append({"tool": "optimize_candidate", "args": {"objective": objective_from_prompt(text)}})
                 actions.append({"tool": "explain_candidate", "args": {}})
 
-    # Explain / interpret scores — read-only. When the user has a region/base
+    # Explain / interpret scores - read-only. When the user has a region/base
     # selected, explain THAT region (real per-position Evo2 signal + evidence)
     # instead of re-printing the whole-sequence summary.
     if explain_only and not any(a["tool"] in {"edit_base", "optimize_candidate", "transform_sequence"} for a in actions):
@@ -360,7 +360,7 @@ def _build_planning_context(
         if view_mode:
             parts.append(f"View mode: {view_mode}")
 
-        # SELECTION — the single most important signal for region-scoped intent.
+        # SELECTION - the single most important signal for region-scoped intent.
         resolved = candidate_snapshot.get("selected_region_resolved")
         sel_region = candidate_snapshot.get("selected_region")
         sel_pos = candidate_snapshot.get("selected_position")
@@ -389,7 +389,7 @@ def _build_planning_context(
                 parts.append(f"Evidence available: {', '.join(labels[:6])}")
 
     if history:
-        # Real conversation content — lets the planner resolve references like
+        # Real conversation content - lets the planner resolve references like
         # "do that again", "the other one", "make it safer instead".
         recent = history[-6:]
         parts.append("Conversation so far:")

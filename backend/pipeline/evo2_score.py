@@ -1,4 +1,4 @@
-"""Evo2 scoring pipeline — 4-dimensional candidate evaluation.
+"""Evo2 scoring pipeline - 4-dimensional candidate evaluation.
 
 Takes raw Evo2 forward pass output and computes:
   1. Functional plausibility  (sequence looks biologically real)
@@ -148,7 +148,7 @@ def score_off_target(
 
     # Real k-mer homology scan against curated genomic panels (Alu/LINE repeats,
     # oncogene hotspots, repeat expansions, regulatory elements). This replaces
-    # pure motif-counting with an actual similarity search — a clean, novel
+    # pure motif-counting with an actual similarity search - a clean, novel
     # sequence shares few k-mers with these panels and stays low-risk.
     try:
         from services.offtarget import scan_offtargets
@@ -274,13 +274,13 @@ async def rescore_mutation_detailed(
     The mutation delta (ref vs alt) and the full candidate rescore are computed
     concurrently. The per-position log-likelihoods are sliced to a window around
     the edit so the response stays small and the frontend heatmap can patch in
-    place. This deliberately does NOT fold protein structure — that is a slow,
+    place. This deliberately does NOT fold protein structure - that is a slow,
     best-effort step the caller runs out of band.
     """
     mutated = sequence[:position] + new_base.upper() + sequence[position + 1 :]
 
     # Delta (needs a ref + alt forward pass) and the full alt rescore are
-    # independent — run them together instead of serially.
+    # independent - run them together instead of serially.
     mutation, (scores, per_position) = await asyncio.gather(
         service.score_mutation(sequence, position, new_base),
         score_candidate(

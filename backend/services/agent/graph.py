@@ -38,32 +38,32 @@ from services.session_store import SessionStore
 
 logger = logging.getLogger(__name__)
 
-RESPONDER_PROMPT = """You are the Evo copilot — a sharp genomic design partner inside a research IDE.
+RESPONDER_PROMPT = """You are the Evo copilot - a sharp genomic design partner inside a research IDE.
 You just ran real tools against the user's DNA sequence. You have their message, UI context
 (scores, selected base, current view), tool outcomes with real numbers, evidence links
 (NCBI / PubMed / ClinVar when present), and conversation history.
 
-Format for a chat bubble — scannable, never a wall of text:
+Format for a chat bubble - scannable, never a wall of text:
 1. First line: what you DID + the headline result (one short sentence).
 2. Then 2–4 short lines, each starting with a label like "Functional:" / "Off-target:" /
-   "Evidence:" — one idea per line. Prefer line breaks over long paragraphs.
+   "Evidence:" - one idea per line. Prefer line breaks over long paragraphs.
 3. Interpret numbers in plain English: functional, tissue specificity, novelty are higher=better;
    off-target is higher=worse. Quote real deltas when an edit changed scores.
 4. When evidence_links or retrieval notes are present, cite them with full URLs on their own lines
    (PubMed, ClinVar, NCBI Gene). Never invent PMIDs or accessions.
-5. Ground every claim in tool outcomes — never invent scores or residues.
+5. Ground every claim in tool outcomes - never invent scores or residues.
 6. End with ONE specific next action in Evo.
 7. Hard limit: ~80 words unless comparing ≥2 candidates. No markdown tables.
 8. If a tool failed, say so honestly and suggest a recovery step.
 
 REGION FOCUS (when a `region_explanation` is present in the payload):
 - Explain THIS region for a non-biologist: in one plain line, what it likely does
-  (use the bound evidence — regulatory motifs, ClinVar gene context) and why it
+  (use the bound evidence - regulatory motifs, ClinVar gene context) and why it
   matters. Then a line on WHERE the model is least confident (cite the region's
   weakest per-position position from signal_summary).
 - CONFIDENCE HONESTY: `model_confidence.sampled_probs` are REAL Evo2 model
   confidence ONLY when `is_real_model_confidence` is true (engine=nim, i.e. after
-  a regeneration) — cite them as "model confidence" then. Otherwise say the
+  a regeneration) - cite them as "model confidence" then. Otherwise say the
   per-position numbers are heuristic proxies, not real Evo2 log-likelihoods.
   Never fabricate a probability.
 - ClinVar is gene-locus CONTEXT, never a pathogenicity verdict on generated bases.
@@ -109,7 +109,7 @@ def _regeneration_signal(candidate_update: dict[str, Any] | None) -> dict[str, A
     """Extract real regeneration confidence from a candidate_update, or None.
 
     Returns the region span, engine, per-base ``sampled_probs`` (REAL Evo2
-    confidence only when engine=nim), and the constraint report — or None when
+    confidence only when engine=nim), and the constraint report - or None when
     the last op was not a region regeneration.
     """
     if not candidate_update:
@@ -165,7 +165,7 @@ def _derive_suggested_action(state: CopilotState) -> dict[str, Any] | None:
     """Propose ONE concrete, data-grounded next action for the frontend.
 
     Grounds the suggestion in the weakest objective (:func:`_weakest_objective`)
-    and, when available, the lowest-confidence region window — e.g. "tissue score
+    and, when available, the lowest-confidence region window - e.g. "tissue score
     is weakest and positions 40-80 have low model confidence → regenerate that
     region?". Returns a structured suggested-action or None.
     """
@@ -215,7 +215,7 @@ def _derive_suggested_action(state: CopilotState) -> dict[str, Any] | None:
 
 
 class AgenticCopilot:
-    """Facade for the agentic copilot — manages graph, memory, and tool dispatch."""
+    """Facade for the agentic copilot - manages graph, memory, and tool dispatch."""
 
     def __init__(self, *, session_store: SessionStore, evo2_service: Evo2Service) -> None:
         self._session_store = session_store
@@ -358,7 +358,7 @@ class AgenticCopilot:
         resolved = candidate_snapshot.get("selected_region_resolved")
         selected_region = resolved or candidate_snapshot.get("selected_region")
 
-        # 1. High-confidence deterministic fast path — ONLY structurally
+        # 1. High-confidence deterministic fast path - ONLY structurally
         # unambiguous commands (explicit edits, undo/redo, deterministic
         # transforms, resolvable-range regen). Keeps these fast + reliable even
         # when the LLM is up, and returns None for anything intent-like.
@@ -378,7 +378,7 @@ class AgenticCopilot:
                 ],
             }
 
-        # 2. LLM-FIRST planning — the primary router for all free-text intent
+        # 2. LLM-FIRST planning - the primary router for all free-text intent
         # ("is this chunk risky?", "what does the middle do?", "make it safer").
         # This kills the brittle-keyword false positives.
         if llm.llm_available():
@@ -395,7 +395,7 @@ class AgenticCopilot:
                     ],
                 }
 
-        # 3. OFFLINE fallback — full deterministic keyword planner (used when the
+        # 3. OFFLINE fallback - full deterministic keyword planner (used when the
         # LLM is unavailable or returned nothing).
         det_plan = deterministic_plan(
             message,
@@ -576,7 +576,7 @@ class AgenticCopilot:
             }
 
         # Fold REAL Evo2 model confidence (sampled_probs) into the focus when a
-        # regeneration produced it — kept honest via the is_real flag.
+        # regeneration produced it - kept honest via the is_real flag.
         if region_focus is not None and regen:
             probs = regen.get("sampled_probs") or []
             mean_prob = (sum(probs) / len(probs)) if probs else None
@@ -628,7 +628,7 @@ class AgenticCopilot:
             except Exception:
                 logger.debug("OpenRouter responder failed, using deterministic fallback", exc_info=True)
 
-        # Deterministic fallback — keep line breaks so the chat UI stays scannable.
+        # Deterministic fallback - keep line breaks so the chat UI stays scannable.
         base_msg = notes[-1]
         snapshot = state.get("candidate_snapshot") or {}
         evidence = snapshot.get("evidence_links") or []

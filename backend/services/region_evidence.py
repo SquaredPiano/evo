@@ -11,15 +11,15 @@ carrying its own 0-based, half-open coordinates in the candidate's frame.
 
 Sources wired in TODAY (all three already exist in the codebase):
 
-* **ClinVar** — via :mod:`services.variant_annotation`. Known variants for the
+* **ClinVar** - via :mod:`services.variant_annotation`. Known variants for the
   *gene* are parsed from HGVS titles into positions and overlaid on these
   coordinates. Honesty note: this is *context about the gene locus*, NOT a
   claim that the generated base is pathogenic. That framing is encoded in the
   ``detail`` field of every ClinVar record.
-* **Regulatory** — via :func:`services.regulatory_viz.build_regulatory_map`.
+* **Regulatory** - via :func:`services.regulatory_viz.build_regulatory_map`.
   Each detected motif becomes a ``source="regulatory"`` record. These are
   motif-derived (pattern matches), not literature-linked, so ``url`` is None.
-* **Literature** — via :class:`services.literature_index.LiteratureRagProvider`,
+* **Literature** - via :class:`services.literature_index.LiteratureRagProvider`,
   a concrete :class:`RegionRagProvider` (see below) that vector-searches
   post-2025 PubMed papers indexed in :class:`services.literature_index.LiteratureIndex`
   and Gemini-condenses each hit's abstract into an honest ``detail`` (see
@@ -29,7 +29,7 @@ Sources wired in TODAY (all three already exist in the codebase):
   ``python -m scripts.ingest_literature <GENE>`` (run from ``backend/``).
 
 :func:`attach_literature_evidence` and :class:`RegionRagProvider` below remain
-a generic seam — any other ``RegionRagProvider`` implementation (a different
+a generic seam - any other ``RegionRagProvider`` implementation (a different
 index, a different retrieval strategy) drops in the same way, with no UI
 change, since every source normalises into the same :class:`RegionEvidence`
 record with ``source="literature"``.
@@ -123,7 +123,7 @@ async def _clinvar_evidence(
         # NOT a statement that the generated base here is pathogenic.
         detail = (
             f"Known ClinVar variant in {gene} ({change}) overlapping this "
-            f"position — context for the region, not a pathogenicity claim "
+            f"position - context for the region, not a pathogenicity claim "
             f"about the generated sequence."
         )
         if ann.condition:
@@ -167,7 +167,7 @@ def _regulatory_evidence(
 ) -> list[RegionEvidence]:
     """Convert a regulatory map's motif features to RegionEvidence.
 
-    Pure/local — no network. Safe to call inside the pipeline. Features are
+    Pure/local - no network. Safe to call inside the pipeline. Features are
     kept when they OVERLAP [region_start, region_end).
     """
     features = regulatory_map.get("features")
@@ -240,7 +240,7 @@ async def assemble_region_evidence(
 
     Returns:
         A flat list of RegionEvidence, sorted by (start, source). Empty list is
-        a valid, honest result — never raises for "no evidence".
+        a valid, honest result - never raises for "no evidence".
     """
     if region_end is None:
         region_end = len(sequence)
@@ -286,7 +286,7 @@ async def assemble_region_evidence(
 # A RAG over post-2025 research papers, indexed per region, plugs in HERE
 # without touching the UI or the assembly above. Implemented today by
 # :class:`services.literature_index.LiteratureRagProvider` (wired into
-# ``POST /api/region-evidence`` in ``backend/main.py``) — this stays a generic
+# ``POST /api/region-evidence`` in ``backend/main.py``) - this stays a generic
 # Protocol so a different index/strategy can be swapped in the same way.
 #
 # Contract for the provider:
@@ -346,7 +346,7 @@ async def attach_literature_evidence(
 
     Normalises provider output, forces source/kind so the UI badges it as a
     paper, and tolerates sync or async providers. It does NOT itself query any
-    index — pass a concrete :class:`RegionRagProvider`, e.g.
+    index - pass a concrete :class:`RegionRagProvider`, e.g.
     ``LiteratureRagProvider(literature_index)`` from
     :mod:`services.literature_index` (see ``backend/main.py``).
 

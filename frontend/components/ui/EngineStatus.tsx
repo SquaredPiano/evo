@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * EngineStatus — honest provenance for generation + structure backends.
+ * EngineStatus - honest provenance for generation + structure backends.
  */
 
 import { useEffect, useState } from "react";

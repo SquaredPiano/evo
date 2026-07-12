@@ -1,7 +1,7 @@
 """Tests for services.literature_index: indexing, semantic search, and the
 LiteratureRagProvider adapter that feeds region_evidence's RAG seam.
 
-No network, no real Mongo, no real Gemini — LocalHashEmbedder + an in-memory
+No network, no real Mongo, no real Gemini - LocalHashEmbedder + an in-memory
 LiteratureIndex give deterministic, offline-safe search, and the autouse
 fixture clears settings.gemini_api_key so synthesize_detail takes its
 truncated-abstract fallback path (see test_evidence_synthesis.py).
@@ -113,7 +113,7 @@ class TestIndexAndSearch:
 
     @pytest.mark.asyncio
     async def test_atlas_empty_result_falls_back_to_mongo_hydration(self):
-        """Atlas Search indexes new writes near-real-time, not instantly — an
+        """Atlas Search indexes new writes near-real-time, not instantly - an
         empty $vectorSearch result right after a fresh upsert (e.g. from
         ensure_indexed's on-demand backfill, same request) must not be trusted
         as "nothing exists"; it should fall through to a plain Mongo query,

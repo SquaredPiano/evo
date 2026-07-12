@@ -1,4 +1,4 @@
-"""Evo2 service layer — the core of Helix.
+"""Evo2 service layer - the core of Helix.
 
 Three backends behind one interface:
   - Evo2LocalService:  wraps arcinstitute/evo2 on the GX10 (primary)
@@ -31,7 +31,7 @@ from models.domain import ForwardResult, Impact, MutationScore
 
 
 # ---------------------------------------------------------------------------
-# Generation provenance — the honest structured result of a generation call
+# Generation provenance - the honest structured result of a generation call
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -49,7 +49,7 @@ class GenerationResult:
                      local (we never fabricate probabilities). Under nim_api a
                      failed call RAISES rather than degrading, so a mock
                      suffix is never returned as a NIM result.
-      engine:        actual engine that produced these bases — one of
+      engine:        actual engine that produced these bases - one of
                      "nim" | "local" | "mock". Under nim_api a failed NIM call
                      raises; it does not silently fall back to mock.
       elapsed_ms:    wall-clock (or engine-reported) latency for the call.
@@ -116,11 +116,11 @@ class Evo2Service(ABC):
         """Generate and return structured provenance (bases + engine + confidence).
 
         Default implementation drives the streaming ``generate`` and reports the
-        engine honestly with ``sampled_probs=None`` — no probabilities are
+        engine honestly with ``sampled_probs=None`` - no probabilities are
         fabricated. NIM overrides this to capture real Evo2 ``sampled_probs`` and
         to report ``mock_fallback`` truthfully when it degrades to mock.
 
-        NOTE: generation is autoregressive / left-to-right — it conditions on the
+        NOTE: generation is autoregressive / left-to-right - it conditions on the
         ``seed`` prefix only. Callers doing region splicing must treat this as a
         prefix-only limitation (see services/regeneration.py).
         """
@@ -144,7 +144,7 @@ class Evo2Service(ABC):
 
 
 # ---------------------------------------------------------------------------
-# Mock implementation — realistic enough for TDD and frontend integration
+# Mock implementation - realistic enough for TDD and frontend integration
 # ---------------------------------------------------------------------------
 
 # Dinucleotide transition probabilities (simplified Markov chain)
@@ -207,7 +207,7 @@ def _mock_logits(sequence: str) -> list[float]:
 def _composition_logits(sequence: str) -> list[float]:
     """Deterministic per-position composition signal (NOT an Evo2 log-likelihood).
 
-    This is a transparent, reproducible function of the ACTUAL sequence — no RNG.
+    This is a transparent, reproducible function of the ACTUAL sequence - no RNG.
     Each position's value is the log-odds of its base given the previous base
     under a fixed dinucleotide model (``_TRANSITION``), relative to a uniform
     0.25 baseline, plus known-motif boosts and a slight GC-stability term.
@@ -342,7 +342,7 @@ class Evo2MockService(Evo2Service):
 
 
 # ---------------------------------------------------------------------------
-# Local inference — wraps arcinstitute/evo2 on the GX10
+# Local inference - wraps arcinstitute/evo2 on the GX10
 # ---------------------------------------------------------------------------
 
 class Evo2LocalService(Evo2Service):
@@ -360,7 +360,7 @@ class Evo2LocalService(Evo2Service):
 
     def _load_model(self) -> object:
         if self._model is None:
-            # Deferred import — only needed when actually running local
+            # Deferred import - only needed when actually running local
             from evo2 import Evo2  # type: ignore[import-untyped]
 
             self._model = Evo2(self._model_path)
@@ -454,7 +454,7 @@ class Evo2LocalService(Evo2Service):
 
 
 # ---------------------------------------------------------------------------
-# NVIDIA NIM API — fallback to the 40B model via cloud
+# NVIDIA NIM API - fallback to the 40B model via cloud
 # ---------------------------------------------------------------------------
 
 class Evo2NIMService(Evo2Service):
@@ -491,13 +491,13 @@ class Evo2NIMService(Evo2Service):
         return "429" in msg or "too many requests" in msg or "rate limit" in msg
 
     async def forward(self, sequence: str) -> ForwardResult:
-        # The hosted NIM endpoint exposes generation only — no per-position
-        # forward pass — so there is NO real per-position Evo2 log-likelihood for
+        # The hosted NIM endpoint exposes generation only - no per-position
+        # forward pass - so there is NO real per-position Evo2 log-likelihood for
         # an arbitrary pasted sequence. Real Evo2 confidence is available only as
         # the per-generated-base sampled_probs captured during generation
         # (see generate_detailed). For scorers that need a per-position array over
         # a non-generated sequence we return a DETERMINISTIC composition/motif
-        # signal derived from the actual sequence — honestly not an Evo2 LL, and
+        # signal derived from the actual sequence - honestly not an Evo2 LL, and
         # never seeded-random fabrication.
         logits = _composition_logits(sequence)
         return ForwardResult(
@@ -536,7 +536,7 @@ class Evo2NIMService(Evo2Service):
         self, seed: str, n_tokens: int, temperature: float = 1.0
     ) -> AsyncGenerator[str, None]:
         # FAIL-LOUD: a NIM API failure (422, 429, 5xx, timeout) RAISES. We never
-        # degrade to fabricated tokens under nim_api — a hard failure must surface
+        # degrade to fabricated tokens under nim_api - a hard failure must surface
         # to the caller as an error, not silently stream fake sequence.
         clamped_temp = max(0.01, min(float(temperature), 1.0))
         data = await self._post({
@@ -549,7 +549,7 @@ class Evo2NIMService(Evo2Service):
         generated = _extract_generated_sequence(data)
         suffix = generated[len(seed):] if generated.startswith(seed) else generated
 
-        # NIM returns the full suffix in one shot — yield base-by-base so the
+        # NIM returns the full suffix in one shot - yield base-by-base so the
         # WebSocket client can stream into the IDE.
         for base in (suffix or "").upper():
             if base not in ("A", "T", "C", "G", "N"):
@@ -563,7 +563,7 @@ class Evo2NIMService(Evo2Service):
         """NIM generation with real Evo2 provenance.
 
         On success, returns ``engine="nim"`` plus the REAL per-generated-token
-        ``sampled_probs`` from the Evo2-40B model — genuine model confidence,
+        ``sampled_probs`` from the Evo2-40B model - genuine model confidence,
         distinct from the heuristic 4D scores. FAIL-LOUD: on ANY error
         (422/429/5xx/timeout) this RAISES rather than degrading to fabricated
         output, so the caller can never present mock sequence as real NIM.
@@ -644,7 +644,7 @@ def _softmax(x: np.ndarray) -> np.ndarray:
 def _extract_sampled_probs(data: dict[str, object]) -> list[float] | None:
     """Pull the per-generated-token sampled probabilities from a NIM response.
 
-    These are REAL Evo2 model confidences. Returns None if absent or malformed —
+    These are REAL Evo2 model confidences. Returns None if absent or malformed -
     we never fabricate probabilities.
     """
     probs = data.get("sampled_probs")

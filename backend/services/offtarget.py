@@ -1,4 +1,4 @@
-"""Off-target analysis service — k-mer similarity + NCBI BLAST.
+"""Off-target analysis service - k-mer similarity + NCBI BLAST.
 
 Two analysis modes:
   1. **Local k-mer scan** (fast, deterministic): Builds a k-mer index of the
@@ -7,7 +7,7 @@ Two analysis modes:
 
   2. **NCBI BLAST** (thorough, async): Submits to the NCBI BLAST REST API
      for comprehensive homology search. Returns when results are ready or
-     after timeout. Optional — requires network.
+     after timeout. Optional - requires network.
 
 The local scan uses pre-built reference k-mer sets for common genomic
 contexts (repeat elements, oncogene hotspots, common coding regions) so
@@ -75,7 +75,7 @@ _LINE1_5UTR = (
     "ACGCAGAAGACGGTGATTTCTGCATTTCCATCTGAGGTACCGGGTTCATCTCACTAGGGAG"
 )
 
-# Common pathogenic motifs — trinucleotide repeat expansions
+# Common pathogenic motifs - trinucleotide repeat expansions
 _REPEAT_EXPANSIONS = {
     "CAG_repeat": "CAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG",
     "CGG_repeat": "CGGCGGCGGCGGCGGCGGCGGCGGCGGCGGCGGCGGCGGCGGCGGCGG",
@@ -265,7 +265,7 @@ def scan_offtargets(
                 total_query_kmers=total_query_kmers,
                 category="oncogene",
                 risk_level="high" if similarity > 0.1 else "medium" if similarity > 0.03 else "low",
-                description=f"Shares {shared} {k}-mers with {name} — potential oncogene off-target",
+                description=f"Shares {shared} {k}-mers with {name} - potential oncogene off-target",
             ))
 
     # Scan regulatory elements
@@ -311,7 +311,7 @@ async def submit_blast(
 ) -> str | None:
     """Submit a BLAST search to NCBI and return the Request ID (RID).
 
-    Does NOT wait for results — caller should poll with check_blast().
+    Does NOT wait for results - caller should poll with check_blast().
     Returns None on failure.
     """
     try:

@@ -8,10 +8,10 @@
  * An interface glyph, not a literal DNA double helix.
  *
  * Usage:
- *   <EvoLogo />                    — mark + wordmark (nav default)
- *   <EvoLogo variant="mark" />     — mark only (favicon, app icon, collapsed nav)
- *   <EvoLogo variant="wordmark" /> — wordmark only (footer, docs)
- *   <EvoLogo size="lg" />          — larger (hero, splash)
+ *   <EvoLogo />                    - mark + wordmark (nav default)
+ *   <EvoLogo variant="mark" />     - mark only (favicon, app icon, collapsed nav)
+ *   <EvoLogo variant="wordmark" /> - wordmark only (footer, docs)
+ *   <EvoLogo size="lg" />          - larger (hero, splash)
  *
  * Color: uses currentColor. Set the parent's text color.
  */

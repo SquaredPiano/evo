@@ -1,12 +1,12 @@
-"""Cross-phase integration tests — verifying real data flows that compose
+"""Cross-phase integration tests - verifying real data flows that compose
 services from Phases 1–4 together.
 
 Design principles:
   1. One test, one invariant.  The docstring states it; every assertion
      verifies it.  Nothing else.
-  2. Real sequences — no toy "ATCG" strings.
+  2. Real sequences - no toy "ATCG" strings.
   3. DRY setup via module-scoped fixtures.
-  4. No mocking of internal services — every service runs its real code path.
+  4. No mocking of internal services - every service runs its real code path.
   5. Tests are derived from the actual API contracts, verified by probing
      the real endpoints first.
 """
@@ -36,16 +36,16 @@ from services.translation import (
 # BRCA1 coding-region fragment (47 bp, starts with ATG)
 BRCA1 = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAAT"
 
-# TP53 exon 5 — known oncogene hotspot
+# TP53 exon 5 - known oncogene hotspot
 TP53_EX5 = "TACTCCCCTGCCCTCAACAAGATGTTTTGCCAACTGGCCAAGACCTGCCCTGTGCAGCTGTGGG"
 
-# GFP (first 60 bp of enhanced GFP CDS — multiple of 3 for clean translation)
+# GFP (first 60 bp of enhanced GFP CDS - multiple of 3 for clean translation)
 GFP = "ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGAC"
 
 # CpG island (100% GC)
 ALL_GC = "GCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGC"
 
-# Alu consensus fragment (first 60 bp) — known repeat element reference
+# Alu consensus fragment (first 60 bp) - known repeat element reference
 from services.offtarget import _ALU_CONSENSUS
 ALU_60 = _ALU_CONSENSUS[:60]
 
@@ -202,7 +202,7 @@ class TestOptimizationSafety:
         delta = abs(result.gc_content_after - result.gc_content_before)
         assert delta < 0.20, (
             f"GC went from {result.gc_content_before:.2f} to "
-            f"{result.gc_content_after:.2f} — too dramatic"
+            f"{result.gc_content_after:.2f} - too dramatic"
         )
 
 
@@ -239,7 +239,7 @@ class TestStructureEndpoint:
 
         There is no synthetic fallback: a region that cannot be folded returns
         503 (fail closed), never a fabricated structure. seq2 keeps the ATG start
-        then switches to a run of Ala (GCG) codons — no premature stops — so it is
+        then switches to a run of Ala (GCG) codons - no premature stops - so it is
         a distinct, foldable protein of comparable length to LONG_SEQ.
         """
         seq2 = self.LONG_SEQ[:63] + "GCG" * 40

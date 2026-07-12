@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive Evo2 playground — test every operation with visual feedback.
+"""Interactive Evo2 playground - test every operation with visual feedback.
 
 Run from backend/:
     source .venv/bin/activate

@@ -221,7 +221,7 @@ export default function CandidateLeaderboard() {
               <span className="w-20 text-right text-base font-semibold font-mono" style={{ color: "var(--text-primary)" }}>{c.overall.toFixed(1)}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); handleCompare(c.id); }}
-                title={compareLeftId === c.id ? "Pinned as A — pick another to compare" : compareLeftId !== null ? "Compare against A" : "Pick as A to compare"}
+                title={compareLeftId === c.id ? "Pinned as A - pick another to compare" : compareLeftId !== null ? "Compare against A" : "Pick as A to compare"}
                 aria-label="Compare this candidate"
                 className="w-8 shrink-0 flex items-center justify-center rounded-full py-1 transition-colors hover:bg-black/[0.06]"
                 style={{ color: compareLeftId === c.id ? "var(--accent)" : "var(--text-faint)" }}>

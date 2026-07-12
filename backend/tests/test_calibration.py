@@ -84,7 +84,7 @@ class TestHelpers:
 
 class _FakeService:
     """Engine where pathogenic alt bases get a strongly negative delta and
-    benign ones get a mildly positive delta — so a correct harness yields
+    benign ones get a mildly positive delta - so a correct harness yields
     AUROC = 1.0."""
 
     def __init__(self, deltas: dict[int, float]):

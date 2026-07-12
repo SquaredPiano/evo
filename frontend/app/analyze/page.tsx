@@ -62,7 +62,7 @@ const VIEW_LABELS = {
 
 const VALID_VIEWS = ["input", "pipeline", "analyze", "structure", "leaderboard", "explorer", "ide", "compare"];
 
-// Views where edits actually apply to the active candidate — these get the
+// Views where edits actually apply to the active candidate - these get the
 // "Editing candidate #N" pill. Read-only surfaces (overview, variants grid,
 // compare, pipeline, input) deliberately do not.
 const EDIT_CAPABLE_VIEWS: string[] = ["explorer", "ide", "structure"];
@@ -151,7 +151,7 @@ function AnalyzePageInner() {
   const scores = useEvoStore((s) => s.scores);
   const analysisResult = useEvoStore((s) => s.analysisResult);
   const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
-  // Gene symbol from NCBI retrieval — scopes ClinVar region-evidence in AnnotationTrack.
+  // Gene symbol from NCBI retrieval - scopes ClinVar region-evidence in AnnotationTrack.
   const activeGene = (() => {
     const ncbi = retrievalStatuses.find((r) => r.source === "ncbi")?.result as
       | Record<string, unknown>
@@ -212,7 +212,7 @@ function AnalyzePageInner() {
   const [structureFullscreen, setStructureFullscreen] = useState(false);
   const urlHydratedRef = useRef(false);
 
-  // Hydrate view from URL once on mount — never fight sidebar clicks afterward.
+  // Hydrate view from URL once on mount - never fight sidebar clicks afterward.
   useEffect(() => {
     if (urlHydratedRef.current) return;
     urlHydratedRef.current = true;
@@ -249,7 +249,7 @@ function AnalyzePageInner() {
       setActivePdb(analysisResult.predictedProteins[0].pdbData);
       return;
     }
-    // Analyze may return ORF metadata without PDB — fold via /api/structure (ESMFold).
+    // Analyze may return ORF metadata without PDB - fold via /api/structure (ESMFold).
     if (analysisResult && !activePdb && rawSequence && rawSequence.length >= 30) {
       let cancelled = false;
       setFoldState("folding");
@@ -283,7 +283,7 @@ function AnalyzePageInner() {
     }
   }, [rawSequence, simulate, addEditEntry]);
 
-  // Inline editor: local (optimistic) sequence edits — insert/delete/typing.
+  // Inline editor: local (optimistic) sequence edits - insert/delete/typing.
   const handleSequenceChange = useCallback((next: string) => {
     useEvoStore.getState().setEditedSequence(next);
   }, []);
@@ -336,8 +336,8 @@ function AnalyzePageInner() {
     }
   }, [clickedResidue, setHighlightResidues]);
 
-  // One source of truth: when the playhead (selectedPosition) moves — from the
-  // scrubber, the LikelihoodGraph, the editor caret, or a region jump — mirror
+  // One source of truth: when the playhead (selectedPosition) moves - from the
+  // scrubber, the LikelihoodGraph, the editor caret, or a region jump - mirror
   // it onto the 3D residue highlight so the structure tracks the sequence.
   // Uses the same residue↔base mapping as handleResidueClick ((resi-1)*3).
   useEffect(() => {
@@ -414,7 +414,7 @@ function AnalyzePageInner() {
               }
             })
             .catch(() => {
-              // Persistence unavailable — leave the workspace untouched.
+              // Persistence unavailable - leave the workspace untouched.
             });
         }}
         wsStatus={wsStatus}
@@ -467,7 +467,7 @@ function AnalyzePageInner() {
                     </motion.button>
                   ))}
                 </div>
-                {/* Story Mode: plain-English glossary — reachable from every view */}
+                {/* Story Mode: plain-English glossary - reachable from every view */}
                 <button onClick={toggleStoryMode}
                   aria-label="Open Story Mode glossary"
                   className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:bg-white/[0.06]"
@@ -779,7 +779,7 @@ function AnalyzePageInner() {
                   <div className="flex items-center gap-3">
                     <Box size={14} style={{ color: "var(--accent)" }} />
                     <span className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-                      <ScienceTooltip term="protein-structure">3D Protein Structure</ScienceTooltip> — hover residues for details, click to inspect
+                      <ScienceTooltip term="protein-structure">3D Protein Structure</ScienceTooltip> - hover residues for details, click to inspect
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -808,7 +808,7 @@ function AnalyzePageInner() {
                 </motion.div>
 
                 {/* Plain-English framing for non-biologists */}
-                <ViewIntro text="The 3D shape your protein is predicted to fold into — hover or click a residue to link it back to the DNA that codes for it." />
+                <ViewIntro text="The 3D shape your protein is predicted to fold into - hover or click a residue to link it back to the DNA that codes for it." />
 
                 {/* Viewer */}
                 <motion.div
@@ -843,11 +843,11 @@ function AnalyzePageInner() {
                       transition={{ delay: 0.3, ...springTransition }}
                     >
                       <span className="text-[10px] leading-snug" style={{ color: "#B45309" }}>
-                        Uploaded structure — not model-predicted; not linked to a DNA sequence. Colors are not pLDDT.
+                        Uploaded structure - not model-predicted; not linked to a DNA sequence. Colors are not pLDDT.
                       </span>
                     </motion.div>
                   ) : (
-                  /* pLDDT legend — top-left so it never collides with view-mode buttons */
+                  /* pLDDT legend - top-left so it never collides with view-mode buttons */
                   <motion.div
                     className="absolute top-14 left-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 rounded-2xl pointer-events-none max-w-[min(100%,340px)] z-10"
                     style={{
@@ -913,14 +913,14 @@ function AnalyzePageInner() {
                       </motion.div>
                     ) : (
                       <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                        Hover the ribbon to preview residues — click once to pin and link the DNA codon.
+                        Hover the ribbon to preview residues - click once to pin and link the DNA codon.
                       </p>
                     )}
                   </div>
 
                   <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
 
-                  {/* Sequence context — DNA preview + candidate scores, collapsed
+                  {/* Sequence context - DNA preview + candidate scores, collapsed
                       by default (they duplicate the Sequence view). Residue
                       Inspector and Guided Next Steps stay primary/visible. */}
                   <DisclosureSection label="Sequence context" hint="preview + scores" contentClassName="px-5 pb-5 space-y-4">
@@ -1094,7 +1094,7 @@ function AnalyzePageInner() {
               </div>
 
               {/* Plain-English framing for non-biologists */}
-              <ViewIntro text="The DNA you're designing — edit any base and watch the scores and 3D shape update." />
+              <ViewIntro text="The DNA you're designing - edit any base and watch the scores and 3D shape update." />
 
               <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Editable workspace */}
@@ -1126,7 +1126,7 @@ function AnalyzePageInner() {
                       highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
                   </div>
                 </div>
-                {/* IDE right panel — compact tabbed rail (simple by default,
+                {/* IDE right panel - compact tabbed rail (simple by default,
                     one tab open). Every original panel is still reachable:
                     Edit → mutation + structure, Scores, Tools → tools + related
                     work, History → merged edit + experiment history. */}
@@ -1174,7 +1174,7 @@ function AnalyzePageInner() {
                           )}
                         </div>
                         <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                        {/* Static structure shortcut — the one live 3D viewer lives
+                        {/* Static structure shortcut - the one live 3D viewer lives
                             in the Structure view; this is just a link to it. */}
                         <div className="p-5">
                           <div className="flex items-center justify-between mb-2">
@@ -1191,7 +1191,7 @@ function AnalyzePageInner() {
                             <div className="text-center">
                               <Box size={32} style={{ color: "var(--accent)", margin: "0 auto 6px", opacity: 0.5 }} />
                               <span className="text-[11px] block" style={{ color: "var(--text-muted)" }}>
-                                {activePdb ? "Open the 3D structure" : "No structure yet — fold in Structure view"}
+                                {activePdb ? "Open the 3D structure" : "No structure yet - fold in Structure view"}
                               </span>
                             </div>
                           </button>
@@ -1295,7 +1295,7 @@ function AnalyzePageInner() {
         </AnimatePresence>
       </div>
 
-      {/* Helio opens from the header only — no duplicate floating button */}
+      {/* Helio opens from the header only - no duplicate floating button */}
 
       {/* Story Mode: judge-facing plain-English glossary (opens from the header on every view) */}
       <StoryMode />

@@ -1,7 +1,7 @@
 {
   "name": "evo",
   "version": "1.0.0",
-  "description": "Evo — genomic design IDE frontend",
+  "description": "Evo - genomic design IDE frontend",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

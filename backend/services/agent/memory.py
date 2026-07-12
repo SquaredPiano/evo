@@ -1,4 +1,4 @@
-"""Agent conversation memory — Redis-backed for persistence across restarts."""
+"""Agent conversation memory - Redis-backed for persistence across restarts."""
 
 from __future__ import annotations
 

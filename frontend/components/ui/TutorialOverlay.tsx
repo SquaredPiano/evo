@@ -30,7 +30,7 @@ const STEPS: TutorialStep[] = [
   {
     id: "analyzing",
     title: "Analyzing...",
-    description: "The AI pipeline is running — Evo 2 scores every position, ESMFold predicts protein structure.",
+    description: "The AI pipeline is running - Evo 2 scores every position, ESMFold predicts protein structure.",
     icon: FlaskConical,
     advanceWhen: (s) => s.hasAnalysis,
   },

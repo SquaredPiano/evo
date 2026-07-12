@@ -1,13 +1,13 @@
 "use client";
 
 /**
- * SequenceScrubber — a draggable playhead over the whole sequence.
+ * SequenceScrubber - a draggable playhead over the whole sequence.
  *
  * It scrubs `selectedPosition` (the single source of truth in the store) like a
  * timeline playhead: drag the thumb, click anywhere on the track, or use the
  * arrow keys to move it. Because it drives `selectedPosition`, it stays in
  * lock-step with the SequenceEditor caret, the LikelihoodGraph highlight and
- * the 3D residue highlight — all of which read from / write to the same value.
+ * the 3D residue highlight - all of which read from / write to the same value.
  *
  * Keyboard (when focused):
  *   ← / →              move by 1

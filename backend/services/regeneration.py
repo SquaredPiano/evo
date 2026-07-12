@@ -1,4 +1,4 @@
-"""Constrained region regeneration for Evo2 — TRUE re-invocation of the model.
+"""Constrained region regeneration for Evo2 - TRUE re-invocation of the model.
 
 This module implements generation-based iteration (reprompting), as opposed to
 the single-base hill-climbing that only mutates an existing candidate. It calls
@@ -57,7 +57,7 @@ RESTRICTION_SITES: dict[str, str] = {
 
 @dataclass
 class RegenerationResult:
-    """Result of a constrained region regeneration — the frontend payload source.
+    """Result of a constrained region regeneration - the frontend payload source.
 
     All fields are additive and honest. ``sampled_probs`` is real Evo2 confidence
     (per regenerated base) ONLY when ``engine == "nim"``; otherwise it is None.
@@ -67,11 +67,11 @@ class RegenerationResult:
     regenerated: str             # just the newly generated sub-sequence
     region_start: int            # start index in the ORIGINAL sequence
     region_end: int              # end index in the ORIGINAL sequence (exclusive)
-    new_region_end: int          # start + len(regenerated) — end in the NEW sequence
+    new_region_end: int          # start + len(regenerated) - end in the NEW sequence
     sampled_probs: list[float] | None  # per-regenerated-base Evo2 confidence (or None)
     engine: str                  # "nim" | "mock_fallback" | "local" | "mock"
     elapsed_ms: float | None
-    prefix_only_conditioning: bool  # always True — see module docstring
+    prefix_only_conditioning: bool  # always True - see module docstring
     method: str                  # "rejection_sampling_sample_k"
     candidates_evaluated: int    # K
     constraint_report: dict[str, Any] = field(default_factory=dict)
@@ -100,7 +100,7 @@ class RegenerationResult:
 
 
 # ---------------------------------------------------------------------------
-# Constraint helpers (pure functions — unit-tested)
+# Constraint helpers (pure functions - unit-tested)
 # ---------------------------------------------------------------------------
 
 def gc_fraction(sequence: str) -> float:
@@ -130,7 +130,7 @@ def normalize_avoid_motifs(motifs: list[str] | None) -> list[str]:
             out.append(RESTRICTION_SITES[token])
         elif set(token) <= set("ATCGN"):
             out.append(token)
-        # else: unknown label — skip silently (nothing to avoid)
+        # else: unknown label - skip silently (nothing to avoid)
     # De-duplicate while preserving order.
     seen: set[str] = set()
     deduped: list[str] = []
@@ -211,10 +211,10 @@ async def regenerate_region(
     If ``end >= len(sequence)`` this is a tail regeneration (no suffix to preserve).
 
     Constraints (all optional, via ``constraints`` dict):
-        gc_target:    float in [0, 1] — desired GC fraction of the region.
-        length_delta: int — bp to add (+) / remove (-) from the region length.
-        avoid_motifs: list[str] — substrings / enzyme names the region must avoid.
-        temperature:  float — sampling temperature.
+        gc_target:    float in [0, 1] - desired GC fraction of the region.
+        length_delta: int - bp to add (+) / remove (-) from the region length.
+        avoid_motifs: list[str] - substrings / enzyme names the region must avoid.
+        temperature:  float - sampling temperature.
 
     Constraint satisfaction uses SAMPLE-K rejection sampling (see module docstring):
     NOT native constrained decoding. The returned ``constraint_report`` states what

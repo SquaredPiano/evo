@@ -265,7 +265,7 @@ def test_agent_chat_transform_all_ts_persists_sequence() -> None:
     transformed_sequence = body["candidate_update"]["sequence"]
     assert transformed_sequence
     assert set(transformed_sequence) == {"T"}
-    # Structure is real ESMFold or an honest null — never a fabricated mock fold.
+    # Structure is real ESMFold or an honest null - never a fabricated mock fold.
     pdb_data = body["candidate_update"]["pdb_data"]
     assert pdb_data is None or pdb_data.startswith("HEADER")
 
@@ -478,7 +478,7 @@ def test_literature_prewarm_does_not_block_startup(monkeypatch: pytest.MonkeyPat
     """The demo-gene pre-warm task is fire-and-forget: even if it takes a long
     time (real PubMed + embedding calls for several genes), entering the app's
     lifespan must not wait for it. Mongo's own connect() is stubbed out here
-    so the only variable in the timing is the pre-warm task itself — real
+    so the only variable in the timing is the pre-warm task itself - real
     Mongo/TLS latency is covered separately and would make this flaky."""
     import asyncio
     import time

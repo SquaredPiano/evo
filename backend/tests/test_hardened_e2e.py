@@ -1,7 +1,7 @@
-"""Hardened end-to-end test suite — real inputs, exact expected outputs.
+"""Hardened end-to-end test suite - real inputs, exact expected outputs.
 
 Every assertion checks a concrete value computed from first principles.
-No `isinstance` or `in` checks — we know exactly what the deterministic
+No `isinstance` or `in` checks - we know exactly what the deterministic
 mock service produces and verify every field.
 """
 
@@ -37,16 +37,16 @@ from models.domain import ForwardResult
 # Real genomic sequences used throughout
 # ---------------------------------------------------------------------------
 
-# BRCA1 exon 2 fragment — the seed sequence used by Helix
+# BRCA1 exon 2 fragment - the seed sequence used by Helix
 BRCA1 = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAAT"
 
 # Huntington's disease-like CAG repeat region (pathogenic)
 HUNTINGTON_LIKE = "ATGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAG"
 
-# All-T synthetic — worst-case GC content (0%)
+# All-T synthetic - worst-case GC content (0%)
 ALL_T = "T" * 48
 
-# High GC — extreme composition
+# High GC - extreme composition
 HIGH_GC = "GCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGCGC"
 
 # Contains TATA box and start codon
@@ -54,7 +54,7 @@ PROMOTER_LIKE = "GGGCGGTATAAAAATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAA"
 
 
 # ---------------------------------------------------------------------------
-# 1. Translation service — exact codon-by-codon verification
+# 1. Translation service - exact codon-by-codon verification
 # ---------------------------------------------------------------------------
 
 
@@ -102,7 +102,7 @@ class TestTranslationExact:
         assert abs(gc_content(BRCA1) - 1 / 3) < 1e-10
 
     def test_find_orfs_brca1_no_stop(self):
-        """BRCA1 seed has ATG but NO stop codon — ORF detection requires a stop, so none found."""
+        """BRCA1 seed has ATG but NO stop codon - ORF detection requires a stop, so none found."""
         orfs = find_orfs(BRCA1, min_length=10)
         assert len(orfs) == 0  # No complete ORFs without stop codon
 
@@ -136,7 +136,7 @@ class TestTranslationExact:
 
 
 # ---------------------------------------------------------------------------
-# 2. Mock Evo2 service — deterministic output verification
+# 2. Mock Evo2 service - deterministic output verification
 # ---------------------------------------------------------------------------
 
 
@@ -256,7 +256,7 @@ class TestEvo2MockDeterminism:
 
 
 # ---------------------------------------------------------------------------
-# 3. Scoring pipeline — exact score computation from first principles
+# 3. Scoring pipeline - exact score computation from first principles
 # ---------------------------------------------------------------------------
 
 
@@ -387,7 +387,7 @@ class TestScoringExact:
 
 
 # ---------------------------------------------------------------------------
-# 4. Sequence formats — exact byte-level output verification
+# 4. Sequence formats - exact byte-level output verification
 # ---------------------------------------------------------------------------
 
 
@@ -493,7 +493,7 @@ class TestGenBankHardened:
 
 
 # ---------------------------------------------------------------------------
-# 5. API endpoints — exact response contracts
+# 5. API endpoints - exact response contracts
 # ---------------------------------------------------------------------------
 
 
@@ -597,13 +597,13 @@ class TestAPIContracts:
         assert res.status_code == 422
 
     def test_analyze_response_has_no_regions_field(self, client):
-        """regions was removed as dead code — verify it's gone."""
+        """regions was removed as dead code - verify it's gone."""
         res = client.post("/api/analyze", json={"sequence": BRCA1})
         assert res.status_code == 200
         assert "regions" not in res.json()
 
     def test_edit_base_persists_and_reports_correct_reference(self, client):
-        """Edit base at position 0 (A→G), then edit again — reference should be G."""
+        """Edit base at position 0 (A→G), then edit again - reference should be G."""
         sid = "hardened-persist"
         client.post("/api/design", json={"goal": "Design test", "session_id": sid})
 
@@ -898,7 +898,7 @@ class TestSessionStoreEdges:
 
 
 # ---------------------------------------------------------------------------
-# 8. Agent chat integration — exact tool dispatch verification
+# 8. Agent chat integration - exact tool dispatch verification
 # ---------------------------------------------------------------------------
 
 

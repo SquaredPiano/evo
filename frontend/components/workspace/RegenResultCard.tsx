@@ -25,8 +25,8 @@ export interface RegenResult {
 /**
  * Result card for a Helio `regenerate_region` action. Shows which region
  * changed, a compact inline diff of old vs regenerated bases, the honest
- * constraint report, and — ONLY when the engine returned real Evo 2
- * probabilities — a per-base confidence strip visually distinct from the
+ * constraint report, and - ONLY when the engine returned real Evo 2
+ * probabilities - a per-base confidence strip visually distinct from the
  * heuristic 4D scores. When the engine returns no real probabilities it shows
  * an honest note instead.
  */
@@ -101,7 +101,7 @@ export default function RegenResultCard({ result }: { result: RegenResult }) {
           )}
         </div>
 
-        {/* Real Evo 2 confidence strip — VISUALLY DISTINCT from 4D heuristics */}
+        {/* Real Evo 2 confidence strip - VISUALLY DISTINCT from 4D heuristics */}
         {realConfidence ? (
           <ConfidenceStrip probs={m.sampled_probs} />
         ) : (
@@ -290,7 +290,7 @@ function ConstraintReportView({ report }: { report?: RegenerationMutation["const
       label: "Avoid motifs",
       value:
         stillPresent.length === 0
-          ? `${report.avoid_motifs.join(", ")} — all removed`
+          ? `${report.avoid_motifs.join(", ")} - all removed`
           : `still present: ${stillPresent.join(", ")}`,
       ok: stillPresent.length === 0,
     });

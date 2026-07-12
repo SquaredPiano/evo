@@ -130,7 +130,7 @@ class TestAssembly:
             new=AsyncMock(side_effect=RuntimeError("network down")),
         ):
             out = await assemble_region_evidence(seq, gene="BRCA1")
-        # Regulatory still present, ClinVar silently dropped — no crash.
+        # Regulatory still present, ClinVar silently dropped - no crash.
         assert all(e.source == "regulatory" for e in out)
 
     @pytest.mark.asyncio

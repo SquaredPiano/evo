@@ -106,7 +106,7 @@ class TestSessionDataIsolation:
 
     @pytest.mark.asyncio
     async def test_cannot_access_other_users_session_data(self):
-        """Session data access is by session_id — no cross-contamination."""
+        """Session data access is by session_id - no cross-contamination."""
         store = MemorySessionStore(default_seed=DEFAULT_SEED)
         await store.initialize_session("s-private", user_id="alice")
         await store.set_candidate_sequence("s-private", 1, "GCGCGCGC")

@@ -1,4 +1,4 @@
-"""Tests for off-target analysis service — k-mer similarity, repeat detection, API contract.
+"""Tests for off-target analysis service - k-mer similarity, repeat detection, API contract.
 
 Covers:
 - K-mer set building (both strands, N-filtering)
@@ -43,7 +43,7 @@ from services.translation import reverse_complement
 
 BRCA1 = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAAT"
 
-# Alu-like fragment — first 30 bp of Alu consensus
+# Alu-like fragment - first 30 bp of Alu consensus
 ALU_FRAGMENT = _ALU_CONSENSUS[:60]
 
 # CAG repeat (Huntington-like)
@@ -215,7 +215,7 @@ class TestRepeatFraction:
     def test_cag_repeat_detected(self):
         """CAG repeats should NOT be detected as simple repeat (they're trinucleotide)."""
         # _compute_repeat_fraction only checks mono (6+) and di (4+ units / 8+ bp)
-        # CAG is trinucleotide — not caught by this specific function
+        # CAG is trinucleotide - not caught by this specific function
         frac = _compute_repeat_fraction("CAGCAGCAGCAGCAGCAGCAG")
         # No mono-6 runs, no di-4 runs in pure CAG
         assert frac == 0.0
@@ -369,7 +369,7 @@ class TestScanOffTargets:
             assert isinstance(hit.description, str) and hit.description
 
     def test_brca1_no_high_risk_repeats(self):
-        """BRCA1 seed is a real gene fragment — should NOT be flagged as an Alu or LINE."""
+        """BRCA1 seed is a real gene fragment - should NOT be flagged as an Alu or LINE."""
         result = scan_offtargets(BRCA1, k=12)
         high_repeat_hits = [
             h for h in result.hits

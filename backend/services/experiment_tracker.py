@@ -1,4 +1,4 @@
-"""Experiment version tracking — every design iteration gets a permanent version.
+"""Experiment version tracking - every design iteration gets a permanent version.
 
 Gives researchers:
 - A timeline of every edit, transform, optimisation, and generation

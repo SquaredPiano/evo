@@ -1,7 +1,7 @@
 """FASTA and GenBank parsing and export.
 
 Pure functions for converting between raw DNA sequences and standard
-bioinformatics file formats. No external dependencies (no BioPython) —
+bioinformatics file formats. No external dependencies (no BioPython) -
 we handle the subset of these formats that genomic IDE users actually need.
 """
 
@@ -138,7 +138,7 @@ def export_fasta(
 
 
 # ---------------------------------------------------------------------------
-# GenBank parsing (subset — enough for import)
+# GenBank parsing (subset - enough for import)
 # ---------------------------------------------------------------------------
 
 _LOCATION_RE = re.compile(

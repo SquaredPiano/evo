@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ExperimentHistory — exposes the backend version-tracking store that had no
+ * ExperimentHistory - exposes the backend version-tracking store that had no
  * UI. Lists every recorded version of the active candidate (each edit, score,
  * and fold) and lets the user revert to an earlier one. Only rendered once a
  * design session exists, since versions are keyed by session id.

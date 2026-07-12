@@ -2,7 +2,7 @@
 """Populate the literature vector index for one or more genes via PubMed.
 
 Fetches post-2025 PubMed articles (services.pubmed's default date filter),
-embeds them, and upserts them into the literature index — the same index
+embeds them, and upserts them into the literature index - the same index
 /api/region-evidence's RAG seam (services.literature_index.LiteratureRagProvider)
 searches at request time. Uses the exact same embedder/Mongo-store construction
 as backend/main.py, so what this script writes is what the running app reads.
@@ -34,10 +34,10 @@ async def ingest(genes: list[str], max_results: int) -> None:
     connected = await mongo_store.connect()
     print(f"Embedder: {embedder.name} (dim={embedder.dim})")
     if connected:
-        print("MongoDB Atlas: connected — articles persist for every process, not just this run.")
+        print("MongoDB Atlas: connected - articles persist for every process, not just this run.")
     else:
         print(
-            "MongoDB Atlas: unreachable — indexing in this script's in-process cache only. "
+            "MongoDB Atlas: unreachable - indexing in this script's in-process cache only. "
             "It will be searchable here but gone on exit; the running backend won't see it "
             "until Atlas is reachable. Not a crash, just an honest limitation."
         )

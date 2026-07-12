@@ -1,4 +1,4 @@
-"""Tests for the explanation layer — prompt construction and score-based fallback.
+"""Tests for the explanation layer - prompt construction and score-based fallback.
 
 Uses real genomic design scenarios with exact expected outputs.
 """
@@ -128,7 +128,7 @@ class TestScoreBasedFallback:
         scores = {"combined": 0.55}
         chunks = _build_score_based_fallback(scores, MINIMAL_SPEC)
 
-        assert chunks[0] == "This candidate has moderate potential — some dimensions score well while others may need optimization."
+        assert chunks[0] == "This candidate has moderate potential - some dimensions score well while others may need optimization."
 
     def test_high_off_target_warning_exact_text(self):
         """Off-target >= 0.5 → BLAST warning."""
@@ -194,7 +194,7 @@ class TestScoreBasedFallback:
         chunks = _build_score_based_fallback(scores, MINIMAL_SPEC)
 
         assert len(chunks) == 1
-        assert chunks[0] == "This candidate has moderate potential — some dimensions score well while others may need optimization."
+        assert chunks[0] == "This candidate has moderate potential - some dimensions score well while others may need optimization."
 
     def test_boundary_combined_0_7_is_strong(self):
         scores = {"combined": 0.70}

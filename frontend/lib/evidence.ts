@@ -41,14 +41,14 @@ export function ncbiGeneUrl(geneId: string): string | null {
   return `https://www.ncbi.nlm.nih.gov/gene/${encodeURIComponent(id)}`;
 }
 
-/** NCBI Gene symbol search — e.g. BRCA1[sym]. */
+/** NCBI Gene symbol search - e.g. BRCA1[sym]. */
 export function ncbiGeneSearchUrl(gene: string): string | null {
   const g = gene.trim();
   if (isDemo(g)) return null;
   return `https://www.ncbi.nlm.nih.gov/gene/?term=${encodeURIComponent(`${g}[sym]`)}`;
 }
 
-/** ClinVar search scoped to a gene — e.g. BRCA1[gene]. */
+/** ClinVar search scoped to a gene - e.g. BRCA1[gene]. */
 export function clinvarGeneUrl(gene: string): string | null {
   const g = gene.trim();
   if (isDemo(g)) return null;

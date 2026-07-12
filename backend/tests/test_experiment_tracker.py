@@ -1,4 +1,4 @@
-"""Tests for experiment version tracking service — exact, deterministic assertions.
+"""Tests for experiment version tracking service - exact, deterministic assertions.
 
 Covers:
 - Version recording and retrieval
@@ -60,7 +60,7 @@ async def session(store):
 
 
 # ---------------------------------------------------------------------------
-# 1. _diff_sequences — exact position-level diffs
+# 1. _diff_sequences - exact position-level diffs
 # ---------------------------------------------------------------------------
 
 

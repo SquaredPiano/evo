@@ -1,4 +1,4 @@
-"""Tests for variant annotation service — HGVS parsing, position mapping, API contract.
+"""Tests for variant annotation service - HGVS parsing, position mapping, API contract.
 
 Uses deterministic mock ClinVar data so tests don't hit the network.
 """
@@ -22,7 +22,7 @@ from services.clinvar import ClinVarResult, ClinVarVariant
 
 
 # ---------------------------------------------------------------------------
-# HGVS parsing — exact outputs for known nomenclature patterns
+# HGVS parsing - exact outputs for known nomenclature patterns
 # ---------------------------------------------------------------------------
 
 class TestHGVSParsing:

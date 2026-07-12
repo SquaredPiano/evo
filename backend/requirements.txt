@@ -10,11 +10,11 @@ httpx>=0.27.0
 redis>=5.0
 celery>=5.4
 
-# Durable persistence (MongoDB Atlas) — optional; app runs Redis-only without it.
+# Durable persistence (MongoDB Atlas) - optional; app runs Redis-only without it.
 # AsyncMongoClient (native async) needs pymongo>=4.9; dnspython resolves mongodb+srv URIs.
 pymongo>=4.9
 dnspython>=2.6
-# Explicit CA bundle for pymongo's TLS handshake — some Python builds (macOS
+# Explicit CA bundle for pymongo's TLS handshake - some Python builds (macOS
 # python.org/Homebrew) don't expose the system trust store to the ssl module.
 certifi>=2024.0.0
 

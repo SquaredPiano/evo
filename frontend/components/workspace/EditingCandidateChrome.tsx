@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * EditingCandidateChrome — the persistent "which candidate do edits apply to?"
+ * EditingCandidateChrome - the persistent "which candidate do edits apply to?"
  * indicator. Reads the store directly so every edit surface stays truthful and
  * in sync with `activeCandidateId` (via the shared candidateDisplay helper).
  *

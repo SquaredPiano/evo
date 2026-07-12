@@ -191,7 +191,7 @@ export default function PipelineStatus() {
           >
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
             <span>
-              Generation hit an error before candidates finished. Try again — shorter designs usually succeed on the first pass.
+              Generation hit an error before candidates finished. Try again - shorter designs usually succeed on the first pass.
               {candidates.find((c) => c.error)?.error ? ` (${candidates.find((c) => c.error)?.error})` : ""}
             </span>
           </div>
@@ -212,7 +212,7 @@ export default function PipelineStatus() {
           >
             <Check size={16} style={{ color: "var(--honey-700)" }} />
             <span className="text-[13px] font-medium" style={{ color: "var(--honey-700)" }}>
-              Done — opening results
+              Done - opening results
             </span>
             <Loader2 size={14} className="animate-spin spinner-keep ml-auto" style={{ color: "var(--honey-600)" }} />
           </motion.div>

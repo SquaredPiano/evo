@@ -3,9 +3,9 @@
  *
  * Two shapes carry provenance:
  *   1. `candidate_update.mutation` when scope === "regenerate" (Helio
- *      `regenerate_region` tool) — see RegenerationMutation.
+ *      `regenerate_region` tool) - see RegenerationMutation.
  *   2. `candidate.provenance` on WS pipeline_complete candidates (constrained
- *      full redesign) — see CandidateProvenance.
+ *      full redesign) - see CandidateProvenance.
  *
  * HONESTY CONTRACT: the `engine` field is the ACTUAL engine used, and
  * `sampled_probs_are_real_model_confidence` gates whether `sampled_probs` are
@@ -121,7 +121,7 @@ export function engineBadge(engine: RegenEngine): EngineBadge {
 export function methodLabel(method: string): string {
   if (!method) return "sampled candidates, picked best";
   if (method.includes("rejection_sampling")) {
-    return "prefix-conditioned rejection sampling — sampled candidates, picked best";
+    return "prefix-conditioned rejection sampling - sampled candidates, picked best";
   }
   return method.replace(/_/g, " ");
 }

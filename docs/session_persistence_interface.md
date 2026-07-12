@@ -4,7 +4,7 @@ Owner of storage impl: **Mohammed** (Mongo + DigitalOcean). This doc defines the
 contract so persistence drops in without touching the frontend workspace or the
 reprompt/evidence features already built.
 
-> **Status — backend seam IMPLEMENTED** (MongoDB, `backend/services/mongo_store.py`).
+> **Status - backend seam IMPLEMENTED** (MongoDB, `backend/services/mongo_store.py`).
 > The REST endpoints below (`GET /api/sessions`, `GET/PUT/DELETE /api/sessions/{id}`)
 > and a `SessionSnapshotStore` interface are live and tested; all degrade to safe
 > no-ops when `MONGODB_URI` is unset or Atlas is unreachable. **Only the frontend
@@ -20,13 +20,13 @@ reprompt/evidence features already built.
 >   permissive (unknown fields round-trip), so the client can evolve the store
 >   shape without a backend change.
 > - A separate **design-run history** layer also lands (`design_runs` collection,
->   `GET /api/history/{session_id}`) — additive, independent of this contract.
+>   `GET /api/history/{session_id}`) - additive, independent of this contract.
 
 ## Why
 Today a "session" is two disconnected things:
-- `frontend/lib/sessionHistory.ts` — localStorage list storing ONLY the prompt/sequence
+- `frontend/lib/sessionHistory.ts` - localStorage list storing ONLY the prompt/sequence
   (`SessionEntry{id,kind,title,payload,createdAt}`). "Resuming" re-runs from scratch.
-- `backend` `sessionId` — binds the current DNA to the agent so `/api/agent/chat` +
+- `backend` `sessionId` - binds the current DNA to the agent so `/api/agent/chat` +
   `editBase` mutate the right sequence. Not listed, not persisted.
 
 Goal: sessions that **restore full state** (candidates, chat, scores, structure),
@@ -50,7 +50,7 @@ capture, per session id:
 | `scores` | number[] | per-position |
 | `regions` | SequenceRegion[] | |
 | `activePdb` / `structureModel` | string \| null | structure + provenance (`user_pdb` etc.) |
-| `chatMessages` | ChatMessage[] | the Helio conversation — **the thing New Chat clears** |
+| `chatMessages` | ChatMessage[] | the Helio conversation - **the thing New Chat clears** |
 | `editHistory` | EditEntry[] | |
 | `retrievalStatuses` | RetrievalStatus[] | NCBI/PubMed/ClinVar payloads (drives evidence + gene) |
 | `seedSource` / `scoringNote` | string \| null | provenance labels |
@@ -65,7 +65,7 @@ Frontend `frontend/lib/api.ts` has NO session endpoints today (only
 `listExperiments`/`revertExperiment`, which are per-session VERSION snapshots and are
 a reasonable storage precedent). Add:
 
-- `GET  /api/sessions` → `{ sessions: SessionSummary[] }` — summaries only
+- `GET  /api/sessions` → `{ sessions: SessionSummary[] }` - summaries only
   (`{sessionId,title,kind,updatedAt,candidateCount,length}`) for the home/summary list.
 - `GET  /api/sessions/{sessionId}` → full session snapshot (fields above).
 - `PUT  /api/sessions/{sessionId}` → upsert snapshot (debounced autosave from the client).
@@ -87,7 +87,7 @@ session document or a sibling `versions` collection keyed by `sessionId`.
 - `frontend/lib/store.ts` → `clearChat()` has a `// TODO(persist): session store` marker.
   New Chat = snapshot current session via `PUT`, then `clearChat()` and start fresh.
 - `reset()` already PRESERVES `chatMessages` intentionally (so reprompt/redesign don't
-  wipe the thread) — persistence should snapshot BEFORE a hard reset.
+  wipe the thread) - persistence should snapshot BEFORE a hard reset.
 - `WorkspaceSidebar.onSelectSession` (currently re-prefills the composer) → change to
   `GET /api/sessions/{id}` then rehydrate the store and go to `analyze`, not `input`.
 - Add an autosave effect (debounced `PUT` on meaningful store changes).

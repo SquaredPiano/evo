@@ -1,4 +1,4 @@
-"""Parallel genomic context retrieval — runs NCBI, PubMed, and ClinVar concurrently.
+"""Parallel genomic context retrieval - runs NCBI, PubMed, and ClinVar concurrently.
 
 "Partial success is success." If any service fails or times out,
 the pipeline continues with whatever succeeded.

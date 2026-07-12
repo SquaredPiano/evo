@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SequenceEditor — a real inline DNA editor.
+ * SequenceEditor - a real inline DNA editor.
  *
  * Unlike the read-only SequenceViewer, this supports the interactions a
  * biologist expects from an editor:
@@ -102,8 +102,8 @@ export default function SequenceEditor({
   }, [len, caret]);
 
   // Follow the store playhead when it moves *externally* (LikelihoodGraph,
-  // scrubber, 3D residue click). We key off the incoming prop value — not the
-  // local caret — so ordinary typing/arrow edits never get yanked backwards.
+  // scrubber, 3D residue click). We key off the incoming prop value - not the
+  // local caret - so ordinary typing/arrow edits never get yanked backwards.
   const prevSelectedRef = useRef<number | null>(selectedPosition);
   useEffect(() => {
     if (selectedPosition === null) {

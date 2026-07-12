@@ -20,7 +20,7 @@ function badgeFor(source: string) {
   );
 }
 
-/** Real external link only — never fabricate. Backend supplies url; require http(s). */
+/** Real external link only - never fabricate. Backend supplies url; require http(s). */
 function safeUrl(url?: string | null): string | null {
   if (!url) return null;
   const u = url.trim();

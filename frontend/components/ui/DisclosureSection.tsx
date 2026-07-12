@@ -5,11 +5,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 
 /**
- * DisclosureSection — a labeled section that is collapsed by default with a
+ * DisclosureSection - a labeled section that is collapsed by default with a
  * chevron. "Simple by default, expand for depth." Open/closed state is LOCAL
  * (this component owns it, or the parent can control it via `open`/`onToggle`).
  *
- * Uses the existing design tokens so it blends into the current look — no new
+ * Uses the existing design tokens so it blends into the current look - no new
  * skin. Reuse this for every progressive-disclosure expander in the workspace.
  */
 export default function DisclosureSection({

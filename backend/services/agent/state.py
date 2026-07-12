@@ -1,4 +1,4 @@
-"""Agent state types — CopilotState, tool call results, candidate updates."""
+"""Agent state types - CopilotState, tool call results, candidate updates."""
 
 from __future__ import annotations
 

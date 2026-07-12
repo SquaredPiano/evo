@@ -104,7 +104,7 @@ class TestProfileScaling:
         assert profile.candidate_workers == 4
 
     def test_demo_10k_same_as_default(self):
-        """10k is the baseline — scale factor is 1.0."""
+        """10k is the baseline - scale factor is 1.0."""
         profile = _profile("demo", "demo_fallback", target_length=10_000)
         assert profile.generation_timeout == 8.0
         assert profile.scoring_timeout == 8.0
@@ -274,7 +274,7 @@ class TestGenerateBatched:
 
     @pytest.mark.asyncio
     async def test_batched_start_positions_are_contiguous(self):
-        """Batch start_position values should be contiguous — no gaps."""
+        """Batch start_position values should be contiguous - no gaps."""
         service = Evo2MockService()
         seed = "ATG"
         n_tokens = 450

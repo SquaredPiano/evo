@@ -73,7 +73,7 @@ class TestFallbackPath:
 
     def test_truncated_max_tokens_response_falls_back(self, monkeypatch):
         """A MAX_TOKENS finishReason means a cut-off sentence fragment, not a
-        usable summary — must degrade to the honest fallback, not surface the
+        usable summary - must degrade to the honest fallback, not surface the
         fragment (regression test for the gemini-2.5 thinking-budget bug)."""
         monkeypatch.setattr(settings, "gemini_api_key", "fake-test-key")
         mock_response = MagicMock()

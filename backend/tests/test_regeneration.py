@@ -204,7 +204,7 @@ class TestConstraintSatisfaction:
         assert result.constraint_report["satisfied"] is True
 
     async def test_avoid_motif_reports_when_unavoidable(self) -> None:
-        # Every candidate contains the motif — report it honestly, don't crash.
+        # Every candidate contains the motif - report it honestly, don't crash.
         svc = _FakeService(["GAATTC", "GAATTC"])
         result = await regenerate_region(
             svc, "AAAAAAAA" + "XXXXXX", 8, 14, {"avoid_motifs": ["GAATTC"]}, sample_k=2,

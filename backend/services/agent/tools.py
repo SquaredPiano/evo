@@ -1,4 +1,4 @@
-"""Agent tool implementations — each tool is a standalone async function.
+"""Agent tool implementations - each tool is a standalone async function.
 
 Tools are registered in TOOL_REGISTRY and dispatched by name from the executor.
 """
@@ -53,7 +53,7 @@ async def tool_explain(
         f"Off-target: {score_dict['off_target']:.3f} (lower = better)\n"
         f"Novelty: {score_dict['novelty']:.3f} (higher = more unique)\n"
         f"{caveat.strip()}\n"
-        "These are research demo metrics — not clinical predictions."
+        "These are research demo metrics - not clinical predictions."
     )
     return ToolExecution(
         call=AgentToolCall(tool="explain_candidate", status="ok", summary="Scored and summarized active candidate."),
@@ -98,7 +98,7 @@ async def tool_explain_region(
     Assembles: the region's real per-position Evo2 signal (log-likelihood proxy),
     a plain summary of where the model is least confident, region evidence
     (regulatory motifs always; ClinVar as *gene context* when a gene is known),
-    and honest provenance. Read-only — never mutates the candidate. The narration
+    and honest provenance. Read-only - never mutates the candidate. The narration
     itself is produced by the responder from the ``region_explanation`` payload.
     """
     from services.region_evidence import assemble_region_evidence
@@ -110,7 +110,7 @@ async def tool_explain_region(
         region_end = min(seq_len, region_start + 1)
     region_start = max(0, min(region_start, max(0, seq_len - 1)))
 
-    # Real Evo2 forward pass — slice per-position log-likelihoods to the region.
+    # Real Evo2 forward pass - slice per-position log-likelihoods to the region.
     scores, per_position = await score_candidate(service, sequence)
     region_scores = [
         {"position": p.position, "score": p.score}
@@ -286,7 +286,7 @@ async def tool_optimize(
     total_evaluated = 0
 
     for round_idx in range(max_rounds):
-        # Sample variant positions — spread evenly across the sequence
+        # Sample variant positions - spread evenly across the sequence
         all_positions = list(range(len(current_sequence)))
         step = max(1, len(all_positions) // VARIANTS_PER_ROUND)
         sampled_positions = all_positions[::step][:VARIANTS_PER_ROUND]
@@ -331,7 +331,7 @@ async def tool_optimize(
 
         # Only accept if strictly improving
         if round_obj_score <= current_obj_score:
-            break  # Converged — no further improvement
+            break  # Converged - no further improvement
 
         mutations_applied.append({
             "round": round_idx + 1,
@@ -511,7 +511,7 @@ async def tool_restore(
 
 
 # ---------------------------------------------------------------------------
-# Phase 5 tools — wiring existing services into the agentic copilot
+# Phase 5 tools - wiring existing services into the agentic copilot
 # ---------------------------------------------------------------------------
 
 
@@ -622,7 +622,7 @@ async def tool_offtarget_scan(
         ],
     }
 
-    # Return read-only result — no sequence mutation, but a structured payload so
+    # Return read-only result - no sequence mutation, but a structured payload so
     # the frontend can render the scan visibly.
     return ToolExecution(
         call=AgentToolCall(
@@ -707,7 +707,7 @@ async def tool_delete_bases(
     deleted_bases = sequence[start:end]
     trimmed = sequence[:start] + sequence[end:]
     if not trimmed:
-        raise ValueError("cannot delete all bases — sequence would be empty")
+        raise ValueError("cannot delete all bases - sequence would be empty")
 
     await store.set_candidate_sequence(session_id, candidate_id, trimmed)
     scores, per_position = await score_candidate(service, trimmed)
@@ -781,7 +781,7 @@ async def tool_regenerate_region(
     temperature: float | None = None,
     **_kwargs: Any,
 ) -> ToolExecution:
-    """TRUE region regeneration — re-invokes Evo2 to resample a region.
+    """TRUE region regeneration - re-invokes Evo2 to resample a region.
 
     Unlike edit_base / optimize (which mutate the existing candidate), this calls
     the model to generate new bases for ``sequence[start:end]`` and splices them
@@ -827,7 +827,7 @@ async def tool_regenerate_region(
 
     engine_label = {
         "nim": "real Evo2-40B (NIM)",
-        "mock_fallback": "MOCK FALLBACK (NIM call failed — not real Evo2)",
+        "mock_fallback": "MOCK FALLBACK (NIM call failed - not real Evo2)",
         "local": "local Evo2",
         "mock": "mock",
     }.get(engine, engine)

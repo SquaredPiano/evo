@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ToolsPanel — surfaces the research-grade backend services that previously
+ * ToolsPanel - surfaces the research-grade backend services that previously
  * had no UI: off-target scanning, codon optimization, ClinVar variant
  * annotation, and FASTA/GenBank export. Each tool operates on the active
  * candidate sequence and reports real results from the backend.
@@ -310,7 +310,7 @@ export default function ToolsPanel() {
             </button>
           </div>
           <div className="text-[10px]" style={{ color: "var(--text-faint)" }}>
-            Scores known pathogenic vs benign ClinVar variants aligned to the current sequence and reports a real AUROC — no claim, a measurement.
+            Scores known pathogenic vs benign ClinVar variants aligned to the current sequence and reports a real AUROC - no claim, a measurement.
           </div>
           {calibration && (
             <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
@@ -326,7 +326,7 @@ export default function ToolsPanel() {
                 <div className="flex justify-between"><span>Skipped (unaligned)</span><span className="font-mono">{calibration.n_skipped_unaligned}</span></div>
               )}
               {calibration.mean_delta_pathogenic != null && (
-                <div className="flex justify-between"><span>Mean Δ path / benign</span><span className="font-mono">{calibration.mean_delta_pathogenic.toFixed(3)} / {calibration.mean_delta_benign?.toFixed(3) ?? "—"}</span></div>
+                <div className="flex justify-between"><span>Mean Δ path / benign</span><span className="font-mono">{calibration.mean_delta_pathogenic.toFixed(3)} / {calibration.mean_delta_benign?.toFixed(3) ?? "-"}</span></div>
               )}
               <div className="pt-1 leading-relaxed" style={{ color: "var(--text-faint)" }}>{calibration.note}</div>
             </div>

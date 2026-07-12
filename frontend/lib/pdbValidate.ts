@@ -1,7 +1,7 @@
 /**
  * Client-side validation for user-uploaded PDB structure files.
  *
- * A user-uploaded PDB is NOT a model prediction — we render it plainly and
+ * A user-uploaded PDB is NOT a model prediction - we render it plainly and
  * label it honestly. This helper only sanity-checks that the file looks like
  * a real coordinate file before we hand it to the 3D viewer.
  */
@@ -55,7 +55,7 @@ export function validatePdbText(text: string): PdbValidation {
   result.hasBackbone = BACKBONE_ATOMS.size === backboneSeen.size;
 
   if (atomCount < 1) {
-    result.error = "No ATOM records found — this does not look like a PDB structure file.";
+    result.error = "No ATOM records found - this does not look like a PDB structure file.";
     return result;
   }
 

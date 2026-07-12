@@ -37,7 +37,7 @@ interface CandidateLike {
  * Resolve the best HONEST per-candidate PDB. Priority:
  *  1. The active candidate's live-folded structure (activePdb).
  *  2. A predicted protein whose region length uniquely matches this candidate.
- * Anything ambiguous or absent returns null — we never show another candidate's
+ * Anything ambiguous or absent returns null - we never show another candidate's
  * fold under the wrong label, and we never fabricate a structure.
  */
 function pdbForCandidate(
@@ -262,7 +262,7 @@ export default function CompareView() {
 
         {sameCandidate && (
           <div className="rounded-xl p-4 mb-6 text-[13px]" style={{ background: cardBg, color: "var(--text-muted)" }}>
-            A and B are the same candidate — pick two different variants to see a diff.
+            A and B are the same candidate - pick two different variants to see a diff.
           </div>
         )}
 
@@ -308,7 +308,7 @@ export default function CompareView() {
           </div>
         </div>
 
-        {/* ── BASE-LEVEL DIFF (collapsed by default — simple first) ── */}
+        {/* ── BASE-LEVEL DIFF (collapsed by default - simple first) ── */}
         {!sameCandidate && diff && (
           <div className="rounded-xl overflow-hidden mb-6" style={{ background: cardBg }}>
             <button
@@ -460,7 +460,7 @@ export default function CompareView() {
           <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
             <Box size={14} style={{ color: "var(--accent)" }} />
             <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              3D Structure — Candidate A vs Candidate B
+              3D Structure - Candidate A vs Candidate B
             </span>
           </div>
           <div className="grid grid-cols-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
@@ -653,7 +653,7 @@ function HunkBlock({
               {region && (
                 <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: "var(--ghost-border)", color: "var(--text-muted)" }}>{region}</span>
               )}
-              {/* Only show a real per-position score delta — never a fake 0. */}
+              {/* Only show a real per-position score delta - never a fake 0. */}
               {hasScoreDeltas && c.scoreDelta !== undefined && (
                 <span style={{ color: c.scoreDelta > 0 ? "var(--accent)" : c.scoreDelta < 0 ? "var(--base-t)" : "var(--text-muted)" }}>
                   <ScienceTooltip term="log-likelihood">
@@ -670,7 +670,7 @@ function HunkBlock({
 }
 
 // ---------------------------------------------------------------------------
-// Structure pane — real fold or honest empty state
+// Structure pane - real fold or honest empty state
 // ---------------------------------------------------------------------------
 function StructurePane({ pdb, theme, bordered }: { pdb: string | null; theme: "dark" | "light"; bordered?: boolean }) {
   const bg = theme === "dark" ? "var(--surface-void)" : "var(--surface-base)";

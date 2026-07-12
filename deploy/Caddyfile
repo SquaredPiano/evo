@@ -1,7 +1,7 @@
 # Single-domain reverse proxy with automatic HTTPS (Let's Encrypt).
 # Everything is served from ONE domain; Caddy routes backend paths to the
 # FastAPI service and the rest to Next.js. WebSocket upgrades on /ws/* are
-# handled transparently — the backend then builds wss:// URLs on its own.
+# handled transparently - the backend then builds wss:// URLs on its own.
 #
 # Set DOMAIN in .env (e.g. DOMAIN=evo.example.com) and with a matching build:
 #   NEXT_PUBLIC_API_URL=https://evo.example.com

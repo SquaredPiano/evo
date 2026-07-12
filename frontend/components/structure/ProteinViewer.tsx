@@ -143,7 +143,7 @@ const PLDDT_LEGEND_GRADIENT =
   "linear-gradient(to top, #FF7D45 0%, #FFDB13 50%, #65CBF3 70%, #0053D6 90%, #0053D6 100%)";
 
 // Flat, honest color for structures whose B-factors are NOT pLDDT confidence
-// (e.g. a user-uploaded PDB). Never render these through the pLDDT gradient —
+// (e.g. a user-uploaded PDB). Never render these through the pLDDT gradient -
 // that would imply model confidence the file does not carry.
 const NEUTRAL_COLOR = "#8a94a6";
 
@@ -228,7 +228,7 @@ function renderStructure(viewer: any, params: RenderParams) {
         { stick: { radius: 0.13 } }
       );
     } catch {
-      /* advanced selection unsupported — skip */
+      /* advanced selection unsupported - skip */
     }
   }
 
@@ -278,7 +278,7 @@ function renderStructure(viewer: any, params: RenderParams) {
             alignment: "bottomCenter",
           });
         } catch {
-          /* labels unsupported — skip */
+          /* labels unsupported - skip */
         }
       }
     }
@@ -343,7 +343,7 @@ function renderStructure(viewer: any, params: RenderParams) {
             try {
               viewer.addLine({ start, end, dashed: true, color: HBOND_COLOR });
             } catch {
-              /* contacts unsupported — skip */
+              /* contacts unsupported - skip */
             }
           }
           drawn += 1;
@@ -635,7 +635,7 @@ export default function ProteinViewer({
       atomCount: stats.atoms,
       theme,
     });
-    // Do NOT zoomTo on selection change — that causes camera jumps that feel
+    // Do NOT zoomTo on selection change - that causes camera jumps that feel
     // like phantom clicks.
   }, [
     compatibilityMode,
@@ -762,12 +762,12 @@ export default function ProteinViewer({
         </div>
       )}
 
-      {/* HUD — pointer-events none so they never steal orbit/click */}
+      {/* HUD - pointer-events none so they never steal orbit/click */}
       <div className="absolute left-4 top-4 rounded-2xl px-3 py-2 text-[11px] font-mono pointer-events-none" style={hudStyle}>
         {stats.residues > 0 ? `${stats.residues} residues · ${stats.atoms} atoms` : "No PDB loaded"}
       </div>
 
-      {/* Floating action controls — side chains, spin, reset, screenshot, fullscreen */}
+      {/* Floating action controls - side chains, spin, reset, screenshot, fullscreen */}
       <div className="absolute right-4 top-4 flex items-center gap-1.5 z-20">
         <span className="mr-1 rounded-2xl px-3 py-2 text-[11px] pointer-events-none" style={hudStyle}>
           {modelLabel}
@@ -855,7 +855,7 @@ export default function ProteinViewer({
         </div>
       )}
 
-      {/* Vertical pLDDT color scale — the model confidence legend. Hidden for
+      {/* Vertical pLDDT color scale - the model confidence legend. Hidden for
           uploaded PDBs whose B-factors are not pLDDT. */}
       {showLegend && (
         <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-stretch gap-2 pointer-events-none z-10">
@@ -888,7 +888,7 @@ export default function ProteinViewer({
         </div>
       )}
 
-      {/* Representation selector — subtle segmented control */}
+      {/* Representation selector - subtle segmented control */}
       <div className="absolute right-4 bottom-4 flex flex-col items-end gap-2 z-10 max-w-[min(100%,280px)]">
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
           {([

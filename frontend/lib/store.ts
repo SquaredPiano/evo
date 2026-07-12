@@ -258,7 +258,7 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   ...initialState,
 
   toggleTheme: () => {
-    // Light-only product — ignore dark mode requests.
+    // Light-only product - ignore dark mode requests.
     set({ theme: "light" });
     if (typeof document !== "undefined") {
       document.documentElement.classList.remove("dark");
@@ -327,7 +327,7 @@ export const useEvoStore = create<EvoState>((set, get) => ({
     // (Rescore from Sequence/Edit) is an in-place update of the same session.
     const freshRun = state.viewMode === "pipeline" || state.viewMode === "input";
 
-    // Only leave the pipeline/input screens — never yank Sequence/Edit → Structure.
+    // Only leave the pipeline/input screens - never yank Sequence/Edit → Structure.
     const nextView = freshRun ? "analyze" : state.viewMode;
 
     set({
@@ -378,7 +378,7 @@ export const useEvoStore = create<EvoState>((set, get) => ({
       try {
         void putSession(s.snapshotFromStore()).catch(() => {});
       } catch {
-        // ignore — persistence is additive
+        // ignore - persistence is additive
       }
     }
     set({ chatMessages: [], chatDraft: null });

@@ -24,7 +24,7 @@ const STEPS = [
     icon: <Dna size={22} strokeWidth={2.5} />,
     kicker: "01 / Generate",
     title: "Design in plain English",
-    body: "Describe the element you want. Evo 2 streams candidate sequences base-by-base over a live socket — no spinners, no black box.",
+    body: "Describe the element you want. Evo 2 streams candidate sequences base-by-base over a live socket - no spinners, no black box.",
   },
   {
     icon: <Gauge size={22} strokeWidth={2.5} />,
@@ -126,7 +126,7 @@ export default function Home() {
           </span>
         </h1>
         <p className="h-sub max-w-xl text-[17px] md:text-[19px] leading-relaxed mb-10" style={{ color: "var(--text-secondary)" }}>
-          Paste a sequence or describe a goal. Watch Evo 2 annotate, score, and fold it live — then click any base and feel the consequence in seconds.
+          Paste a sequence or describe a goal. Watch Evo 2 annotate, score, and fold it live - then click any base and feel the consequence in seconds.
         </p>
         <div className="h-cta flex flex-wrap gap-3 justify-center mb-16">
           <Link
@@ -173,7 +173,7 @@ export default function Home() {
         <div className="max-w-5xl mx-auto">
           <p className="label-caps mb-3">How it works</p>
           <h2 className="display text-[clamp(2rem,4.5vw,3.5rem)] mb-16 max-w-2xl">
-            An editor, a compiler, and a lab notebook — for DNA.
+            An editor, a compiler, and a lab notebook - for DNA.
           </h2>
           <div className="flex flex-col gap-5">
             {STEPS.map((s) => (

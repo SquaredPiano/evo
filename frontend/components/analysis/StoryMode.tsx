@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * StoryMode — a self-serve, judge-facing glossary drawer.
+ * StoryMode - a self-serve, judge-facing glossary drawer.
  *
  * Plain-English + HONEST definitions of every term Evo puts on screen. The
  * stance is deliberate: we never upgrade heuristics into clinical claims. The
@@ -44,7 +44,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     term: "ORF (open reading frame)",
     plain: "A start→stop stretch of DNA that could be a gene.",
-    honesty: "A hint about where a gene might be — not a validated gene.",
+    honesty: "A hint about where a gene might be - not a validated gene.",
   },
   {
     term: "Off-target",
@@ -55,14 +55,14 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     term: "Functional / Tissue / Novelty scores (the 4D scores)",
     plain:
-      "Ranking heuristics built from composition, short motifs, and panel overlap — used only to sort candidates inside this IDE.",
+      "Ranking heuristics built from composition, short motifs, and panel overlap - used only to sort candidates inside this IDE.",
     honesty:
       "Ranking heuristics, not clinical assays. A high tissue score does NOT mean the gene is expressed in that tissue.",
   },
   {
     term: "Evo 2",
     plain:
-      "Arc Institute's genomic foundation model — the engine that writes the candidate DNA.",
+      "Arc Institute's genomic foundation model - the engine that writes the candidate DNA.",
     honesty:
       "Generation (writing bases) and scoring are separate steps. Generation is live Evo 2; the 4D scores are composition and motif heuristics.",
   },
@@ -70,7 +70,7 @@ const GLOSSARY: GlossaryEntry[] = [
     term: "ESMFold",
     plain:
       "Meta's model (Lin et al., Science 2023) that folds an amino-acid sequence into a 3D structure. It produces the structure preview and pLDDT.",
-    honesty: "Predicts shape from sequence — a structural hypothesis, not a functional guarantee.",
+    honesty: "Predicts shape from sequence - a structural hypothesis, not a functional guarantee.",
   },
 ];
 
@@ -106,7 +106,7 @@ export default function StoryMode() {
             >
               <div className="flex items-center gap-2">
                 <BookOpen size={16} style={{ color: "var(--accent)" }} />
-                <span className="text-sm font-semibold">Story Mode — plain English</span>
+                <span className="text-sm font-semibold">Story Mode - plain English</span>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -125,7 +125,7 @@ export default function StoryMode() {
               >
                 <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                   The wow here is the <strong>closed loop + live engines + honesty</strong>, not the
-                  numbers. Every score below is a hypothesis or a ranking heuristic — never a clinical
+                  numbers. Every score below is a hypothesis or a ranking heuristic - never a clinical
                   claim.
                 </p>
               </div>

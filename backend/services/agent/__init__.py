@@ -1,10 +1,10 @@
-"""Helix agentic copilot — modular agent for genomic design assistance.
+"""Helix agentic copilot - modular agent for genomic design assistance.
 
 Public API:
-    AgenticCopilot — main facade class (plan→execute→reflect→respond loop)
-    AgentChatResult — result of a chat() call
-    AgentToolCall — single tool invocation result
-    AgentCandidateUpdate — candidate state change from tool execution
+    AgenticCopilot - main facade class (plan→execute→reflect→respond loop)
+    AgentChatResult - result of a chat() call
+    AgentToolCall - single tool invocation result
+    AgentCandidateUpdate - candidate state change from tool execution
 """
 
 from services.agent.graph import AgenticCopilot

@@ -26,13 +26,13 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: { default: "Evo", template: "%s — Evo" },
+  title: { default: "Evo", template: "%s - Evo" },
   description:
     "The genomic design IDE. Generate, score, and edit DNA sequences with the Evo 2 foundation model and live ESMFold structure prediction.",
   icons: { icon: "/favicon.svg" },
   metadataBase: new URL("https://evo.bio"),
   openGraph: {
-    title: "Evo — Genomic Design IDE",
+    title: "Evo - Genomic Design IDE",
     description: "Co-design genomes with an IDE that thinks out loud. Powered by the Evo 2 model and ESMFold.",
     type: "website",
   },

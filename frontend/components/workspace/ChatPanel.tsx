@@ -128,7 +128,7 @@ export default function ChatPanel() {
     return buildEvidenceLinks(map);
   }, [retrievalStatuses]);
 
-  // Gene symbol from NCBI retrieval — enables ClinVar gene context in region
+  // Gene symbol from NCBI retrieval - enables ClinVar gene context in region
   // evidence. Same derivation used in analyze/page.tsx; read from the shared
   // store state so ChatPanel can thread `gene` into the agent context.
   const activeGene = useMemo(() => {
@@ -271,7 +271,7 @@ export default function ChatPanel() {
       },
       {
         label: "Give me shorter candidates",
-        hint: "Fresh design run — shorter variants",
+        hint: "Fresh design run - shorter variants",
         prompt: "Give me new candidates that are shorter than the current design.",
       },
     ];
@@ -354,7 +354,7 @@ export default function ChatPanel() {
     if (update.pdb_data && typeof update.pdb_data === "string" && update.pdb_data.length > 10) {
       useEvoStore.getState().setActivePdb(update.pdb_data);
     } else if (update.sequence) {
-      // Backend didn't return PDB — trigger a refold on the new sequence
+      // Backend didn't return PDB - trigger a refold on the new sequence
       try {
         const { fetchStructure } = await import("@/lib/api");
         const pdb = await fetchStructure(0, update.sequence.length, update.sequence);
@@ -373,7 +373,7 @@ export default function ChatPanel() {
   };
 
   // Intentionally start a fresh Helio conversation. The design workspace
-  // (sequence, candidates, structure) stays — only the chat thread + its
+  // (sequence, candidates, structure) stays - only the chat thread + its
   // ephemeral regen/comparison cards are cleared.
   const handleNewChat = () => {
     clearChat();
@@ -389,7 +389,7 @@ export default function ChatPanel() {
 
   // Clicking Helio's suggested action fires the follow-up that triggers the
   // underlying tool (regenerate_region / optimize_candidate). We compose a
-  // natural-language message the backend already routes and reuse handleSend —
+  // natural-language message the backend already routes and reuse handleSend -
   // the same path used by every other regen/agent action.
   const handleSuggestedAction = (action: SuggestedAction) => {
     if (isTyping) return;
@@ -442,14 +442,14 @@ export default function ChatPanel() {
           "Here are the live database records tied to this design run:",
           ...evidenceLinks.map((l) => `${l.source.toUpperCase()}: ${l.label}\n${l.url}`),
           seedSource ? `Seed provenance: ${seedSource.replace(/_/g, " ")}` : "",
-          "ClinVar/PubMed are context cards — they inform you, they do not rewrite the DNA.",
+          "ClinVar/PubMed are context cards - they inform you, they do not rewrite the DNA.",
         ].filter(Boolean);
         addChatMessage({ role: "assistant", content: lines.join("\n\n") });
       } else {
         addChatMessage({
           role: "assistant",
           content:
-            "No NCBI / PubMed / ClinVar links are stored for this session yet. Run a design from a gene goal so retrieval can attach real PMIDs and ClinVar IDs — then ask me again.",
+            "No NCBI / PubMed / ClinVar links are stored for this session yet. Run a design from a gene goal so retrieval can attach real PMIDs and ClinVar IDs - then ask me again.",
         });
       }
       setIsTyping(false);
@@ -470,7 +470,7 @@ export default function ChatPanel() {
           addChatMessage({ role: "assistant", content: `Rescored ${result.perPositionScores.length} positions. ${result.predictedProteins.length} protein(s) predicted. Check the Overview for updated results.` });
         } catch {
           setActiveToolCalls([{ tool: "analyzeSequence", status: "failed", summary: "Backend unavailable" }]);
-          addChatMessage({ role: "assistant", content: "Couldn't rescore — backend may be unavailable." });
+          addChatMessage({ role: "assistant", content: "Couldn't rescore - backend may be unavailable." });
         }
       } else {
         addChatMessage({ role: "assistant", content: "No sequence loaded. Submit a sequence first." });
@@ -490,7 +490,7 @@ export default function ChatPanel() {
           const pdb = await fetchStructure(0, s.rawSequence.length, s.rawSequence);
           useEvoStore.getState().setActivePdb(pdb);
           setActiveToolCalls([{ tool: "fetchStructure", status: "ok", summary: "ESMFold structure ready" }]);
-          addChatMessage({ role: "assistant", content: "Structure re-folded with ESMFold. Open the Structure view to inspect it — drag to orbit, scroll to zoom, click a residue only after a short tap (drags won't select)." });
+          addChatMessage({ role: "assistant", content: "Structure re-folded with ESMFold. Open the Structure view to inspect it - drag to orbit, scroll to zoom, click a residue only after a short tap (drags won't select)." });
         } catch {
           setActiveToolCalls([{ tool: "fetchStructure", status: "failed", summary: "Prediction failed" }]);
           addChatMessage({ role: "assistant", content: "Structure prediction failed. Confirm STRUCTURE_MODE=esmfold and that the backend can reach api.esmatlas.com." });
@@ -504,14 +504,14 @@ export default function ChatPanel() {
     }
 
     // FULL REDESIGN from chat: a request for NEW candidates (optionally
-    // constrained — shorter / higher GC / avoid motif) runs the design
+    // constrained - shorter / higher GC / avoid motif) runs the design
     // pipeline. startDesign() resets the workspace but PRESERVES this
     // conversation (see store.reset), so the scientist never loses context.
     if (isRedesignRequest(lc)) {
       addChatMessage({
         role: "assistant",
         content:
-          "Launching a fresh design run with your constraints. New candidates will stream into the workspace — I'm keeping this conversation intact.",
+          "Launching a fresh design run with your constraints. New candidates will stream into the workspace - I'm keeping this conversation intact.",
       });
       setIsTyping(false);
       setAgentPhase("idle");
@@ -534,7 +534,7 @@ export default function ChatPanel() {
       if (!s.rawSequence && !sessionId) {
         addChatMessage({
           role: "assistant",
-          content: "Load or design a sequence first — I need DNA in the workspace before I can edit, score, or explain.",
+          content: "Load or design a sequence first - I need DNA in the workspace before I can edit, score, or explain.",
         });
         setIsTyping(false);
         setAgentPhase("idle");
@@ -626,7 +626,7 @@ export default function ChatPanel() {
         ]);
       }
 
-      // Region-aware payloads (all nullable — guard every field).
+      // Region-aware payloads (all nullable - guard every field).
       if (isRegionExplanation(data.region_explanation)) {
         setRegionExplanation(data.region_explanation);
       }
@@ -667,7 +667,7 @@ export default function ChatPanel() {
     }
   };
 
-  // Helio edits the active candidate — say which one, honestly.
+  // Helio edits the active candidate - say which one, honestly.
   const helioDisplay = getCandidateDisplay(candidates, activeCandidateId);
   const helioSubtitle = helioDisplay.hasCandidate ? helioDisplay.label : "Agent · tools · explain";
   const helioSubtitleTitle = helioDisplay.hasCandidate ? helioDisplay.subtitle : "Agent · tools · explain";
@@ -739,7 +739,7 @@ export default function ChatPanel() {
           <button
             onClick={() =>
               handleSend(
-                "Explain the selected region in plain English — what it does, why it matters, and how confident the model is."
+                "Explain the selected region in plain English - what it does, why it matters, and how confident the model is."
               )
             }
             disabled={isTyping}
@@ -756,7 +756,7 @@ export default function ChatPanel() {
               </span>
             </div>
             <div className="text-[10.5px] mt-1 leading-snug" style={{ color: "var(--text-secondary)" }}>
-              What it does &amp; why it matters — for {explainTargetLabel}.
+              What it does &amp; why it matters - for {explainTargetLabel}.
             </div>
           </button>
         )}
@@ -827,7 +827,7 @@ export default function ChatPanel() {
           </div>
         )}
 
-        {/* Region explanation — the STAR card for a non-biologist */}
+        {/* Region explanation - the STAR card for a non-biologist */}
         {regionExplanation && (
           <RegionExplanationCard explanation={regionExplanation} />
         )}

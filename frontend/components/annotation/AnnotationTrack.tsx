@@ -15,7 +15,7 @@ interface AnnotationTrackProps {
   gene?: string | null;
 }
 
-/** Items overlapping [region.start, region.end) — half-open ranges. */
+/** Items overlapping [region.start, region.end) - half-open ranges. */
 function evidenceForRegion(items: RegionEvidence[], region: SequenceRegion): RegionEvidence[] {
   return items.filter((e) => e.end > region.start && e.start < region.end);
 }
@@ -43,7 +43,7 @@ export default function AnnotationTrack({
     setSelectedPosition(region.start);
     setChatOpen(true);
     setChatDraft(
-      "Explain the selected region in plain English — what it does, why it matters, and how confident the model is."
+      "Explain the selected region in plain English - what it does, why it matters, and how confident the model is."
     );
   };
 
@@ -76,7 +76,7 @@ export default function AnnotationTrack({
           borderRadius: "3px",
         }}
       >
-        {/* Visual bars — existing rendering, unchanged. */}
+        {/* Visual bars - existing rendering, unchanged. */}
         <div className="absolute inset-0 overflow-hidden" style={{ borderRadius: "3px" }}>
           {regions.map((region, i) => (
             <RegionHighlight
@@ -87,7 +87,7 @@ export default function AnnotationTrack({
           ))}
         </div>
 
-        {/* Hover/evidence layer — transparent hitboxes over each region. */}
+        {/* Hover/evidence layer - transparent hitboxes over each region. */}
         <div className="absolute inset-0">
           {regions.map((region, i) => {
             const leftPct = (region.start / sequenceLength) * 100;

@@ -112,7 +112,7 @@ function WorkspaceSidebar({
       return;
     }
     if (!hasWorkspace) {
-      // Workspace views need a finished run — send people to compose, don't pretend we navigated.
+      // Workspace views need a finished run - send people to compose, don't pretend we navigated.
       onNavigate("input");
       onCloseMobile();
       return;
@@ -217,7 +217,7 @@ function WorkspaceSidebar({
           })}
         </div>
 
-        {/* Recent sessions — durable (Mongo) when available, else localStorage. */}
+        {/* Recent sessions - durable (Mongo) when available, else localStorage. */}
         <div className="px-2 mb-2 flex items-center justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
             {useDurable ? "Saved" : "Recent"}

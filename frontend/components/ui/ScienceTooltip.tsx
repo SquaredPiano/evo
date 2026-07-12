@@ -26,7 +26,7 @@ export const SCIENCE_TERMS: Record<
   "tissue-specificity": {
     title: "Tissue Motif Score (heuristic)",
     explanation:
-      "Counts a small set of hand-picked short motifs from neuronal/cardiac literature. Not GTEx/ENCODE expression prediction — does not guarantee tissue-restricted activity.",
+      "Counts a small set of hand-picked short motifs from neuronal/cardiac literature. Not GTEx/ENCODE expression prediction - does not guarantee tissue-restricted activity.",
   },
   "off-target-risk": {
     title: "Panel Off-Target Overlap (heuristic)",
@@ -36,7 +36,7 @@ export const SCIENCE_TERMS: Record<
   novelty: {
     title: "Novelty Score (heuristic)",
     explanation:
-      "How different this string looks from simple composition baselines. Higher means more unusual DNA — not validated inventiveness.",
+      "How different this string looks from simple composition baselines. Higher means more unusual DNA - not validated inventiveness.",
   },
   "log-likelihood": {
     title: "Log-likelihood (“model surprise”)",
@@ -59,12 +59,12 @@ export const SCIENCE_TERMS: Record<
       "Weighted blend of the four heuristic dimensions for ranking inside this IDE. A ranking heuristic, not assay-backed viability.",
   },
   cai: {
-    title: "CAI — Codon Adaptation Index",
+    title: "CAI - Codon Adaptation Index",
     explanation:
-      "How closely a coding sequence’s codon choices match a highly-expressed reference set for the chosen host (0–1). Higher can mean easier expression in that host — it is a heuristic, not a guarantee the protein will express or work.",
+      "How closely a coding sequence’s codon choices match a highly-expressed reference set for the chosen host (0–1). Higher can mean easier expression in that host - it is a heuristic, not a guarantee the protein will express or work.",
   },
   auroc: {
-    title: "AUROC — Area Under the ROC Curve",
+    title: "AUROC - Area Under the ROC Curve",
     explanation:
       "A 0.5–1.0 measure of how well a score separates two classes (e.g. pathogenic vs benign variants). 1.0 = perfect, 0.5 = no better than chance. Here it is a real measurement on the scored variants, not a claim.",
   },
@@ -81,22 +81,22 @@ export const SCIENCE_TERMS: Record<
   "repeat-fraction": {
     title: "Repeat Fraction (composition heuristic)",
     explanation:
-      "The share of the sequence made of short repeated stretches. High repeat content can make DNA harder to synthesize or less stable. A composition heuristic — not a genome-wide or clinical measure.",
+      "The share of the sequence made of short repeated stretches. High repeat content can make DNA harder to synthesize or less stable. A composition heuristic - not a genome-wide or clinical measure.",
   },
   identity: {
     title: "% Sequence Identity",
     explanation:
-      "The percentage of positions that match between two aligned sequences. Higher means more similar. It measures similarity of the letters — not whether the two sequences behave the same biologically.",
+      "The percentage of positions that match between two aligned sequences. Higher means more similar. It measures similarity of the letters - not whether the two sequences behave the same biologically.",
   },
   codon: {
     title: "Codon",
     explanation:
-      "A group of three DNA bases that codes for one amino acid (or a stop). Several different codons can code for the same amino acid — which is why a coding sequence can be rewritten without changing the protein it makes.",
+      "A group of three DNA bases that codes for one amino acid (or a stop). Several different codons can code for the same amino acid - which is why a coding sequence can be rewritten without changing the protein it makes.",
   },
   wildtype: {
     title: "Wildtype",
     explanation:
-      "The original, unedited base (or sequence) before any mutation is applied — the reference you are comparing a change against.",
+      "The original, unedited base (or sequence) before any mutation is applied - the reference you are comparing a change against.",
   },
   "off-target": {
     title: "Off-Target (panel heuristic)",
@@ -189,7 +189,7 @@ export const SCIENCE_TERMS: Record<
   esmfold: {
     title: "ESMFold",
     explanation:
-      "Meta’s model (Lin et al., Science 2023) that predicts a protein’s 3D structure from its amino-acid sequence. Faster than AlphaFold. The pLDDT confidence numbers come from ESMFold — confidence of shape, not proof of function.",
+      "Meta’s model (Lin et al., Science 2023) that predicts a protein’s 3D structure from its amino-acid sequence. Faster than AlphaFold. The pLDDT confidence numbers come from ESMFold - confidence of shape, not proof of function.",
   },
   alphafold: {
     title: "AlphaFold",

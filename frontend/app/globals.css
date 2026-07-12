@@ -4,7 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ========================================
-   EVO DESIGN SYSTEM — Be Prepared app mode
+   EVO DESIGN SYSTEM - Be Prepared app mode
    Soft sunny cream, wax borders, honey glow.
    No hard black borders / offset shadows in product UI.
    ======================================== */
@@ -70,7 +70,7 @@
   --impact-moderate: #D97706;
   --impact-deleterious: #DC2626;
 
-  /* Soft borders only — Be Prepared app mode */
+  /* Soft borders only - Be Prepared app mode */
   --ghost-border: rgba(230, 226, 211, 0.85);
   --hard-border: #E6E2D3;
   --border-soft: rgba(226, 226, 226, 0.4);
@@ -253,7 +253,7 @@ body {
   border-bottom: 1px solid var(--ghost-border);
 }
 
-/* Soft card — was "brutal"; now Be Prepared frosted panel */
+/* Soft card - was "brutal"; now Be Prepared frosted panel */
 .brutal {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(16px);
@@ -446,7 +446,7 @@ body {
     scroll-behavior: auto !important;
   }
   .skeleton { animation: none; }
-  /* Keep indeterminate loading indicators moving — they communicate progress, not decoration. */
+  /* Keep indeterminate loading indicators moving - they communicate progress, not decoration. */
   .animate-spin,
   .spinner-keep {
     animation: spin 0.8s linear infinite !important;

@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     ncbi_email: str = ""
     ncbi_tool: str = "evo"
 
-    # --- LLM layer (OpenRouter — single gateway for every model call) ---
+    # --- LLM layer (OpenRouter - single gateway for every model call) ---
     # All intent parsing, explanation, and agent reasoning route through
     # OpenRouter's OpenAI-compatible API. Swap providers by changing LLM_MODEL.
     openrouter_api_key: str = ""
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     llm_fast_model: str = "openai/gpt-4o-mini"
 
     # Legacy provider keys are still read (so existing .env files keep working).
-    # anthropic_api_key / openai_api_key are no longer used for live calls —
+    # anthropic_api_key / openai_api_key are no longer used for live calls -
     # OpenRouter supersedes them for chat/reasoning. gemini_api_key IS used,
     # but for a narrower job: services/evidence_synthesis.py's literature
     # detail summaries (not chat/reasoning, so it doesn't go through llm.py).
@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     # prompt/design-run history so a session survives restarts and the reprompt
     # feature can build on prior runs. Persistence is OPTIONAL: if no URI is set
     # or Atlas is unreachable, the app runs exactly as before (Redis-only) and
-    # every persistence call becomes a logged no-op — never a request failure.
+    # every persistence call becomes a logged no-op - never a request failure.
     mongodb_uri: str = ""
     mongodb_db_name: str = "evo"
     # Fail-fast connection budget so a bad/blocked URI never hangs startup.
@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     # key is set, real embeddings are used; otherwise a deterministic local
     # feature-hashing embedder keeps search working offline (lower quality).
     # Both backends emit vectors of EMBEDDING_DIM so ONE Atlas vector index
-    # fits either — but don't mix backends in one populated index (re-index if
+    # fits either - but don't mix backends in one populated index (re-index if
     # you switch). embedding_api_key falls back to the legacy openai_api_key.
     embedding_api_key: str = ""
     embedding_base_url: str = "https://api.openai.com/v1"

@@ -8,7 +8,7 @@ and reports a real AUROC.
 
 Directionality: the Evo2 paper reports that deleterious variants receive a
 *lower* (more negative) log-likelihood than the reference. So the pathogenicity
-score we rank on is ``-delta_likelihood`` — higher means "looks more broken".
+score we rank on is ``-delta_likelihood`` - higher means "looks more broken".
 
 Honesty note baked into the output: the hosted NIM endpoint has no per-position
 forward pass, so under ``nim_api`` (and the offline dev engine) the scores here
@@ -138,7 +138,7 @@ def _aligned(variant: VariantAnnotation, sequence: str) -> bool:
 
 
 def _engine_mode() -> str:
-    """Active Evo2 engine from config — read directly to avoid a network
+    """Active Evo2 engine from config - read directly to avoid a network
     health check (nim_api's health() call would hit the live API)."""
     try:
         from config import settings

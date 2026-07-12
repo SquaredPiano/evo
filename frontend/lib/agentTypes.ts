@@ -9,7 +9,7 @@
  *    `is_real_model_confidence === true`. Otherwise the per-position scores are
  *    heuristic proxies (see `provenance.per_position_signal`) and no confidence
  *    strip may be rendered.
- *  - ClinVar evidence is GENE CONTEXT, framed per `provenance.clinvar` — never a
+ *  - ClinVar evidence is GENE CONTEXT, framed per `provenance.clinvar` - never a
  *    verdict on the candidate.
  *  - Links are rendered only when the backend supplies a real http(s) url.
  */
@@ -190,6 +190,6 @@ export function messageForSuggestedAction(action: SuggestedAction): string {
       : "Optimize this candidate and show the before/after scores.";
   }
 
-  // Unknown tool — the label is already imperative in practice.
+  // Unknown tool - the label is already imperative in practice.
   return action.label;
 }

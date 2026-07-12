@@ -187,7 +187,7 @@ function RestrictionSitesCard({ r }: { r: RestrictionSitesResult }) {
         </div>
       ) : (
         <div className="text-[10.5px]" style={{ color: "var(--accent)" }}>
-          No restriction sites for the checked enzymes — clean to cut.
+          No restriction sites for the checked enzymes - clean to cut.
         </div>
       )}
     </CardShell>

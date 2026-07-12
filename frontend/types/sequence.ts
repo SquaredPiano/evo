@@ -23,7 +23,7 @@ export type RegionEvidenceSource = "clinvar" | "regulatory" | "literature";
 /**
  * One piece of evidence bound to a coordinate span in the candidate's frame.
  * 0-based, half-open [start, end). Mirror of backend
- * services.region_evidence.RegionEvidence — see docs/region_evidence_interface.md.
+ * services.region_evidence.RegionEvidence - see docs/region_evidence_interface.md.
  */
 export interface RegionEvidence {
   start: number;

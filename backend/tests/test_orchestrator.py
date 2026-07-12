@@ -83,7 +83,7 @@ async def test_generation_pipeline_emits_key_events() -> None:
 async def test_demo_profile_retrieval_reports_failure_without_fabricating(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Even under the demo profile, failed sources are reported as failed — no
+    """Even under the demo profile, failed sources are reported as failed - no
     fabricated demo payloads are ever backfilled (real_only is now the behavior)."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
@@ -182,7 +182,7 @@ class TestFilterRelevantLiteratureHits:
 
     def test_weak_top_hit_excludes_everything(self):
         """Real observed case: an off-topic query, still gene-filtered, whose
-        best hit only reaches ~0.49 — below the absolute floor, so nothing
+        best hit only reaches ~0.49 - below the absolute floor, so nothing
         should be cited even though the relative gap between hits is small."""
         hits = [{"score": 0.4923}, {"score": 0.4917}, {"score": 0.4751}]
         assert _filter_relevant_literature_hits(hits) == []
@@ -237,7 +237,7 @@ async def test_retrieval_merges_literature_when_keyword_pubmed_failed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The keyword PubMed sub-fetch can fail/timeout independently (result.pubmed
-    is None) while NCBI/ClinVar still succeed — literature hits must still
+    is None) while NCBI/ClinVar still succeed - literature hits must still
     surface via a freshly-built PubMedResult, not silently disappear."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
@@ -270,7 +270,7 @@ async def test_retrieval_merges_literature_when_keyword_pubmed_failed(
 @pytest.mark.asyncio
 async def test_retrieval_excludes_weak_literature_matches(monkeypatch: pytest.MonkeyPatch) -> None:
     """A query with no genuinely relevant literature must not cite the
-    closest-but-still-weak match — the whole point of the relevance filter."""
+    closest-but-still-weak match - the whole point of the relevance filter."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
     await manager.connect(ws, "session-lit-weak")
@@ -647,7 +647,7 @@ async def test_ten_candidates_all_complete_in_demo_mode() -> None:
 @pytest.mark.asyncio
 async def test_demo_profile_fails_closed_when_generation_service_raises() -> None:
     """FAIL-LOUD: when generation raises before producing any real bases, the
-    candidate fails honestly — no fabricated demo tokens are streamed."""
+    candidate fails honestly - no fabricated demo tokens are streamed."""
 
     class _FailingGenerateService(Evo2MockService):
         async def generate(self, seed: str, n_tokens: int, temperature: float = 1.0):

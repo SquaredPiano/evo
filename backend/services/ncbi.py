@@ -23,7 +23,7 @@ from services.eutils import (
 
 logger = logging.getLogger(__name__)
 
-# Interactive design window — long enough to ground identity, short enough for NIM.
+# Interactive design window - long enough to ground identity, short enough for NIM.
 _MAX_SEED_BP = 720
 
 
@@ -145,7 +145,7 @@ def _clean_fasta_sequence(text: str) -> str:
 
 def _extract_cds_from_genbank(text: str) -> str | None:
     """Pull the joined CDS translation substrate (nucleotide) from GenBank text."""
-    # Prefer a CDS feature with /translation= nearby — extract the location span sequence
+    # Prefer a CDS feature with /translation= nearby - extract the location span sequence
     # via the ORIGIN block when location is simple.
     cds_match = re.search(
         r"^\s+CDS\s+(?:join\()?([0-9.,\s]+)",

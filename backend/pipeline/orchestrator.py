@@ -61,7 +61,7 @@ from ws.manager import WebSocketManager
 
 logger = logging.getLogger("evo")
 
-# Neutral coding scaffold — NOT a real gene fragment (avoids silent BRCA contamination).
+# Neutral coding scaffold - NOT a real gene fragment (avoids silent BRCA contamination).
 DEFAULT_SEED = "ATGGCTGCAGAAGCTAAAGCTGCTGGTAAAGCTGCTGCTAAAGCTGCTTAATAA"
 CandidateUpdateCallback = Callable[[int, str], Awaitable[None] | None]
 SpecUpdateCallback = Callable[[DesignSpec], Awaitable[None] | None]
@@ -168,7 +168,7 @@ class StageTracker:
 
 
 # ---------------------------------------------------------------------------
-# Shared helpers — extracted to eliminate copy-paste across pipelines
+# Shared helpers - extracted to eliminate copy-paste across pipelines
 # ---------------------------------------------------------------------------
 
 
@@ -179,7 +179,7 @@ async def _score_real(
     timeout: float,
 ) -> tuple[CandidateScores, list[LikelihoodScore]]:
     """Score a candidate with the real engine. FAIL-LOUD: a scoring failure or
-    timeout propagates to the caller — there is no mock fallback."""
+    timeout propagates to the caller - there is no mock fallback."""
     async with asyncio.timeout(timeout):
         return await score_candidate(service, sequence, target_tissues=target_tissues)
 
@@ -235,7 +235,7 @@ async def _resolve_structure(
     """Predict structure, returning (pdb_data, confidence, error_reason, model).
 
     Real ESMFold only. On failure (timeout, API down, or ORF too short) this
-    returns ``pdb_data=None`` with an honest error reason — never a fabricated
+    returns ``pdb_data=None`` with an honest error reason - never a fabricated
     fold. The caller fails the candidate closed.
     """
     pdb_data: str | None = None
@@ -838,7 +838,7 @@ async def run_followup_pipeline(
     engine = str(followup_provenance.get("engine", "unknown"))
     engine_label = {
         "nim": "real Evo2-40B (NIM)",
-        "mock_fallback": "mock fallback (NIM unavailable — NOT real Evo2)",
+        "mock_fallback": "mock fallback (NIM unavailable - NOT real Evo2)",
         "local": "local Evo2",
         "mock": "mock engine",
     }.get(engine, engine)
@@ -902,15 +902,15 @@ async def _emit_intent(manager: WebSocketManager, session_id: str, goal: str) ->
 
 
 # Relative cutoff: keep hits within 30% of the best match for THIS query.
-# Starting point, not a fixed rule — tune once more real queries are observed.
+# Starting point, not a fixed rule - tune once more real queries are observed.
 _LITERATURE_RELATIVE_CUTOFF = 0.7
 # Absolute floor: a relative cutoff alone can't tell "everything returned is
-# strong" from "everything returned is equally weak" — an irrelevant query
+# strong" from "everything returned is equally weak" - an irrelevant query
 # still has a top hit, just a mediocre one. Calibrated against this index's
 # actual local-hash-embedder scores: a genuinely relevant BRCA1 query's top
 # hit lands ~0.62-0.67; a plainly unrelated query (still gene-filtered to
 # BRCA1) tops out ~0.49. 0.55 sits between the two with margin either way.
-# Re-check this if EMBEDDING_API_KEY switches the index to a real embedder —
+# Re-check this if EMBEDDING_API_KEY switches the index to a real embedder -
 # cosine scores from a different embedder aren't on the same scale.
 _LITERATURE_ABSOLUTE_FLOOR = 0.55
 
@@ -919,7 +919,7 @@ def _filter_relevant_literature_hits(
     hits: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     """Keep hits that are both close to the best match and absolutely strong
-    enough. A weak top hit means nothing in the batch is genuinely relevant —
+    enough. A weak top hit means nothing in the batch is genuinely relevant -
     never cite the "least bad" option just because it was the closest match."""
     if not hits:
         return []
@@ -963,7 +963,7 @@ async def _emit_retrieval(
     if literature_index is not None and result is not None:
         try:
             # Backfill on first use so any gene works, not just ones someone has
-            # already run the ingestion script/pre-warm against — mirrors
+            # already run the ingestion script/pre-warm against - mirrors
             # LiteratureRagProvider.fetch()'s use of this same method.
             await literature_index.ensure_indexed(
                 spec.target_gene,
@@ -1213,7 +1213,7 @@ async def _regenerate_followup(
 
     cleaned = "".join(b for b in sequence.upper() if b in {"A", "T", "C", "G"}) or sequence
     if not cleaned:
-        return sequence, {"engine": "none", "note": "empty sequence — nothing to regenerate"}
+        return sequence, {"engine": "none", "note": "empty sequence - nothing to regenerate"}
 
     # Merge message-level intent (explicit range / GC / avoid) with spec constraints.
     parsed = parse_region_regeneration(message) or {}
@@ -1239,7 +1239,7 @@ async def _regenerate_followup(
         result = await regenerate_region(service, cleaned, start, end, constraints)
     except Exception:
         logger.warning("Follow-up regeneration failed; returning original sequence", exc_info=True)
-        return cleaned, {"engine": "error", "note": "regeneration failed — sequence unchanged"}
+        return cleaned, {"engine": "error", "note": "regeneration failed - sequence unchanged"}
 
     mean_conf = (
         round(sum(result.sampled_probs) / len(result.sampled_probs), 4)
@@ -1274,7 +1274,7 @@ def _default_target_sequence_length(
     run_profile: str,
     target_length_override: int | None = None,
 ) -> int:
-    """Practical lengths for interactive design — not genome-scale.
+    """Practical lengths for interactive design - not genome-scale.
 
     Longer runs belong in batch jobs; the IDE needs candidates in tens of seconds.
     """

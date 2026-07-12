@@ -1,4 +1,4 @@
-"""Session snapshot models — the resumable session-persistence contract.
+"""Session snapshot models - the resumable session-persistence contract.
 
 Defined by docs/session_persistence_interface.md. A snapshot is the frontend
 ``useEvoStore`` state captured per session id so a session can be *resumed*
@@ -27,7 +27,7 @@ class SessionSummary(BaseModel):
 
 
 class SessionSnapshot(BaseModel):
-    """Full resumable snapshot. Permissive by design — unknown fields from the
+    """Full resumable snapshot. Permissive by design - unknown fields from the
     evolving frontend store are accepted and stored as-is."""
 
     model_config = ConfigDict(extra="allow")

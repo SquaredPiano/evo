@@ -3,7 +3,7 @@
 Covers the deterministic local embedder, cosine similarity, the hybrid embedder
 factory, the LiteratureIndex in-memory search path, the region_evidence RAG
 adapter, and the API endpoints. Everything runs with MongoDB disabled, so the
-suite exercises the in-memory fallback — the path that must work with zero
+suite exercises the in-memory fallback - the path that must work with zero
 external services (the honest default for a demo / CI).
 """
 
@@ -153,7 +153,7 @@ class TestCreateEmbedder:
 
 
 # ---------------------------------------------------------------------------
-# 4. LiteratureIndex — in-memory index + search
+# 4. LiteratureIndex - in-memory index + search
 # ---------------------------------------------------------------------------
 
 

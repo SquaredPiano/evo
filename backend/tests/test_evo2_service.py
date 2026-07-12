@@ -243,7 +243,7 @@ class TestNIMService:
     async def test_forward_returns_composition_signal(self) -> None:
         """The hosted NIM endpoint has no per-position forward pass, so forward()
         returns a DETERMINISTIC composition/motif signal (honestly not an Evo2 LL)
-        derived from the actual sequence — never seeded-random fabrication."""
+        derived from the actual sequence - never seeded-random fabrication."""
         from services.evo2 import _composition_logits
 
         service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")

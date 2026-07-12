@@ -1,4 +1,4 @@
-"""Pydantic response models — serialized to JSON at the API boundary.
+"""Pydantic response models - serialized to JSON at the API boundary.
 
 These must match what the frontend expects in lib/api.ts.
 """
@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 class DesignAcceptedResponse(BaseModel):
     session_id: str
-    # Durable id for this run — the client keeps it as the parent_run_id of the
+    # Durable id for this run - the client keeps it as the parent_run_id of the
     # next reprompt so the history thread chains correctly. Present even when
     # persistence is disabled (Mongo just won't have a matching document).
     run_id: str
@@ -35,7 +35,7 @@ class BaseEditResponse(BaseModel):
     # without waiting on (or blocking) the slow structure refold.
     sequence: str | None = None
     per_position_scores: list[dict[str, float | int]] | None = None
-    # True only when the edit changes the translated coding region — i.e. when a
+    # True only when the edit changes the translated coding region - i.e. when a
     # protein refold would actually differ. Lets the client skip needless folds.
     refold_recommended: bool = False
 

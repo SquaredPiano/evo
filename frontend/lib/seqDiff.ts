@@ -1,16 +1,16 @@
 /**
- * Sequence diff helper for CompareView — a lightweight, honest, git-diff-style
+ * Sequence diff helper for CompareView - a lightweight, honest, git-diff-style
  * comparison between two DNA candidate sequences.
  *
  * Semantics mirror the backend primitive `_diff_sequences`
  * (backend/services/experiment_tracker.py): position-level substitutions over
  * the common prefix, then a length tail reported as insertions/deletions. This
- * is intentionally NOT a full gap-aware alignment — it matches what the backend
+ * is intentionally NOT a full gap-aware alignment - it matches what the backend
  * `/api/experiments/diff` endpoint reports, so the two never disagree.
  *
  * Per-position score deltas are computed ONLY when both candidates carry
  * per-position likelihood scores. When they are absent, `scoreDelta` is left
- * undefined — we never fabricate a zero delta.
+ * undefined - we never fabricate a zero delta.
  */
 
 export type DiffKind = "snp" | "ins" | "del";

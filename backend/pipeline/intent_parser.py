@@ -1,4 +1,4 @@
-"""Intent parsing — decompose a natural-language design goal into a DesignSpec.
+"""Intent parsing - decompose a natural-language design goal into a DesignSpec.
 
 Uses the unified OpenRouter LLM client (JSON mode). When no API key is
 configured, or the call fails, falls back to a deterministic keyword heuristic

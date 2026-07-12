@@ -1,4 +1,4 @@
-"""Variant annotation service — overlays ClinVar/pathogenicity data on sequences.
+"""Variant annotation service - overlays ClinVar/pathogenicity data on sequences.
 
 Parses ClinVar variant titles (HGVS nomenclature) to extract positions,
 maps them onto a user's sequence region, and returns position-level

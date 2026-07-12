@@ -32,7 +32,7 @@ export default function ProvenanceBadge({
     badge.detail,
     method ? `Method: ${methodLabel(method)}.` : null,
     prefixOnlyConditioning
-      ? "Caveat: the regenerated bases were conditioned on the PREFIX only (not the downstream context) — this is prefix-conditioned rejection sampling, not native infilling."
+      ? "Caveat: the regenerated bases were conditioned on the PREFIX only (not the downstream context) - this is prefix-conditioned rejection sampling, not native infilling."
       : null,
   ]
     .filter(Boolean)

@@ -1,4 +1,4 @@
-"""Core domain types — source of truth for the backend.
+"""Core domain types - source of truth for the backend.
 
 Frontend types in /types mirror these. API responses in responses.py
 serialize from these. Components never see raw model tensors.

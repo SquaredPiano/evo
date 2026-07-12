@@ -46,7 +46,7 @@ class TestHillClimbConstants:
         assert VARIANTS_PER_ROUND >= 1
 
     def test_max_rounds_bounded(self):
-        assert MAX_HILL_CLIMB_ROUNDS <= 20  # Sanity — shouldn't be too large
+        assert MAX_HILL_CLIMB_ROUNDS <= 20  # Sanity - shouldn't be too large
 
 
 class TestHillClimbOptimizer:
@@ -228,7 +228,7 @@ class TestHillClimbOptimizer:
 
     @pytest.mark.asyncio
     async def test_optimize_sequence_length_preserved(self, service, store):
-        """Hill-climbing only mutates — length should never change."""
+        """Hill-climbing only mutates - length should never change."""
         seq = DEFAULT_SEED
         await store.set_candidate_sequence("s1", 0, seq)
 

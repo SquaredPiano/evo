@@ -1,8 +1,8 @@
 """Durable persistence backend (MongoDB Atlas).
 
 Redis remains the *hot* store for a live pipeline run (fast, TTL'd, pub/sub).
-MongoDB is the *durable* store: it records each design run — critically the
-**prompt/goal** that produced it, which Redis never kept — so a session and its
+MongoDB is the *durable* store: it records each design run - critically the
+**prompt/goal** that produced it, which Redis never kept - so a session and its
 prompt history survive process restarts and TTL expiry. That durable history is
 what the "reprompt" feature builds on: a new goal can be chained to a prior run.
 
@@ -77,7 +77,7 @@ class MongoStore:
     async def connect(self) -> bool:
         """Attempt a connection. Returns True only if Atlas answered a ping.
 
-        Never raises — a failure here just leaves the store disabled so the app
+        Never raises - a failure here just leaves the store disabled so the app
         keeps running on Redis alone.
         """
         if not self.configured:
@@ -92,12 +92,12 @@ class MongoStore:
                 # installs) don't wire up the system trust store for the ssl
                 # module, which surfaces as CERTIFICATE_VERIFY_FAILED against
                 # Atlas's TLS endpoints even though the URI/allowlist are
-                # correct. Retry once with an explicit CA bundle — ONLY on
+                # correct. Retry once with an explicit CA bundle - ONLY on
                 # this specific failure: passing tlsCAFile unconditionally
                 # would implicitly force TLS on and break non-TLS/self-hosted
                 # deployments that connect fine without it.
                 logger.info(
-                    "MongoDB TLS handshake failed against the system trust store — "
+                    "MongoDB TLS handshake failed against the system trust store - "
                     "retrying once with certifi's CA bundle."
                 )
                 try:
@@ -107,14 +107,14 @@ class MongoStore:
                     pass
             self._ready = False
             logger.warning(
-                "MongoDB unreachable — running Redis-only, persistence is a no-op. "
+                "MongoDB unreachable - running Redis-only, persistence is a no-op. "
                 "If using Atlas, add this host's IP to Network Access. Detail: %s",
                 exc,
             )
             return False
         except Exception:  # defensive: DNS/SSL/etc. must not crash startup
             self._ready = False
-            logger.warning("MongoDB connection failed unexpectedly — persistence disabled.", exc_info=True)
+            logger.warning("MongoDB connection failed unexpectedly - persistence disabled.", exc_info=True)
             return False
 
     async def _connect_once(self, *, tls_ca_file: str | None) -> None:
@@ -161,7 +161,7 @@ class MongoStore:
         unsupported on self-hosted / local MongoDB and on older servers, so
         EVERY failure is swallowed here. Without this index, ``$vectorSearch``
         simply errors at query time and the caller falls back to in-memory
-        cosine similarity — the feature still works, just not at Atlas scale.
+        cosine similarity - the feature still works, just not at Atlas scale.
         """
         try:
             from pymongo.operations import SearchIndexModel
@@ -189,7 +189,7 @@ class MongoStore:
             logger.info("Created Atlas vector index '%s' on literature.", self._vector_index_name)
         except Exception:  # noqa: BLE001 - non-Atlas / old server / perms: fall back silently
             logger.info(
-                "Atlas vector index unavailable — literature search will use in-memory cosine "
+                "Atlas vector index unavailable - literature search will use in-memory cosine "
                 "fallback. (Provision '%s' on Atlas to enable $vectorSearch.)",
                 self._vector_index_name,
             )
@@ -310,7 +310,7 @@ class MongoStore:
             logger.warning("MongoStore.get_run failed for %s", run_id, exc_info=True)
             return None
 
-    # ── session snapshots (the resumable-state store — interface-doc contract) ─
+    # ── session snapshots (the resumable-state store - interface-doc contract) ─
     async def put_session_snapshot(self, snapshot: dict[str, Any]) -> bool:
         """Upsert a full session snapshot (debounced client autosave).
 
@@ -325,7 +325,7 @@ class MongoStore:
         if not session_id:
             return False
         now = _utcnow_iso()
-        # _id and createdAt are managed here — keep them out of $set to avoid
+        # _id and createdAt are managed here - keep them out of $set to avoid
         # Mongo's immutable-_id error and a $set/$setOnInsert path conflict.
         doc = {k: v for k, v in snapshot.items() if k not in ("_id", "createdAt")}
         doc["sessionId"] = session_id
@@ -425,7 +425,7 @@ class MongoStore:
         """Atlas ``$vectorSearch`` over the literature collection.
 
         Returns a list of matching docs (each with a ``score``), or ``None`` to
-        signal the caller to fall back to in-memory search — which is what
+        signal the caller to fall back to in-memory search - which is what
         happens whenever the vector index isn't provisioned (the aggregation
         errors) or the query otherwise fails. Never raises.
         """
@@ -449,7 +449,7 @@ class MongoStore:
             cursor = await self._db.literature.aggregate(pipeline)
             return [self._clean(doc) async for doc in cursor]
         except Exception:  # noqa: BLE001 - no index / unsupported → in-memory fallback
-            logger.info("Atlas $vectorSearch unavailable — using in-memory literature search.")
+            logger.info("Atlas $vectorSearch unavailable - using in-memory literature search.")
             return None
 
     async def list_literature_docs(

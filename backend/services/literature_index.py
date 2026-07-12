@@ -2,13 +2,13 @@
 
 This is the RAG index the ``region_evidence`` module documents a seam for: it
 embeds PubMed articles (title + abstract), stores them, and answers semantic
-queries — "which papers are most relevant to this gene / region / question?".
+queries - "which papers are most relevant to this gene / region / question?".
 
 Two axes of graceful degradation, matching the rest of the backend:
 
-* **Embeddings** — hybrid (see :mod:`services.embeddings`): a real embedding API
+* **Embeddings** - hybrid (see :mod:`services.embeddings`): a real embedding API
   when a key is configured, else a deterministic local embedder.
-* **Index / query backend** — MongoDB Atlas ``$vectorSearch`` when a Mongo
+* **Index / query backend** - MongoDB Atlas ``$vectorSearch`` when a Mongo
   connection *and* a vector index are available; otherwise an in-process cosine
   similarity scan over whatever has been indexed (kept in memory, and reloaded
   from Mongo when the durable store is up but the vector index isn't).
@@ -81,7 +81,7 @@ class LiteratureIndex:
     """Embed, store, and semantically search research literature.
 
     ``mongo_store`` is optional. When absent (or disabled), everything runs from
-    an in-process cache — fine for a single-instance demo, lost on restart.
+    an in-process cache - fine for a single-instance demo, lost on restart.
     """
 
     def __init__(self, *, embedder: Embedder, mongo_store: Any | None = None) -> None:
@@ -173,21 +173,21 @@ class LiteratureIndex:
     ) -> None:
         """Backfill the index for ``gene`` on first use, if nothing exists yet.
 
-        Checks whether any documents are already indexed for ``gene`` — Mongo
-        when connected and ready, else the in-process cache — and, if none
+        Checks whether any documents are already indexed for ``gene`` - Mongo
+        when connected and ready, else the in-process cache - and, if none
         are found, fetches + indexes real PubMed articles via
         :meth:`index_from_pubmed`. This is what makes "any gene" work instead
         of only genes someone has manually run the ingestion script against.
 
         Never raises: mirrors this module's own "no results, not an error"
-        degradation — an ingestion failure here just means the caller's
+        degradation - an ingestion failure here just means the caller's
         subsequent :meth:`search` returns its own honest empty result, same as
         a PubMed outage would.
 
         Concurrent calls for the SAME gene (e.g. the startup pre-warm racing a
         live user query) serialize on a per-gene lock rather than each
         independently deciding "not indexed yet" and duplicating the PubMed
-        fetch + embedding work — the second caller re-checks after the first
+        fetch + embedding work - the second caller re-checks after the first
         finishes and finds it already done.
         """
         gene = (gene or "").strip()
@@ -256,7 +256,7 @@ class LiteratureIndex:
         """Return the ``k`` most semantically similar documents to ``query``.
 
         Tries Atlas ``$vectorSearch`` first (when Mongo is connected); if that
-        is unavailable — no connection, or no vector index provisioned — falls
+        is unavailable - no connection, or no vector index provisioned - falls
         back to an in-process cosine scan. Returns an empty hit list, never an
         error, when nothing has been indexed.
         """
@@ -273,12 +273,12 @@ class LiteratureIndex:
         # instantaneously, so a document upserted moments ago (e.g. by
         # ensure_indexed's on-demand backfill) can be genuinely stored yet
         # still invisible to $vectorSearch for a few seconds. Step 2 checks
-        # the in-process cache first — which already has the write
-        # synchronously in the SAME process that just indexed it — and only
+        # the in-process cache first - which already has the write
+        # synchronously in the SAME process that just indexed it - and only
         # falls back further to a plain (immediately-consistent) Mongo query
         # for the cross-process/multi-worker case. The cost of this fallthrough
         # (an extra bounded, gene-indexed Mongo query) is paid on every
-        # genuinely-empty Atlas result too, not just stale ones — accepted as
+        # genuinely-empty Atlas result too, not just stale ones - accepted as
         # a reasonable tradeoff for not silently missing fresh writes.
         if self._mongo_ready():
             atlas_hits = await self._mongo.vector_search_literature(
@@ -301,7 +301,7 @@ class LiteratureIndex:
         for doc in pool:
             if gene_norm:
                 # Strict equality, matching the Atlas $vectorSearch filter
-                # ``{"gene": gene}`` — docs with a different or missing gene are
+                # ``{"gene": gene}`` - docs with a different or missing gene are
                 # excluded, so both backends return the same set.
                 if (doc.get("gene") or "").upper() != gene_norm:
                     continue
@@ -354,10 +354,10 @@ class LiteratureRagProvider:
     coordinate-bound ``RegionEvidence`` records tagged ``source="literature"``,
     so semantically-retrieved papers merge into the same evidence list the UI
     already renders. Honest by construction: URLs come straight from the indexed
-    document (or None — never fabricated), and the confidence string names the
+    document (or None - never fabricated), and the confidence string names the
     backend that answered. ``detail`` is a Gemini-synthesized 1-2 sentence
     summary (see services.evidence_synthesis) with a truncated-abstract
-    fallback — never a raw, hover-card-unfriendly abstract dump.
+    fallback - never a raw, hover-card-unfriendly abstract dump.
     """
 
     def __init__(self, index: LiteratureIndex, *, k: int = 3) -> None:

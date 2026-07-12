@@ -1,4 +1,4 @@
-"""DNA sequence utilities — translation, ORF finding, composition analysis.
+"""DNA sequence utilities - translation, ORF finding, composition analysis.
 
 Pure computation, no external dependencies. Used by the scoring pipeline
 and the AlphaFold integration (DNA -> protein before folding).

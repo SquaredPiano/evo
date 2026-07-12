@@ -136,7 +136,7 @@ def coding_region_changed(ref_dna: str, alt_dna: str) -> bool:
 
     Compares the foldable protein extracted from each sequence. Returns False for
     synonymous / non-coding edits, so callers can skip an expensive refold that
-    would produce an identical structure. Cheap, string-only — safe to call on the
+    would produce an identical structure. Cheap, string-only - safe to call on the
     hot edit path.
     """
     return _select_protein_for_folding(ref_dna) != _select_protein_for_folding(alt_dna)

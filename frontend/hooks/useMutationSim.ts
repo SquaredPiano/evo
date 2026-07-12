@@ -83,7 +83,7 @@ export function useMutationSim() {
         store.setSequence(mutated);
         useEvoStore.setState({ bases: newBases, scores: nextScores });
 
-        // Scores are in — release the blocking spinner NOW. A single-base edit
+        // Scores are in - release the blocking spinner NOW. A single-base edit
         // should feel instant instead of waiting ~10-90s on protein folding.
         setMutationLoading(false);
 
@@ -96,7 +96,7 @@ export function useMutationSim() {
               const pdb = await fetchStructure(0, mutated.length, mutated);
               useEvoStore.getState().setActivePdb(pdb);
             } catch {
-              // Structure prediction may fail — keep old PDB
+              // Structure prediction may fail - keep old PDB
             } finally {
               useEvoStore.getState().setStructureRefolding(false);
             }

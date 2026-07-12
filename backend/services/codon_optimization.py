@@ -1,11 +1,11 @@
-"""Codon optimization service — organism-specific codon usage optimization.
+"""Codon optimization service - organism-specific codon usage optimization.
 
 Replaces rare codons with high-frequency synonymous codons for a target
 organism while preserving the amino acid sequence exactly. Computes
 Codon Adaptation Index (CAI) before and after optimization.
 
 Codon usage tables sourced from the Codon Usage Database
-(https://www.kazusa.or.jp/codon/) — frequencies per thousand codons.
+(https://www.kazusa.or.jp/codon/) - frequencies per thousand codons.
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ from services.translation import CODON_TABLE, STOP_CODONS, translate
 
 
 # ---------------------------------------------------------------------------
-# Codon usage tables — frequency per 1000 codons
+# Codon usage tables - frequency per 1000 codons
 # Sources: Kazusa Codon Usage Database
 # ---------------------------------------------------------------------------
 
-# Homo sapiens (human) — from CDS of 93487 sequences
+# Homo sapiens (human) - from CDS of 93487 sequences
 HUMAN_USAGE: dict[str, float] = {
     "TTT": 17.6, "TTC": 20.3, "TTA": 7.7,  "TTG": 12.9,
     "CTT": 13.2, "CTC": 19.6, "CTA": 7.2,  "CTG": 39.6,
@@ -41,7 +41,7 @@ HUMAN_USAGE: dict[str, float] = {
     "GGT": 10.8, "GGC": 22.2, "GGA": 16.5, "GGG": 16.5,
 }
 
-# Escherichia coli K12 — from CDS of 4290 sequences
+# Escherichia coli K12 - from CDS of 4290 sequences
 ECOLI_USAGE: dict[str, float] = {
     "TTT": 22.4, "TTC": 16.3, "TTA": 13.8, "TTG": 13.6,
     "CTT": 11.4, "CTC": 11.0, "CTA": 3.9,  "CTG": 52.1,
@@ -61,7 +61,7 @@ ECOLI_USAGE: dict[str, float] = {
     "GGT": 24.5, "GGC": 28.9, "GGA": 8.0,  "GGG": 11.3,
 }
 
-# Saccharomyces cerevisiae (baker's yeast) — from CDS of 6185 sequences
+# Saccharomyces cerevisiae (baker's yeast) - from CDS of 6185 sequences
 YEAST_USAGE: dict[str, float] = {
     "TTT": 26.1, "TTC": 18.2, "TTA": 26.2, "TTG": 27.2,
     "CTT": 12.3, "CTC": 5.4,  "CTA": 13.4, "CTG": 10.5,
@@ -306,7 +306,7 @@ def optimize_codons(
             continue
 
         if aa == "X":
-            # Unknown codon (contains N or invalid) — keep as-is
+            # Unknown codon (contains N or invalid) - keep as-is
             optimized_codons.append(codon)
             continue
 

@@ -8,9 +8,9 @@ import type {
   RegionExplanationEvidence,
 } from "@/lib/agentTypes";
 
-const INDIGO = "#6366f1"; // real Evo 2 confidence — deliberately NOT honey/green.
+const INDIGO = "#6366f1"; // real Evo 2 confidence - deliberately NOT honey/green.
 
-/** Real external link only — never fabricate. Require http(s). */
+/** Real external link only - never fabricate. Require http(s). */
 function safeUrl(url?: string | null): string | null {
   if (!url) return null;
   const u = url.trim();
@@ -136,7 +136,7 @@ export default function RegionExplanationCard({
           </div>
         )}
 
-        {/* Model confidence — REAL (indigo) vs honest heuristic note */}
+        {/* Model confidence - REAL (indigo) vs honest heuristic note */}
         {realConfidence && mc?.sampled_probs ? (
           <ConfidenceStrip probs={mc.sampled_probs} meanProb={mc.mean_sampled_prob} />
         ) : (
@@ -257,7 +257,7 @@ function PerPositionChart({
 }
 
 // ---------------------------------------------------------------------------
-// REAL Evo 2 per-base confidence strip (0..1). Indigo — distinct from honey.
+// REAL Evo 2 per-base confidence strip (0..1). Indigo - distinct from honey.
 // ---------------------------------------------------------------------------
 function ConfidenceStrip({
   probs,
@@ -314,7 +314,7 @@ function ConfidenceStrip({
 }
 
 // ---------------------------------------------------------------------------
-// Evidence list — source badges + real links only. ClinVar framed as context.
+// Evidence list - source badges + real links only. ClinVar framed as context.
 // ---------------------------------------------------------------------------
 function EvidenceList({
   items,

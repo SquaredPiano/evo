@@ -1,5 +1,5 @@
 /**
- * candidateDisplay — single source of truth for how the "active edit target"
+ * candidateDisplay - single source of truth for how the "active edit target"
  * candidate is named across the UI.
  *
  * There are two numbers floating around the product and they were used

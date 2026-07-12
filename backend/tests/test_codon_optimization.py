@@ -1,4 +1,4 @@
-"""Tests for codon optimization service — real sequences, exact computed assertions.
+"""Tests for codon optimization service - real sequences, exact computed assertions.
 
 Verifies:
 - Amino acid sequence is always preserved after optimization
@@ -38,7 +38,7 @@ from services.translation import CODON_TABLE, translate
 # Real protein-coding sequences for testing
 # ---------------------------------------------------------------------------
 
-# GFP (Green Fluorescent Protein) first 90 bp — not optimized for any organism
+# GFP (Green Fluorescent Protein) first 90 bp - not optimized for any organism
 GFP_WILD = "ATGAGTAAAGGAGAAGAACTTTTCACTGGAGTTGTCCCAATTCTTGTTGAATTAGATGGTGATGTTAATGGGCACAAATTTTCTGTCAGT"
 # 90 bp = 30 codons
 
@@ -46,7 +46,7 @@ GFP_WILD = "ATGAGTAAAGGAGAAGAACTTTTCACTGGAGTTGTCCCAATTCTTGTTGAATTAGATGGTGATGTTAA
 INSULIN_SIGNAL = "ATGGCCCTGTGGATGCGCCTCCTGCCCCTGCTGGCGCTGCTGGCCCTCTGGGGACCTGACCCAGCCGCA"
 # 69 bp = 23 codons (last base truncated for testing remainder handling)
 
-# E. coli lacZ first 60 bp — already somewhat E. coli optimized
+# E. coli lacZ first 60 bp - already somewhat E. coli optimized
 LACZ_ECOLI = "ATGACCATGATTACGGATTCACTGGCCGTCGTTTTACAACGTCGTGACTGGGAA"
 # 54 bp = 18 codons
 
@@ -126,7 +126,7 @@ class TestBestCodon:
         assert best == "GCC"
 
     def test_methionine_always_atg(self):
-        """Met only has ATG — optimization can't change it."""
+        """Met only has ATG - optimization can't change it."""
         for table in [HUMAN_USAGE, ECOLI_USAGE, YEAST_USAGE]:
             assert _best_codon_for_aa("M", table) == "ATG"
 

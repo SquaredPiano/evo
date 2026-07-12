@@ -10,7 +10,7 @@ gateway for intent parsing / explanation / agent reasoning. This is a narrow,
 single-purpose literature summarizer that happens to use Gemini
 (``config.settings.gemini_api_key``, previously configured but unused).
 
-Mirrors pipeline/retrieval.py's "partial success is success" — never raises.
+Mirrors pipeline/retrieval.py's "partial success is success" - never raises.
 Any failure (no key, network error, malformed response) degrades to a
 truncated abstract.
 """
@@ -41,7 +41,7 @@ def gemini_available() -> bool:
 
 
 def _truncate(text: str, limit: int = _FALLBACK_ABSTRACT_CHARS) -> str:
-    """Hard length cap — applies to every path (Gemini success or fallback) so
+    """Hard length cap - applies to every path (Gemini success or fallback) so
     ``detail`` is always hover-card-sized, never a model's unbounded/verbose
     response if it doesn't fully honor the "1-2 sentences" prompt instruction."""
     text = (text or "").strip()
@@ -51,11 +51,11 @@ def _truncate(text: str, limit: int = _FALLBACK_ABSTRACT_CHARS) -> str:
 
 
 def _fallback_detail(article: PubMedArticle) -> str:
-    """Truncated-abstract fallback — never claims more than the source does."""
+    """Truncated-abstract fallback - never claims more than the source does."""
     abstract = (article.abstract or "").strip()
     if not abstract:
         title = article.title.strip() or "Untitled"
-        return f"{title} ({article.year or 'year unknown'}) — no abstract available."
+        return f"{title} ({article.year or 'year unknown'}) - no abstract available."
     return _truncate(abstract)
 
 
@@ -87,7 +87,7 @@ async def synthesize_detail(
 
     Calls Gemini to condense the abstract into a hover-card-sized explanation.
     Falls back to a truncated abstract when no key is configured, the request
-    fails, or the response is malformed — this function never raises.
+    fails, or the response is malformed - this function never raises.
     """
     api_key = _gemini_api_key()
     if not api_key:
@@ -96,7 +96,7 @@ async def synthesize_detail(
     generation_config: dict[str, object] = {"temperature": 0.2, "maxOutputTokens": 300}
     if "2.5" in settings.gemini_model:
         # gemini-2.5-* models think by default, and thinking tokens are billed
-        # against maxOutputTokens — without this, a small budget can be
+        # against maxOutputTokens - without this, a small budget can be
         # entirely consumed by hidden reasoning, leaving a sentence fragment
         # (observed: e.g. "In BRCA1-deficient cells") instead of the actual
         # summary. Not needed for a short, non-reasoning condense task, so
@@ -120,7 +120,7 @@ async def synthesize_detail(
             data = resp.json()
         candidate = data["candidates"][0]
         if candidate.get("finishReason") == "MAX_TOKENS":
-            # Truncated mid-sentence — a cut-off fragment is worse than an
+            # Truncated mid-sentence - a cut-off fragment is worse than an
             # honest fallback, never present it as the summary.
             logger.warning("Gemini response truncated (MAX_TOKENS) for PMID=%s", article.pmid)
             return _fallback_detail(article)

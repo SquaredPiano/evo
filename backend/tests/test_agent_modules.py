@@ -45,7 +45,7 @@ GFP_FRAGMENT = "ATGGTGAGCAAGGGCGAGGAGCTG"
 
 
 # -------------------------------------------------------------------------
-# Parsing — real researcher messages
+# Parsing - real researcher messages
 # -------------------------------------------------------------------------
 
 
@@ -125,8 +125,8 @@ class TestApplyTransform:
         """ATGGAT... → reverse complement. Verify against known biology."""
         result = apply_transform(BRCA1_FRAGMENT, "reverse_complement")
         # BRCA1_FRAGMENT = "ATGGATTTATCTGCTCTTCGCGTTGAAGAA"
-        # Reversed: "AAGAAGTTTGCGCTTCTCGTCTATTTTAGGTA" — wait, let's compute properly.
-        # Reverse: "AAGAAGTTTGCGCTTCTCGTCTATTTTAGGTA" — no, complement then reverse.
+        # Reversed: "AAGAAGTTTGCGCTTCTCGTCTATTTTAGGTA" - wait, let's compute properly.
+        # Reverse: "AAGAAGTTTGCGCTTCTCGTCTATTTTAGGTA" - no, complement then reverse.
         # Complement of ATGGATTTATCTGCTCTTCGCGTTGAAGAA:
         # A->T, T->A, G->C, G->C, A->T, T->A, T->A, T->A, A->T, T->A, C->G, T->A, G->C, C->G, T->A, C->G, T->A, T->A, C->G, G->C, C->G, G->C, T->A, T->A, G->C, A->T, A->T, G->C, A->T, A->T
         # Complement: TACCTAAATAGACGAGAAGCGCAACTTCTT
@@ -233,7 +233,7 @@ class TestBand:
 
 
 # -------------------------------------------------------------------------
-# Planner — real researcher commands
+# Planner - real researcher commands
 # -------------------------------------------------------------------------
 
 
@@ -346,7 +346,7 @@ class TestDeterministicFastPath:
         assert plan[0]["args"]["start"] == 40 and plan[0]["args"]["end"] == 80
 
     def test_intent_offtarget_question_is_not_fast_pathed(self):
-        """The classic false positive — must go to the LLM, not run a scan."""
+        """The classic false positive - must go to the LLM, not run a scan."""
         assert deterministic_fast_path("why is the off-target score high?") is None
 
     def test_intent_make_safer_is_not_fast_pathed(self):
@@ -437,7 +437,7 @@ class TestIsDefaultExplainPlan:
 
 
 # -------------------------------------------------------------------------
-# Memory — persistence with real genomic data
+# Memory - persistence with real genomic data
 # -------------------------------------------------------------------------
 
 
@@ -564,7 +564,7 @@ class TestAgentMemory:
 
 
 # -------------------------------------------------------------------------
-# State — merge and trim with real data
+# State - merge and trim with real data
 # -------------------------------------------------------------------------
 
 
@@ -634,7 +634,7 @@ class TestMergeCandidateUpdates:
 
 
 # -------------------------------------------------------------------------
-# Region reasoning — real per-position signal + honest provenance
+# Region reasoning - real per-position signal + honest provenance
 # -------------------------------------------------------------------------
 
 # A 100 bp regulatory-ish sequence with a TATA box embedded.

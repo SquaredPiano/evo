@@ -229,7 +229,7 @@ export interface BaseEditResult {
 }
 
 /** POST /api/edit/base - Single base pair edit, re-score only. Must respond < 2s.
- *  Structure is NOT folded here — the caller refolds out of band when
+ *  Structure is NOT folded here - the caller refolds out of band when
  *  `refold_recommended` is true. */
 export async function editBase(
   sessionId: string,
@@ -295,7 +295,7 @@ export interface AgentChatContext {
   selected_position?: number;
   /** Half-open [start, end) candidate frame; enables region_explanation. */
   selected_region?: { start: number; end: number };
-  /** Gene symbol — enables ClinVar gene context in region evidence. */
+  /** Gene symbol - enables ClinVar gene context in region evidence. */
   gene?: string;
   scores?: Record<string, number>;
   evidence_links?: Array<Record<string, unknown>>;
@@ -483,7 +483,7 @@ import type { RegionEvidence } from "@/types";
 /** POST /api/region-evidence - Assemble coordinate-bound evidence for a sequence.
  *  Binds coordinates → ClinVar variants (gene context), regulatory motifs, and
  *  semantically-retrieved literature (source="literature", on by default server-side
- *  via include_literature) — no UI change needed, the backend just returns more items. */
+ *  via include_literature) - no UI change needed, the backend just returns more items. */
 export async function fetchRegionEvidence(payload: {
   sequence: string;
   gene?: string;

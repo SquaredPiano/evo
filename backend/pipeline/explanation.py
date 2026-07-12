@@ -1,4 +1,4 @@
-"""Explanation layer — generates mechanistic reports for candidates via LLM streaming.
+"""Explanation layer - generates mechanistic reports for candidates via LLM streaming.
 
 Streams through the unified OpenRouter client. Falls back to a score-based
 summary when no LLM is available.
@@ -72,7 +72,7 @@ def _build_score_based_fallback(scores: dict, spec: DesignSpec) -> list[str]:
         if combined >= 0.7:
             chunks.append("This candidate shows strong overall potential with a high combined score.")
         elif combined >= 0.4:
-            chunks.append("This candidate has moderate potential — some dimensions score well while others may need optimization.")
+            chunks.append("This candidate has moderate potential - some dimensions score well while others may need optimization.")
         else:
             chunks.append("This candidate scores below average and may require significant redesign.")
 
@@ -152,7 +152,7 @@ async def generate_explanation(
         except Exception:
             logger.warning("OpenRouter explanation failed, using score-based fallback", exc_info=True)
 
-    logger.info("No LLM available — using score-based explanation")
+    logger.info("No LLM available - using score-based explanation")
     chunks = _build_score_based_fallback(scores, spec)
     for chunk in chunks:
         await manager.send_event(

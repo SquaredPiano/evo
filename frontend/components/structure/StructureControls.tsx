@@ -48,7 +48,7 @@ export default function StructureControls({
         </IconButton>
       )}
 
-      {/* pLDDT legend — AlphaFold / ESMFold standard confidence bands */}
+      {/* pLDDT legend - AlphaFold / ESMFold standard confidence bands */}
       <div className="flex items-center gap-2 ml-auto">
         {[
           { color: "#0053D6", label: ">90" },

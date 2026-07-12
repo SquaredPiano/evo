@@ -2,11 +2,11 @@
 
 Two interchangeable backends sit behind one interface:
 
-* :class:`LocalHashEmbedder` — a deterministic, dependency-free feature-hashing
+* :class:`LocalHashEmbedder` - a deterministic, dependency-free feature-hashing
   embedder. No network, no API key; the same input always maps to the same
   vector. This is the fallback that keeps vector search working offline / in a
   demo with zero configuration.
-* :class:`ApiEmbedder` — calls an OpenAI-compatible embeddings endpoint
+* :class:`ApiEmbedder` - calls an OpenAI-compatible embeddings endpoint
   (OpenAI, Azure OpenAI, or any gateway mirroring ``POST /embeddings``). Higher
   semantic quality; used only when an API key is configured.
 
@@ -15,7 +15,7 @@ when a key is present, otherwise fall back to the local one. Both backends emit
 **L2-normalised** vectors of the SAME configured dimension, so a single MongoDB
 Atlas vector index works regardless of which backend a given deployment runs.
 
-IMPORTANT: do not mix backends within one *populated* index — the API and local
+IMPORTANT: do not mix backends within one *populated* index - the API and local
 vector spaces are unrelated, so cross-backend similarity is meaningless. Pick
 one embedder per deployment; if you switch, re-index.
 """
@@ -81,7 +81,7 @@ def _tokenize(text: str) -> list[str]:
 
 
 def _stable_hash(feature: str) -> int:
-    """Deterministic 64-bit hash — unlike ``hash()``, stable across processes."""
+    """Deterministic 64-bit hash - unlike ``hash()``, stable across processes."""
     return int.from_bytes(hashlib.sha1(feature.encode("utf-8")).digest()[:8], "big")
 
 
@@ -92,7 +92,7 @@ class LocalHashEmbedder:
     contribution; the accumulated vector is L2-normalised. It captures lexical
     overlap (shared vocabulary → higher cosine), which is enough for useful
     literature ranking without any model or network call. It is NOT semantic in
-    the neural sense — synonyms that share no tokens won't match — but it is
+    the neural sense - synonyms that share no tokens won't match - but it is
     free, instant, and perfectly reproducible.
     """
 
@@ -169,7 +169,7 @@ class ApiEmbedder:
             )
             resp.raise_for_status()
             data = resp.json()
-        # Preserve request order — the API returns an "index" per item.
+        # Preserve request order - the API returns an "index" per item.
         items = sorted(data["data"], key=lambda d: d["index"])
         return [_l2_normalize(np.asarray(i["embedding"], dtype=np.float64)).tolist() for i in items]
 
@@ -200,5 +200,5 @@ def create_embedder(settings: object) -> Embedder:
         )
         logger.info("Embeddings: using API embedder (model=%s, dim=%d).", embedder._model, dim)
         return embedder
-    logger.info("Embeddings: no API key — using deterministic local embedder (dim=%d).", dim)
+    logger.info("Embeddings: no API key - using deterministic local embedder (dim=%d).", dim)
     return LocalHashEmbedder(dim=dim)

@@ -182,7 +182,7 @@ export default function MutationPanel({
         )}
       </motion.button>
 
-      {/* Structure refold runs in the background — scores already landed above. */}
+      {/* Structure refold runs in the background - scores already landed above. */}
       <AnimatePresence>
         {structureRefolding && (
           <motion.div

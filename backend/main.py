@@ -1,4 +1,4 @@
-"""FastAPI entrypoint for the Evo backend — genomic design IDE."""
+"""FastAPI entrypoint for the Evo backend - genomic design IDE."""
 
 from __future__ import annotations
 
@@ -104,20 +104,20 @@ async def _session_errors_to_http(candidate_id: int = 0) -> _AsyncIterator[None]
 
 @_acm
 async def _lifespan(app: FastAPI) -> _AsyncIterator[None]:
-    """Modern lifespan handler — replaces deprecated @app.on_event."""
+    """Modern lifespan handler - replaces deprecated @app.on_event."""
     # Startup
     if settings.session_store_mode == SessionStoreMode.REDIS:
         redis_ok = await session_store.ping()
         if not redis_ok:
             raise RuntimeError("Redis session store is enabled but unreachable.")
-    # Durable persistence is optional — a failure here is logged and the app
+    # Durable persistence is optional - a failure here is logged and the app
     # continues Redis-only (see MongoStore.connect). Never fatal.
     await mongo_store.connect()
     # Fire-and-forget: pre-warm the literature index for known demo genes so a
     # live demo doesn't pay first-query PubMed+embedding latency. Scheduled
     # here (inside the lifespan, where a loop is guaranteed to be running)
     # rather than at bare module level, which would raise "no running event
-    # loop" at import time (e.g. under pytest). Must not block startup —
+    # loop" at import time (e.g. under pytest). Must not block startup -
     # ensure_indexed's own failures are already non-raising, so nothing here
     # can delay or fail the `yield` below.
     asyncio.create_task(_prewarm_literature_index())
@@ -148,13 +148,13 @@ experiment_tracker = ExperimentTracker(session_store, mongo_store=mongo_store)
 # index uses Atlas $vectorSearch when available and falls back to in-memory.
 embedder = create_embedder(settings)
 literature_index = LiteratureIndex(embedder=embedder, mongo_store=mongo_store)
-# Adapts literature_index to the region_evidence RAG seam (RegionRagProvider) —
+# Adapts literature_index to the region_evidence RAG seam (RegionRagProvider) -
 # feeds semantically-retrieved papers into /api/region-evidence alongside
 # ClinVar + regulatory evidence.
 literature_rag_provider = LiteratureRagProvider(literature_index)
 
 # Demo genes to pre-warm the literature index for at startup (see _lifespan).
-# On-demand ensure_indexed() already covers any gene a user actually queries —
+# On-demand ensure_indexed() already covers any gene a user actually queries -
 # this list only exists to avoid paying first-query ingestion latency live
 # during a demo. NOTE: confirm/adjust this list with the team before
 # presenting; it's a placeholder default, not a confirmed demo lineup.
@@ -282,7 +282,7 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
                 raise HTTPException(status_code=422, detail="position out of range")
 
             # Single rescore pass yields scores, delta, ref base, impact AND a
-            # per-position patch — no duplicate score_mutation call needed.
+            # per-position patch - no duplicate score_mutation call needed.
             rescore = await rescore_mutation_detailed(
                 evo2_service,
                 sequence=sequence,
@@ -373,7 +373,7 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
 
 @app.post("/api/session/bootstrap")
 async def bootstrap_session(request: SessionBootstrapRequest) -> dict[str, object]:
-    """Bind a sequence to a session for agent chat / edits — no pipeline run."""
+    """Bind a sequence to a session for agent chat / edits - no pipeline run."""
     session_id = request.session_id or str(uuid.uuid4())
     await session_store.set_candidate_sequence(session_id, request.candidate_id, request.sequence)
     return {
@@ -401,7 +401,7 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
         except (SessionNotFoundError, CandidateNotFoundError):
             raise HTTPException(
                 status_code=404,
-                detail="session not found — include 'sequence' to bootstrap",
+                detail="session not found - include 'sequence' to bootstrap",
             ) from None
 
     ctx = request.context.model_dump(exclude_none=True) if request.context else None
@@ -746,16 +746,16 @@ async def region_evidence(request: RegionEvidenceRequest) -> dict[str, object]:
     """Assemble coordinate-bound evidence for a sequence region.
 
     Binds coordinates → research/evidence from three sources: ClinVar variants
-    (known variants for the GENE overlapping these coordinates — context, not a
+    (known variants for the GENE overlapping these coordinates - context, not a
     per-base pathogenicity claim), regulatory motifs, and semantically-retrieved
-    literature (post-2025 PubMed papers, vector-searched via literature_index —
+    literature (post-2025 PubMed papers, vector-searched via literature_index -
     see services.region_evidence.attach_literature_evidence).
     """
     from services.region_evidence import RegionQuery, assemble_region_evidence, attach_literature_evidence
 
     region_end = request.region_end if request.region_end is not None else len(request.sequence)
 
-    # Clamp to the sequence bounds — mirrors assemble_region_evidence's own
+    # Clamp to the sequence bounds - mirrors assemble_region_evidence's own
     # clamping (region_evidence.py) so an out-of-range region_start/region_end
     # can't hand the literature provider an inverted or overflowing span.
     literature_start = max(0, min(request.region_start, len(request.sequence)))
@@ -777,7 +777,7 @@ async def region_evidence(request: RegionEvidenceRequest) -> dict[str, object]:
             sequence=request.sequence,
             gene=request.gene,
         )
-        # Independent I/O (ClinVar/regulatory vs. the literature RAG lookup) —
+        # Independent I/O (ClinVar/regulatory vs. the literature RAG lookup) -
         # run concurrently rather than paying the sum of both latencies.
         items, literature_items = await asyncio.gather(
             assemble_task, attach_literature_evidence([query], literature_rag_provider)
@@ -960,7 +960,7 @@ async def delete_session_snapshot(session_id: str) -> dict[str, object]:
 
 @app.get("/api/history/{session_id}")
 async def session_history(session_id: str) -> dict[str, object]:
-    """Prompt/run history for a session, oldest first — powers the reprompt thread.
+    """Prompt/run history for a session, oldest first - powers the reprompt thread.
 
     Returns an empty list (not an error) when durable persistence is disabled or
     the session predates it, so the client can treat it as 'no history yet'.
@@ -1051,7 +1051,7 @@ async def health() -> HealthResponse:
 
 @app.get("/api/health/detail")
 async def health_detail() -> dict[str, object]:
-    """Extended health for debugging — includes structure + LLM readiness."""
+    """Extended health for debugging - includes structure + LLM readiness."""
     payload = await evo2_service.health()
     from services import llm as llm_service
 

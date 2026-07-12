@@ -2,7 +2,7 @@
 
 This document is the contract between the **coordinate → evidence binding**
 (ClinVar + regulatory motifs) and the **RAG provider** (per-region research-paper
-retrieval — implemented, see §5). The UI did not change when the RAG was added —
+retrieval - implemented, see §5). The UI did not change when the RAG was added -
 it renders whatever `RegionEvidence[]` the backend returns.
 
 Hover a DNA region in the UI → the evidence overlapping that region is shown,
@@ -23,19 +23,19 @@ Frontend mirror: `frontend/types/sequence.ts` (`RegionEvidence` interface).
 | `kind`       | `str`               | `"pathogenic_variant" \| "motif" \| "paper" \| ...`. |
 | `title`      | `str`               | Short display title. |
 | `detail`     | `str \| None`       | One-to-two sentence explanation. **Must be honest about provenance** (see §4). |
-| `url`        | `str \| None`       | Real external link (PubMed / ClinVar / DOI) or `null`. **Never fabricate** — `null` when there is no stable link. |
+| `url`        | `str \| None`       | Real external link (PubMed / ClinVar / DOI) or `null`. **Never fabricate** - `null` when there is no stable link. |
 | `identifier` | `str \| None`       | PMID / ClinVar UID / accession / motif name. |
 | `score`      | `float \| None`     | Source-native strength/relevance if any. |
 | `confidence` | `str \| None`       | Human label, e.g. `"ClinVar review: 3/4 stars"`, `"motif pattern match"`, `"RAG top-k"`. |
 
-`RegionEvidence.to_dict()` returns exactly these keys — that dict IS the wire
+`RegionEvidence.to_dict()` returns exactly these keys - that dict IS the wire
 format for both the HTTP endpoint and the WS event.
 
 ---
 
 ## 2. HTTP endpoint
 
-`POST /api/region-evidence` — `backend/main.py`; request model
+`POST /api/region-evidence` - `backend/main.py`; request model
 `RegionEvidenceRequest` in `backend/models/requests.py`.
 
 Request body:
@@ -63,7 +63,7 @@ Response body:
 }
 ```
 
-`items` is `[]` when there is no evidence — an honest, non-error result.
+`items` is `[]` when there is no evidence - an honest, non-error result.
 
 Frontend client: `fetchRegionEvidence(...)` in `frontend/lib/api.ts`;
 store action `loadRegionEvidence(sequence, gene?)` in `frontend/lib/store.ts`
@@ -74,7 +74,7 @@ store action `loadRegionEvidence(sequence, gene?)` in `frontend/lib/store.ts`
 
 ## 3. WebSocket event
 
-`region_evidence_ready` — emitted beside `regulatory_map_ready` from
+`region_evidence_ready` - emitted beside `regulatory_map_ready` from
 `backend/pipeline/orchestrator.py::_emit_structure`. Models in
 `backend/ws/events.py` (`RegionEvidenceReadyData` / `RegionEvidenceReadyEvent`).
 
@@ -97,7 +97,7 @@ store action `loadRegionEvidence(sequence, gene?)` in `frontend/lib/store.ts`
 ## 4. Honesty rules (apply to every source)
 
 - **ClinVar** items are framed as *"known variant in this GENE overlapping this
-  position — context for the region, not a pathogenicity claim about the
+  position - context for the region, not a pathogenicity claim about the
   generated sequence."* Never render a ClinVar item as "this base is pathogenic".
 - **Regulatory** items are motif-derived (pattern matches), not literature; their
   `url` is always `null` and `detail` says so.
@@ -106,7 +106,7 @@ store action `loadRegionEvidence(sequence, gene?)` in `frontend/lib/store.ts`
 
 ---
 
-## 5. RAG provider — IMPLEMENTED
+## 5. RAG provider - IMPLEMENTED
 
 Post-2025 research papers are wired in, without any UI changes. The concrete
 provider is `LiteratureRagProvider` in `backend/services/literature_index.py`,
@@ -130,7 +130,7 @@ To populate the index for a gene, run from `backend/`:
 python -m scripts.ingest_literature BRCA1
 ```
 
-The Protocol below remains a generic seam — a different index or retrieval
+The Protocol below remains a generic seam - a different index or retrieval
 strategy can implement it the same way and merge in without any UI change.
 
 ### Protocol
@@ -162,7 +162,7 @@ class MyRag:
         ]
 ```
 
-`fetch` may be **sync or async** — `attach_literature_evidence` awaits it if it
+`fetch` may be **sync or async** - `attach_literature_evidence` awaits it if it
 returns an awaitable, isolates per-region failures, and forces
 `source="literature"` / `kind="paper"` so the UI badge is always truthful.
 
@@ -170,7 +170,7 @@ returns an awaitable, isolates per-region failures, and forces
 
 1. **Input**: `RegionQuery(start, end, sequence, gene, label)`.
 2. **Output**: `list[RegionEvidence]`, each carrying its own `[start, end)` span
-   (candidate frame) — the region the paper actually supports.
+   (candidate frame) - the region the paper actually supports.
 3. **URL**: real PubMed/DOI link or `None`. Never fabricate.
 4. **Merge**: append your list to the output of `assemble_region_evidence(...)`.
    Same schema, same endpoint/WS event, no UI change.
@@ -183,7 +183,7 @@ and merges in `await attach_literature_evidence([query], literature_rag_provider
 Gated by `RegionEvidenceRequest.include_literature` (default `True`).
 
 Deliberately **not** added to the WS emission (`orchestrator._emit_structure`,
-which emits `region_evidence_ready`) — that path stays regulatory-only by
+which emits `region_evidence_ready`) - that path stays regulatory-only by
 design (local, no network, keeps the pipeline hot path fast; see §3 above).
 Literature stays on-demand via the HTTP endpoint. No frontend edits were
 required.

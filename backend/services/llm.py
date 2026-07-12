@@ -1,11 +1,11 @@
-"""Unified LLM client for Evo — every model call routes through OpenRouter.
+"""Unified LLM client for Evo - every model call routes through OpenRouter.
 
 OpenRouter exposes an OpenAI-compatible Chat Completions API, so a single
 httpx-based async client covers all of Evo's LLM needs:
 
-  - `complete_text()`   — one-shot completion returning plain text
-  - `stream_text()`     — token/chunk streaming via SSE (for explanations)
-  - `complete_json()`   — JSON-mode completion parsed into a dict
+  - `complete_text()`   - one-shot completion returning plain text
+  - `stream_text()`     - token/chunk streaming via SSE (for explanations)
+  - `complete_json()`   - JSON-mode completion parsed into a dict
 
 This replaces the previous ad-hoc Gemini / Claude / LangChain / OpenAI paths.
 Provider and model are chosen entirely by configuration (`LLM_MODEL`,
@@ -31,7 +31,7 @@ logger = logging.getLogger("evo")
 # OpenRouter recommends these headers for attribution / rankings. Harmless if ignored.
 _ATTRIBUTION_HEADERS = {
     "HTTP-Referer": "https://github.com/evo-genomics/evo",
-    # HTTP header values must be latin-1/ASCII encodable — keep this plain ASCII
+    # HTTP header values must be latin-1/ASCII encodable - keep this plain ASCII
     # (no em dash) or httpx raises UnicodeEncodeError when building the request.
     "X-Title": "Evo - Genomic Design IDE",
 }

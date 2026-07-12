@@ -10,7 +10,7 @@ compose file.
 ## 1. Create the Droplet
 
 - **Marketplace image:** *Docker on Ubuntu* (Docker + Compose pre-installed).
-- **Size:** the Next.js build is the heaviest step — use at least **2 GB RAM / 2 vCPU**
+- **Size:** the Next.js build is the heaviest step - use at least **2 GB RAM / 2 vCPU**
   (Basic, ~$18/mo). 1 GB can OOM during `npm run build`. Resize down after if idle.
 - Add your **SSH key**.
 
@@ -20,7 +20,7 @@ Note the Droplet's **public IP** (called `<DROPLET_IP>` below).
 
 In the DO console → Networking → Firewalls (or `ufw` on the box), allow inbound:
 
-- `22` (SSH), `3000` (frontend), `8000` (backend) — for the IP-only phase.
+- `22` (SSH), `3000` (frontend), `8000` (backend) - for the IP-only phase.
 - Later, with a domain: allow `80`, `443` and close `3000`/`8000`.
 
 ## 3. Get the code onto the Droplet

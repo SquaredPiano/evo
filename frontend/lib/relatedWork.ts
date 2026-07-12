@@ -2,11 +2,11 @@
  * Related work for the Evo IDE.
  *
  * Two clearly-separated kinds of "related work":
- *  1. FOUNDATIONAL_WORK — a small, hand-curated, ALWAYS-shown bibliography of the
+ *  1. FOUNDATIONAL_WORK - a small, hand-curated, ALWAYS-shown bibliography of the
  *     models and resources Evo is built on. This is NOT run-specific: it is the
- *     same for every design. No DOIs/PMIDs are invented — where an exact
+ *     same for every design. No DOIs/PMIDs are invented - where an exact
  *     identifier is uncertain we link the canonical project/paper page instead.
- *  2. Run literature — the live NCBI / PubMed / ClinVar records fetched for the
+ *  2. Run literature - the live NCBI / PubMed / ClinVar records fetched for the
  *     current goal. Those come from `buildEvidenceLinks` and are split by ROLE
  *     via `partitionRunLiterature` (see below).
  */
@@ -37,7 +37,7 @@ export const FOUNDATIONAL_WORK: FoundationalRef[] = [
     year: "2025",
     venue: "Arc Institute (genomic foundation model)",
     url: "https://arcinstitute.org/tools/evo",
-    why: "The DNA language model Evo streams to generate candidate sequences — the generative engine behind every design.",
+    why: "The DNA language model Evo streams to generate candidate sequences - the generative engine behind every design.",
   },
   {
     id: "esmfold",
@@ -57,7 +57,7 @@ export const FOUNDATIONAL_WORK: FoundationalRef[] = [
     year: "2024",
     venue: "Science / Arc Institute",
     url: "https://arcinstitute.org/tools/evo",
-    why: "First-generation genomic design model — the lineage and design methodology Evo 2 extends.",
+    why: "First-generation genomic design model - the lineage and design methodology Evo 2 extends.",
   },
   {
     id: "clinvar",
@@ -66,14 +66,14 @@ export const FOUNDATIONAL_WORK: FoundationalRef[] = [
     year: "2018",
     venue: "Nucleic Acids Research / NCBI",
     url: "https://www.ncbi.nlm.nih.gov/clinvar/",
-    why: "Pathogenic/benign labels used to calibrate scores and to annotate variants — the ground-truth reference for the Validate tool.",
+    why: "Pathogenic/benign labels used to calibrate scores and to annotate variants - the ground-truth reference for the Validate tool.",
   },
 ];
 
 export interface RunLiterature {
-  /** NCBI gene/CDS records — the DNA seed that informs generation. */
+  /** NCBI gene/CDS records - the DNA seed that informs generation. */
   seed: EvidenceLink[];
-  /** PubMed + ClinVar — context only; these do NOT rewrite the DNA. */
+  /** PubMed + ClinVar - context only; these do NOT rewrite the DNA. */
   context: EvidenceLink[];
 }
 

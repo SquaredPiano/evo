@@ -159,7 +159,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
   );
 
   // Route ALL FASTA/GenBank uploads through the backend parser (multi-record +
-  // IUPAC aware). No client-side ">"-stripping fallback — on failure we surface
+  // IUPAC aware). No client-side ">"-stripping fallback - on failure we surface
   // the real error instead of mangling the flat file.
   const handleFile = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -193,7 +193,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
     [applyImported]
   );
 
-  // Upload a raw PDB/ENT structure file. This is NOT a model prediction — we
+  // Upload a raw PDB/ENT structure file. This is NOT a model prediction - we
   // render it plainly and label it honestly, with no DNA link or fake pLDDT.
   const handlePdbFile = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -295,7 +295,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                 <Box size={16} /> Choose a .pdb / .ent structure file
               </button>
               <p className="text-[12px] leading-relaxed mt-4 max-w-md mx-auto" style={{ color: "var(--text-muted)" }}>
-                Renders an existing structure exactly as provided. This is an <strong>uploaded structure</strong> —
+                Renders an existing structure exactly as provided. This is an <strong>uploaded structure</strong> -
                 not model-predicted and not linked to a DNA sequence. B-factor colors are not ESMFold pLDDT.
               </p>
               {pdbNote && (
@@ -407,7 +407,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
             style={{ border: "1px solid var(--ghost-border)", background: "#fff" }}
           >
             <div className="px-4 py-3 text-[12px] font-medium" style={{ borderBottom: "1px solid var(--ghost-border)", color: "var(--ink)" }}>
-              {importPick.sequences.length} records in this {importPick.format === "genbank" ? "GenBank" : "FASTA"} file — pick one
+              {importPick.sequences.length} records in this {importPick.format === "genbank" ? "GenBank" : "FASTA"} file - pick one
             </div>
             <div className="max-h-[240px] overflow-auto">
               {importPick.sequences.map((rec, i) => (

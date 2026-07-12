@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * RelatedWorkPanel — two clearly-separated zones so a judge can tell what Evo is
+ * RelatedWorkPanel - two clearly-separated zones so a judge can tell what Evo is
  * built on from what it fetched for THIS run:
  *
- *   Zone 1 "Foundational"  — static, always shown (badge: not run-specific).
- *   Zone 2 "For this run"   — live NCBI/PubMed/ClinVar records, split by role
+ *   Zone 1 "Foundational"  - static, always shown (badge: not run-specific).
+ *   Zone 2 "For this run"   - live NCBI/PubMed/ClinVar records, split by role
  *                             (NCBI seeds the DNA; PubMed + ClinVar are context).
  *
  * Honesty is the point: context literature never rewrites the generated DNA.

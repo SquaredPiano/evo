@@ -1,4 +1,4 @@
-"""Tests for Phase 5 agent tools — codon_optimize, offtarget_scan,
+"""Tests for Phase 5 agent tools - codon_optimize, offtarget_scan,
 insert_bases, delete_bases, restriction_sites.
 
 Tests verify:
@@ -70,7 +70,7 @@ class TestToolCodonOptimize:
 
     @pytest.mark.asyncio
     async def test_codon_optimize_basic(self, service, store):
-        # ATG GAT TTA TCT GCT CTT CGC GTT GAA GAA — protein-coding
+        # ATG GAT TTA TCT GCT CTT CGC GTT GAA GAA - protein-coding
         seq = "ATGGATTTATCTGCTCTTCGCGTTGAAGAA"
         await store.set_candidate_sequence("s1", 0, seq)
 
@@ -195,7 +195,7 @@ class TestToolOfftargetScan:
         )
         assert result.call.status == "ok"
         assert result.call.tool == "offtarget_scan"
-        # No candidate_update — this is a read-only analysis tool
+        # No candidate_update - this is a read-only analysis tool
         assert result.candidate_update is None
 
     @pytest.mark.asyncio
@@ -212,12 +212,12 @@ class TestToolOfftargetScan:
     @pytest.mark.asyncio
     async def test_offtarget_scan_k_clamped(self, service):
         seq = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAAT"
-        # k too small — should clamp to 8
+        # k too small - should clamp to 8
         result = await tool_offtarget_scan(
             service=service, candidate_id=0, sequence=seq, k=3,
         )
         assert result.call.status == "ok"
-        # k too large — should clamp to 20
+        # k too large - should clamp to 20
         result = await tool_offtarget_scan(
             service=service, candidate_id=0, sequence=seq, k=100,
         )
@@ -501,7 +501,7 @@ class TestToolRestrictionSites:
 
     @pytest.mark.asyncio
     async def test_restriction_sites_no_candidate_update(self):
-        """Restriction sites is a read-only analysis — no sequence mutation."""
+        """Restriction sites is a read-only analysis - no sequence mutation."""
         seq = "ATCGGAATTCATCG"
         result = await tool_restriction_sites(candidate_id=0, sequence=seq)
         assert result.candidate_update is None

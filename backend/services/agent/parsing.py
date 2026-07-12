@@ -45,7 +45,7 @@ def resolve_selection_window(
 
     Prefers an explicit ``selected_region {start,end}``; otherwise falls back to
     a ``SELECTION_WINDOW``-wide window centred on ``selected_position``. Returns
-    None when neither is available. End is NOT clamped to sequence length here —
+    None when neither is available. End is NOT clamped to sequence length here -
     callers clamp against the live sequence.
     """
     if selected_region is not None:
@@ -114,7 +114,7 @@ def parse_region_regeneration(
     sel_window = resolve_selection_window(selected_position, selected_region)
     has_sel = sel_window is not None
 
-    # GC intent — a strong regen trigger on its own ("raise GC in this region").
+    # GC intent - a strong regen trigger on its own ("raise GC in this region").
     gc_target: float | None = None
     if re.search(r"\b(raise|increase|higher|boost|more)\b[^.]*\bgc\b", text) or "high gc" in text:
         gc_target = 0.62
@@ -126,7 +126,7 @@ def parse_region_regeneration(
         if 0 <= val <= 100:
             gc_target = val / 100.0
 
-    # Avoid-motif intent — another strong trigger ("avoid EcoRI here").
+    # Avoid-motif intent - another strong trigger ("avoid EcoRI here").
     avoid: list[str] = []
     if "avoid" in text or "remove" in text or "no " in text or "without" in text:
         for enzyme, site in _ENZYME_SITES.items():
@@ -156,7 +156,7 @@ def parse_region_regeneration(
         a, b = int(range_match.group(1)), int(range_match.group(2))
         args["start"], args["end"] = (a, b) if a <= b else (b, a)
     elif has_sel:
-        # No explicit numbers — fall back to the user's on-screen selection.
+        # No explicit numbers - fall back to the user's on-screen selection.
         args["start"], args["end"] = sel_window
     if gc_target is not None:
         args["gc_target"] = gc_target
