@@ -15,8 +15,10 @@ import hashlib
 import math
 import os
 import random
+import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import httpx
@@ -29,11 +31,63 @@ from models.domain import ForwardResult, Impact, MutationScore
 
 
 # ---------------------------------------------------------------------------
+# Generation provenance — the honest structured result of a generation call
+# ---------------------------------------------------------------------------
+
+@dataclass
+class GenerationResult:
+    """Structured, provenance-carrying result of a single generation call.
+
+    This is the honest surface for reprompting/regeneration: it carries not just
+    the generated bases but *where they came from* and *how confident the model
+    was*, so a science UI can never mistake a mock fallback for real Evo2.
+
+    Fields:
+      generated:     the newly generated bases (the suffix beyond ``seed``).
+      sampled_probs: per-generated-token probability from Evo2 (REAL model
+                     confidence) when the engine is ``nim``; ``None`` for mock,
+                     mock_fallback, and local (we never fabricate probabilities).
+      engine:        actual engine that produced these bases — one of
+                     "nim" | "mock_fallback" | "local" | "mock". ``mock_fallback``
+                     means a NIM call was attempted and failed, so this is mock
+                     output presented honestly as such (NOT real NIM).
+      elapsed_ms:    wall-clock (or engine-reported) latency for the call.
+      seed:          the conditioning prefix that was passed in.
+      n_tokens:      number of tokens requested.
+    """
+
+    generated: str
+    sampled_probs: list[float] | None = None
+    engine: str = "unknown"
+    elapsed_ms: float | None = None
+    seed: str = ""
+    n_tokens: int = 0
+
+    @property
+    def sampled_probs_are_real_model_confidence(self) -> bool:
+        """True only when sampled_probs come from a real Evo2 inference (NIM)."""
+        return self.engine == "nim" and self.sampled_probs is not None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "generated": self.generated,
+            "sampled_probs": self.sampled_probs,
+            "engine": self.engine,
+            "elapsed_ms": self.elapsed_ms,
+            "n_tokens": self.n_tokens,
+            "sampled_probs_are_real_model_confidence": self.sampled_probs_are_real_model_confidence,
+        }
+
+
+# ---------------------------------------------------------------------------
 # Abstract interface
 # ---------------------------------------------------------------------------
 
 class Evo2Service(ABC):
     """Abstract Evo2 interface. Every downstream module depends on this."""
+
+    # Honest engine label for provenance. NIM overrides generate_detailed entirely.
+    _engine_name: str = "unknown"
 
     @abstractmethod
     async def forward(self, sequence: str) -> ForwardResult:
@@ -54,6 +108,34 @@ class Evo2Service(ABC):
         self, seed: str, n_tokens: int, temperature: float = 1.0
     ) -> AsyncGenerator[str, None]:
         """Autoregressively generate tokens, yielding one at a time."""
+
+    async def generate_detailed(
+        self, seed: str, n_tokens: int, temperature: float = 1.0
+    ) -> GenerationResult:
+        """Generate and return structured provenance (bases + engine + confidence).
+
+        Default implementation drives the streaming ``generate`` and reports the
+        engine honestly with ``sampled_probs=None`` — no probabilities are
+        fabricated. NIM overrides this to capture real Evo2 ``sampled_probs`` and
+        to report ``mock_fallback`` truthfully when it degrades to mock.
+
+        NOTE: generation is autoregressive / left-to-right — it conditions on the
+        ``seed`` prefix only. Callers doing region splicing must treat this as a
+        prefix-only limitation (see services/regeneration.py).
+        """
+        started = time.perf_counter()
+        tokens: list[str] = []
+        async for token in self.generate(seed, n_tokens, temperature):
+            tokens.append(token)
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        return GenerationResult(
+            generated="".join(tokens),
+            sampled_probs=None,
+            engine=self._engine_name,
+            elapsed_ms=round(elapsed_ms, 2),
+            seed=seed,
+            n_tokens=n_tokens,
+        )
 
     @abstractmethod
     async def health(self) -> dict[str, object]:
@@ -126,6 +208,8 @@ class Evo2MockService(Evo2Service):
     Produces deterministic, biologically-informed outputs so the
     scoring pipeline and CLI can be validated before real Evo2 is ready.
     """
+
+    _engine_name = "mock"
 
     async def forward(self, sequence: str) -> ForwardResult:
         logits = _mock_logits(sequence)
@@ -218,6 +302,8 @@ class Evo2LocalService(Evo2Service):
     Requires: pip install evo2 (or the arcinstitute package)
     Hardware: ASUS ASCENT GX10 with NVIDIA GPU + 128 GB LPDDRX
     """
+
+    _engine_name = "local"
 
     def __init__(self, model_path: str = "arcinstitute/evo2_7b") -> None:
         self._model_path = model_path
@@ -328,6 +414,8 @@ class Evo2NIMService(Evo2Service):
     Used when local GPU is unavailable or when the 40B model is needed.
     """
 
+    _engine_name = "nim"
+
     def __init__(self, api_key: str, api_url: str) -> None:
         self._api_key = api_key
         self._api_url = api_url
@@ -419,6 +507,61 @@ class Evo2NIMService(Evo2Service):
             yield base
             await asyncio.sleep(0.004)
 
+    async def generate_detailed(
+        self, seed: str, n_tokens: int, temperature: float = 1.0
+    ) -> GenerationResult:
+        """NIM generation with real Evo2 provenance.
+
+        On success, returns ``engine="nim"`` plus the REAL per-generated-token
+        ``sampled_probs`` from the Evo2-40B model — genuine model confidence,
+        distinct from the heuristic 4D scores. On ANY error (422/429/5xx/timeout)
+        this reports ``engine="mock_fallback"`` and ``sampled_probs=None`` so the
+        caller can never present degraded mock output as real NIM.
+
+        Conditioning is prefix-only (autoregressive): generated bases see the
+        ``seed`` prefix but not any downstream suffix.
+        """
+        started = time.perf_counter()
+        try:
+            clamped_temp = max(0.01, min(float(temperature), 1.0))
+            data = await self._post({
+                "sequence": seed,
+                "num_tokens": n_tokens,
+                "top_k": 4,
+                "enable_sampled_probs": True,
+                "temperature": clamped_temp,
+            })
+            generated = _extract_generated_sequence(data)
+            suffix = generated[len(seed):] if generated.startswith(seed) else generated
+            suffix = "".join(b for b in suffix.upper() if b in ("A", "T", "C", "G", "N"))
+            probs = _extract_sampled_probs(data)
+            # Keep probs aligned to the returned bases; if lengths disagree, trim
+            # to the common prefix so per-base confidence never misaligns.
+            if probs is not None and len(probs) != len(suffix):
+                common = min(len(probs), len(suffix))
+                probs = probs[:common] if common > 0 else None
+            elapsed_ms = _nim_elapsed_ms(data, started)
+            return GenerationResult(
+                generated=suffix,
+                sampled_probs=probs,
+                engine="nim",
+                elapsed_ms=elapsed_ms,
+                seed=seed,
+                n_tokens=n_tokens,
+            )
+        except Exception:
+            # HONESTY: any NIM failure degrades to mock, reported as mock_fallback.
+            suffix = await self._fallback_generate(seed, n_tokens, temperature)
+            elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+            return GenerationResult(
+                generated=suffix,
+                sampled_probs=None,
+                engine="mock_fallback",
+                elapsed_ms=elapsed_ms,
+                seed=seed,
+                n_tokens=n_tokens,
+            )
+
     async def health(self) -> dict[str, object]:
         try:
             await self._post({
@@ -466,6 +609,32 @@ class Evo2NIMService(Evo2Service):
 def _softmax(x: np.ndarray) -> np.ndarray:
     e = np.exp(x - np.max(x))
     return e / e.sum()
+
+
+def _extract_sampled_probs(data: dict[str, object]) -> list[float] | None:
+    """Pull the per-generated-token sampled probabilities from a NIM response.
+
+    These are REAL Evo2 model confidences. Returns None if absent or malformed —
+    we never fabricate probabilities.
+    """
+    probs = data.get("sampled_probs")
+    if not isinstance(probs, list) or not probs:
+        return None
+    out: list[float] = []
+    for p in probs:
+        try:
+            out.append(round(float(p), 6))
+        except (TypeError, ValueError):
+            return None
+    return out
+
+
+def _nim_elapsed_ms(data: dict[str, object], started: float) -> float:
+    """Prefer the engine-reported elapsed_ms; fall back to measured wall-clock."""
+    reported = data.get("elapsed_ms")
+    if isinstance(reported, (int, float)):
+        return round(float(reported), 2)
+    return round((time.perf_counter() - started) * 1000.0, 2)
 
 
 def _extract_generated_sequence(data: dict[str, object]) -> str:

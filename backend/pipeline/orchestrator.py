@@ -16,6 +16,10 @@ from pipeline.intent_parser import parse_intent
 from pipeline.explanation import generate_explanation
 from pipeline.retrieval import RetrievalResult, retrieve_context
 from services.evo2 import Evo2MockService, Evo2Service
+from services.regeneration import (
+    parse_generation_constraints,
+    regenerate_region,
+)
 from services.mock_pdb import build_mock_pdb_from_dna
 from services.regulatory_viz import build_regulatory_map
 from services.structure import predict_structure
@@ -92,6 +96,7 @@ class CandidateRuntime:
     regulatory_map: dict[str, object] | None = None
     confidence: float | None = None
     error: str | None = None
+    provenance: dict[str, object] | None = None
 
     @property
     def is_failed(self) -> bool:
@@ -111,6 +116,7 @@ class CandidateRuntime:
             "regulatory_map": self.regulatory_map,
             "confidence": self.confidence,
             "error": self.error,
+            "provenance": self.provenance,
         }
 
 
@@ -501,6 +507,7 @@ async def run_generation_pipeline(
             )
             temperature = min(1.0, 0.7 + (0.03 * candidate_id))
             generated = varied_seed
+            candidate_provenance: dict[str, object] | None = None
             await manager.send_event(
                 session_id,
                 CandidateStatusEvent(
@@ -509,6 +516,10 @@ async def run_generation_pipeline(
             )
 
             use_batching = tokens_to_generate >= TOKEN_BATCH_THRESHOLD
+            # DesignSpec.constraints now actually influence generation: when GC /
+            # avoid-motif constraints are present (and we're not on the huge-batch
+            # path), generate via SAMPLE-K rejection sampling and keep the best.
+            gen_constraints = parse_generation_constraints(spec.constraints)
 
             try:
                 async with asyncio.timeout(profile.generation_timeout):
@@ -522,6 +533,17 @@ async def run_generation_pipeline(
                             n_tokens=tokens_to_generate,
                             temperature=temperature,
                             generated=generated,
+                        )
+                    elif gen_constraints:
+                        generated, candidate_provenance = await _generate_constrained_stream(
+                            manager=manager,
+                            session_id=session_id,
+                            candidate_id=candidate_id,
+                            service=service,
+                            seed=varied_seed,
+                            n_tokens=tokens_to_generate,
+                            temperature=temperature,
+                            constraints=gen_constraints,
                         )
                     else:
                         async for token in service.generate(
@@ -634,6 +656,7 @@ async def run_generation_pipeline(
                 regulatory_map=regulatory_map,
                 confidence=confidence,
                 error=None,
+                provenance=candidate_provenance,
             )
             runtime[candidate_id] = candidate
             await _attempt_first_explanation(candidate)
@@ -776,7 +799,7 @@ async def run_followup_pipeline(
     )
 
     await tracker.set("generation", "active", 0.2)
-    base = _apply_followup_constraints(base_sequence, message, spec)
+    base, followup_provenance = await _regenerate_followup(service, base_sequence, message, spec)
     await tracker.set("generation", "done", 1.0)
 
     # --- Score ---
@@ -830,6 +853,7 @@ async def run_followup_pipeline(
                             "regulatory_map": None,
                             "confidence": None,
                             "error": reason,
+                            "provenance": followup_provenance,
                         },
                     ],
                 )
@@ -845,12 +869,23 @@ async def run_followup_pipeline(
 
     # --- Explanation ---
     await tracker.set("explanation", "active", 0.2)
+    engine = str(followup_provenance.get("engine", "unknown"))
+    engine_label = {
+        "nim": "real Evo2-40B (NIM)",
+        "mock_fallback": "mock fallback (NIM unavailable — NOT real Evo2)",
+        "local": "local Evo2",
+        "mock": "mock engine",
+    }.get(engine, engine)
     await manager.send_event(
         session_id,
         ExplanationChunkEvent(
             data=ExplanationChunkData(
                 candidate_id=candidate_id,
-                text="Applied follow-up constraints and recomputed candidate scores.",
+                text=(
+                    f"Regenerated the candidate via {engine_label} using rejection sampling, "
+                    "then recomputed scores. Region conditioning is prefix-only; constraints "
+                    "are rejection-sampled rather than natively decoded."
+                ),
             )
         ).to_json(),
     )
@@ -879,6 +914,7 @@ async def run_followup_pipeline(
                         "regulatory_map": regulatory_map,
                         "confidence": confidence,
                         "error": None,
+                        "provenance": followup_provenance,
                     },
                 ]
             )
@@ -1099,6 +1135,63 @@ async def _generate_batched(
     return generated
 
 
+async def _generate_constrained_stream(
+    *,
+    manager: WebSocketManager,
+    session_id: str,
+    candidate_id: int,
+    service: Evo2Service,
+    seed: str,
+    n_tokens: int,
+    temperature: float,
+    constraints: dict[str, object],
+) -> tuple[str, dict[str, object]]:
+    """Constrained full-candidate generation via SAMPLE-K rejection sampling.
+
+    Draws K full continuations of ``seed`` (each a real Evo2 generation), scores
+    each against the GC / avoid-motif constraints, and keeps the best. The winner's
+    tokens are then streamed as normal ``generation_token`` events so the WS
+    contract is unchanged. Returns ``(full_sequence, provenance)``.
+
+    HONESTY: this is rejection sampling, not native constrained decoding; and
+    generation conditions on the ``seed`` prefix only.
+    """
+    cons: dict[str, object] = dict(constraints)
+    cons["temperature"] = temperature
+    cons["length_delta"] = int(n_tokens)  # tail regeneration of n_tokens on the seed
+
+    # Tail regeneration: region = [len(seed), len(seed)) (empty) + length_delta tokens.
+    result = await regenerate_region(service, seed, len(seed), len(seed), cons)
+
+    generated = seed
+    for token in result.regenerated:
+        position = len(generated)
+        generated += token
+        await manager.send_event(
+            session_id,
+            GenerationTokenEvent(
+                data=GenerationTokenData(candidate_id=candidate_id, token=token, position=position)
+            ).to_json(),
+        )
+
+    mean_conf = (
+        round(sum(result.sampled_probs) / len(result.sampled_probs), 4)
+        if result.sampled_probs
+        else None
+    )
+    provenance: dict[str, object] = {
+        "engine": result.engine,
+        "method": result.method,
+        "prefix_only_conditioning": result.prefix_only_conditioning,
+        "candidates_evaluated": result.candidates_evaluated,
+        "elapsed_ms": result.elapsed_ms,
+        "sampled_probs_are_real_model_confidence": result.sampled_probs_are_real_model_confidence,
+        "mean_sampled_prob": mean_conf,
+        "constraint_report": result.constraint_report,
+    }
+    return generated, provenance
+
+
 async def _fill_with_demo_tokens(
     *,
     manager: WebSocketManager,
@@ -1133,62 +1226,74 @@ def _simple_mutate(sequence: str, position: int, new_base: str) -> str:
     return sequence[:position] + new_base + sequence[position + 1 :]
 
 
-# Motifs used to nudge a sequence toward a follow-up constraint. These are the
-# same regulatory elements the scorer rewards, so the follow-up produces a real,
-# score-relevant change instead of an arbitrary single-base tweak.
-_CONSTRAINT_MOTIFS: dict[str, str] = {
-    "neuronal": "TGACGTCA",   # CRE — neuronal/CREB regulatory element
-    "cardiac": "AGATAG",      # GATA-like cardiac element
-    "generic": "TATAAA",      # TATA box — general promoter element
-}
+async def _regenerate_followup(
+    service: Evo2Service,
+    sequence: str,
+    message: str,
+    spec: DesignSpec,
+) -> tuple[str, dict[str, object]]:
+    """Real constrained regeneration for /api/edit/followup.
 
+    Replaces the old canned motif-insertion heuristic: this genuinely re-invokes
+    Evo2 (via ``regenerate_region``) to resample the sequence, honouring any
+    region range and GC / avoid-motif constraints found in the message or spec.
 
-def _apply_followup_constraints(sequence: str, message: str, spec: DesignSpec) -> str:
-    """Apply follow-up constraints to a sequence deterministically.
-
-    Rather than a hardcoded single-base swap, this inserts the regulatory motif
-    that best matches the requested constraint (tissue-specificity, safety,
-    novelty) so the re-score reflects a meaningful edit. Idempotent: a motif is
-    only inserted if not already present.
+    Returns ``(new_sequence, provenance)`` where provenance carries the honest
+    engine label, real sampled-probs summary, and constraint report so the caller
+    can surface real-vs-mock and the prefix-only / rejection-sampling caveats.
     """
-    text = message.lower()
-    seq = "".join(b for b in sequence.upper() if b in {"A", "T", "C", "G"}) or sequence
-    if not seq:
-        return sequence
+    # Lazy import to avoid a heavy dependency at module import time.
+    from services.agent.parsing import parse_region_regeneration
 
-    def _ensure_motif(current: str, motif: str, position: int) -> str:
-        """Write `motif` over `current` at `position`, preserving total length."""
-        if motif in current or len(current) < len(motif):
-            return current
-        position = max(0, min(position, len(current) - len(motif)))
-        return current[:position] + motif + current[position + len(motif):]
+    cleaned = "".join(b for b in sequence.upper() if b in {"A", "T", "C", "G"}) or sequence
+    if not cleaned:
+        return sequence, {"engine": "none", "note": "empty sequence — nothing to regenerate"}
 
-    # Tissue specificity
-    if "tissue" in text or "specific" in text or (spec.tissue_specificity and spec.tissue_specificity.high_expression):
-        tissues = " ".join(spec.tissue_specificity.high_expression).lower() if spec.tissue_specificity else ""
-        if any(k in text or k in tissues for k in ("neuron", "brain", "hippocamp")):
-            seq = _ensure_motif(seq, _CONSTRAINT_MOTIFS["neuronal"], len(seq) // 3)
-        elif any(k in text or k in tissues for k in ("cardiac", "heart")):
-            seq = _ensure_motif(seq, _CONSTRAINT_MOTIFS["cardiac"], len(seq) // 3)
-        else:
-            seq = _ensure_motif(seq, _CONSTRAINT_MOTIFS["generic"], len(seq) // 3)
+    # Merge message-level intent (explicit range / GC / avoid) with spec constraints.
+    parsed = parse_region_regeneration(message) or {}
+    spec_constraints = parse_generation_constraints(spec.constraints)
 
-    # Novelty: introduce a divergent block toward the middle
-    if "novel" in text or "diverse" in text or "different" in text:
-        mid = len(seq) // 2
-        seq = _simple_mutate(seq, mid, "G")
-        seq = _simple_mutate(seq, min(mid + 3, len(seq) - 1), "C")
+    start = int(parsed.get("start", 0))
+    end = int(parsed.get("end", len(cleaned)))
+    start = max(0, min(start, len(cleaned)))
+    end = max(start, min(end, len(cleaned)))
+    if end <= start:
+        end = len(cleaned)
 
-    # Safety / off-target: break up any homopolymer runs the scorer penalises
-    if "safe" in text or "off-target" in text or "off target" in text:
-        for base in "ATCG":
-            run = base * 6
-            idx = seq.find(run)
-            if idx != -1:
-                swap = {"A": "T", "T": "A", "C": "G", "G": "C"}[base]
-                seq = _simple_mutate(seq, idx + 3, swap)
+    constraints: dict[str, object] = {}
+    constraints.update(spec_constraints)
+    if parsed.get("gc_target") is not None:
+        constraints["gc_target"] = parsed["gc_target"]
+    if parsed.get("avoid_motifs"):
+        constraints["avoid_motifs"] = parsed["avoid_motifs"]
+    if parsed.get("length_delta"):
+        constraints["length_delta"] = parsed["length_delta"]
 
-    return seq
+    try:
+        result = await regenerate_region(service, cleaned, start, end, constraints)
+    except Exception:
+        logger.warning("Follow-up regeneration failed; returning original sequence", exc_info=True)
+        return cleaned, {"engine": "error", "note": "regeneration failed — sequence unchanged"}
+
+    mean_conf = (
+        round(sum(result.sampled_probs) / len(result.sampled_probs), 4)
+        if result.sampled_probs
+        else None
+    )
+    provenance: dict[str, object] = {
+        "engine": result.engine,
+        "method": result.method,
+        "region_start": result.region_start,
+        "region_end": result.region_end,
+        "new_region_end": result.new_region_end,
+        "prefix_only_conditioning": result.prefix_only_conditioning,
+        "candidates_evaluated": result.candidates_evaluated,
+        "elapsed_ms": result.elapsed_ms,
+        "sampled_probs_are_real_model_confidence": result.sampled_probs_are_real_model_confidence,
+        "mean_sampled_prob": mean_conf,
+        "constraint_report": result.constraint_report,
+    }
+    return result.spliced_sequence, provenance
 
 
 def _uses_protein_structure(design_type: str | None) -> bool:

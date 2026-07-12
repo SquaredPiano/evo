@@ -504,6 +504,20 @@ class AgenticCopilot:
                     sequence=sequence,
                     enzymes=args.get("enzymes"),
                 )
+            elif tool_name == "regenerate_region":
+                start_raw = args.get("start")
+                end_raw = args.get("end")
+                gc_raw = args.get("gc_target")
+                temp_raw = args.get("temperature")
+                return await agent_tools.tool_regenerate_region(
+                    **common,
+                    start=int(start_raw) if start_raw is not None else None,
+                    end=int(end_raw) if end_raw is not None else None,
+                    gc_target=float(gc_raw) if gc_raw is not None else None,
+                    length_delta=int(args.get("length_delta", 0) or 0),
+                    avoid_motifs=args.get("avoid_motifs"),
+                    temperature=float(temp_raw) if temp_raw is not None else None,
+                )
             else:
                 return await agent_tools.tool_explain(**common)
         except Exception as exc:

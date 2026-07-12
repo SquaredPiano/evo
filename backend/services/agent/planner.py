@@ -17,6 +17,7 @@ from services.agent.parsing import (
     objective_from_prompt,
     parse_base_replacement,
     parse_explicit_edit,
+    parse_region_regeneration,
     parse_transform_mode,
 )
 
@@ -39,6 +40,11 @@ Allowed tools:
 9) insert_bases — args: {"position": <int>, "bases": "<ATCG...>"}
 10) delete_bases — args: {"start": <int>, "end": <int>}
 11) restriction_sites — args: {"enzymes": ["EcoRI", ...] (optional)}
+12) regenerate_region — args: {"start": <int, optional>, "end": <int, optional>, "gc_target": <float 0-1, optional>, "length_delta": <int, optional>, "avoid_motifs": ["GAATTC" or "EcoRI", ...] (optional), "temperature": <float, optional>}
+    Use this for TRUE re-generation: the model actually resamples a region and splices it back
+    (NOT a single-base edit). Route here for "regenerate positions 40-80", "redo/resample this
+    region", "raise GC in this region", "avoid EcoRI here". If no start/end given, it regenerates
+    the whole sequence. Conditioning is prefix-only; constraints are rejection-sampled.
 
 Rules:
 - If user asks for global sequence rewrite like "all Ts", use transform_sequence.
@@ -51,6 +57,7 @@ Rules:
 - If user asks to insert or add bases, use insert_bases.
 - If user asks to delete or remove bases, use delete_bases.
 - If user asks about restriction enzymes or cloning sites, use restriction_sites.
+- If user asks to regenerate/resample/redo a region, raise GC in a region, or avoid a restriction site in a region, use regenerate_region.
 - You may chain multiple actions in order.
 - If uncertain, default to explain_candidate.
 """
@@ -88,6 +95,17 @@ def deterministic_plan(
             if "explain" in text or "impact" in text:
                 actions.append({"tool": "explain_candidate", "args": {}})
             return actions
+
+    # Region regeneration — TRUE model re-invocation (regenerate/resample/redo a
+    # region, raise GC in a region, avoid a restriction site here). Checked before
+    # single-base edit / optimize so "regenerate positions 40-80" doesn't fall
+    # through to hill-climbing.
+    regen_args = parse_region_regeneration(message)
+    if regen_args is not None:
+        actions.append({"tool": "regenerate_region", "args": regen_args})
+        if "explain" in text or "impact" in text:
+            actions.append({"tool": "explain_candidate", "args": {}})
+        return actions
 
     # Explicit base edit (e.g., "position 5 to G")
     explicit = parse_explicit_edit(message)

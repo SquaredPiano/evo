@@ -607,6 +607,138 @@ _RESTRICTION_ENZYMES: dict[str, str] = {
 }
 
 
+async def tool_regenerate_region(
+    *,
+    service: Evo2Service,
+    store: SessionStore,
+    session_id: str,
+    candidate_id: int,
+    sequence: str,
+    start: int | None = None,
+    end: int | None = None,
+    gc_target: float | None = None,
+    length_delta: int = 0,
+    avoid_motifs: list[str] | None = None,
+    temperature: float | None = None,
+    **_kwargs: Any,
+) -> ToolExecution:
+    """TRUE region regeneration — re-invokes Evo2 to resample a region.
+
+    Unlike edit_base / optimize (which mutate the existing candidate), this calls
+    the model to generate new bases for ``sequence[start:end]`` and splices them
+    back in. Constraints (GC, length, avoid-motifs) are enforced by SAMPLE-K
+    rejection sampling. Carries real Evo2 ``sampled_probs`` + engine provenance so
+    the UI can show genuine model confidence and distinguish real-vs-mock.
+
+    Conditioning is PREFIX-ONLY (autoregressive): regenerated bases see the
+    upstream prefix but not the downstream suffix.
+    """
+    from services.regeneration import regenerate_region
+
+    # Default to a full-sequence regeneration when no explicit region is given.
+    region_start = 0 if start is None else max(0, int(start))
+    region_end = len(sequence) if end is None else min(len(sequence), int(end))
+    if region_end < region_start:
+        region_start, region_end = region_end, region_start
+
+    constraints: dict[str, Any] = {"length_delta": int(length_delta or 0)}
+    if gc_target is not None:
+        constraints["gc_target"] = float(gc_target)
+    if avoid_motifs:
+        constraints["avoid_motifs"] = avoid_motifs
+    if temperature is not None:
+        constraints["temperature"] = float(temperature)
+
+    result = await regenerate_region(
+        service, sequence, region_start, region_end, constraints,
+    )
+    spliced = result.spliced_sequence
+    await store.set_candidate_sequence(session_id, candidate_id, spliced)
+    scores, per_position = await score_candidate(service, spliced)
+    score_dict = scores.to_dict()
+
+    report = result.constraint_report
+    engine = result.engine
+    real_conf = result.sampled_probs_are_real_model_confidence
+    mean_conf = (
+        sum(result.sampled_probs) / len(result.sampled_probs)
+        if result.sampled_probs
+        else None
+    )
+
+    engine_label = {
+        "nim": "real Evo2-40B (NIM)",
+        "mock_fallback": "MOCK FALLBACK (NIM call failed — not real Evo2)",
+        "local": "local Evo2",
+        "mock": "mock",
+    }.get(engine, engine)
+
+    conf_line = (
+        f"Real Evo2 confidence (mean sampled prob): {mean_conf:.3f}. "
+        if (real_conf and mean_conf is not None)
+        else "No real model probabilities available (mock/fallback). "
+    )
+    gc_line = ""
+    if report.get("gc_target") is not None:
+        gc_line = (
+            f"GC target {report['gc_target']:.2f} → achieved {report['achieved_gc']:.2f}"
+            f"{' (within tolerance)' if report.get('gc_within_tolerance') else ' (not met)'}. "
+        )
+    motif_line = ""
+    if report.get("avoid_motifs"):
+        still = report.get("avoid_motifs_still_present") or []
+        motif_line = (
+            f"Avoid-motifs {report['avoid_motifs']}: "
+            + ("all removed. " if not still else f"still present {still}. ")
+        )
+
+    note = (
+        f"Regenerated region [{result.region_start}, {result.region_end}) of candidate "
+        f"#{candidate_id} via {engine_label} ({result.candidates_evaluated}-sample rejection "
+        f"sampling). {report.get('region_length_before')} bp → {report.get('region_length_after')} bp. "
+        f"{gc_line}{motif_line}{conf_line}"
+        f"New combined score {score_dict['combined']:.3f}. "
+        "Conditioning is prefix-only (region does not see downstream context); "
+        "constraints are rejection-sampled, not natively decoded."
+    )
+
+    return ToolExecution(
+        call=AgentToolCall(
+            tool="regenerate_region",
+            status="ok",
+            summary=(
+                f"Regenerated [{result.region_start},{result.region_end}) via {engine} "
+                f"({report.get('region_length_after')} bp)."
+            ),
+        ),
+        note=note,
+        candidate_update=AgentCandidateUpdate(
+            candidate_id=candidate_id,
+            sequence=spliced,
+            scores=score_dict,
+            mutation={
+                "scope": "regenerate",
+                "mode": "regenerate_region",
+                "start": result.region_start,
+                "end": result.region_end,
+                "new_region_end": result.new_region_end,
+                "regenerated": result.regenerated,
+                "regenerated_length": len(result.regenerated),
+                "engine": engine,
+                "method": result.method,
+                "candidates_evaluated": result.candidates_evaluated,
+                "elapsed_ms": result.elapsed_ms,
+                "prefix_only_conditioning": result.prefix_only_conditioning,
+                # REAL Evo2 per-base confidence for the regenerated region (or null).
+                "sampled_probs": result.sampled_probs,
+                "sampled_probs_are_real_model_confidence": real_conf,
+                "constraint_report": report,
+            },
+            per_position_scores=[{"position": x.position, "score": x.score} for x in per_position],
+        ),
+    )
+
+
 async def tool_restriction_sites(
     *,
     candidate_id: int,

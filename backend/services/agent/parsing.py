@@ -28,7 +28,95 @@ ALLOWED_TOOLS = frozenset({
     "insert_bases",
     "delete_bases",
     "restriction_sites",
+    "regenerate_region",
 })
+
+# Enzyme names → recognition sites for "avoid EcoRI here" style requests.
+_ENZYME_SITES: dict[str, str] = {
+    "ecori": "GAATTC", "bamhi": "GGATCC", "hindiii": "AAGCTT", "noti": "GCGGCCGC",
+    "xhoi": "CTCGAG", "ndei": "CATATG", "sali": "GTCGAC", "xbai": "TCTAGA",
+    "spei": "ACTAGT", "psti": "CTGCAG", "kpni": "GGTACC", "saci": "GAGCTC",
+    "ncoi": "CCATGG", "bglii": "AGATCT", "clai": "ATCGAT", "ecorv": "GATATC",
+    "smai": "CCCGGG", "apai": "GGGCCC", "mlui": "ACGCGT", "nhei": "GCTAGC",
+}
+
+# A numeric range like "40-80", "40 to 80", "40:80", "positions 40 through 80".
+_REGION_RANGE_RE = re.compile(
+    r"(?:position|positions|pos|base|bases|bp|region|from)\s*(\d+)\s*(?:-|–|to|through|:|\.\.)\s*(\d+)",
+    flags=re.IGNORECASE,
+)
+
+# Keywords that mean "re-invoke the model on a region" (regenerate/resample/redo).
+_REGEN_KEYWORDS = (
+    "regenerate", "re-generate", "regen ", "resample", "re-sample",
+    "redo this", "re-do this", "redo the", "redesign this region",
+    "redesign the region", "regenerate the", "resynthesize", "re-synthesize",
+    "generate a new", "regenerate positions", "regenerate region",
+)
+
+
+def parse_region_regeneration(message: str) -> dict[str, Any] | None:
+    """Detect a region-regeneration request and extract its args.
+
+    Routes phrases like "regenerate positions 40-80", "redo this region",
+    "resample the promoter", "raise GC in region", "avoid EcoRI here". Returns a
+    dict of args for the ``regenerate_region`` tool, or None if not a regen ask.
+    """
+    text = message.lower()
+
+    range_match = _REGION_RANGE_RE.search(message)
+    has_range = range_match is not None
+    has_regen_kw = any(kw in text for kw in _REGEN_KEYWORDS)
+
+    # GC intent — a strong regen trigger on its own ("raise GC in this region").
+    gc_target: float | None = None
+    if re.search(r"\b(raise|increase|higher|boost|more)\b[^.]*\bgc\b", text) or "high gc" in text:
+        gc_target = 0.62
+    elif re.search(r"\b(lower|reduce|decrease|less)\b[^.]*\bgc\b", text) or "low gc" in text:
+        gc_target = 0.38
+    pct = re.search(r"gc\D{0,12}?(\d{1,3})\s*%", text)
+    if pct:
+        val = int(pct.group(1))
+        if 0 <= val <= 100:
+            gc_target = val / 100.0
+
+    # Avoid-motif intent — another strong trigger ("avoid EcoRI here").
+    avoid: list[str] = []
+    if "avoid" in text or "remove" in text or "no " in text or "without" in text:
+        for enzyme, site in _ENZYME_SITES.items():
+            if enzyme in text:
+                avoid.append(site)
+        for token in re.findall(r"\b([ATCGatcg]{4,})\b", message):
+            up = token.upper()
+            if set(up) <= set("ATCG"):
+                avoid.append(up)
+
+    has_gc = gc_target is not None
+    has_avoid = bool(avoid)
+
+    # Only treat as regeneration when there is a clear regen signal:
+    # an explicit range, a regen keyword, or a GC/avoid-in-region ask.
+    region_word = any(w in text for w in ("region", "promoter", "enhancer", "this part", "this section", "here"))
+    if not (has_regen_kw or (has_range and (region_word or has_gc or has_avoid)) or ((has_gc or has_avoid) and region_word)):
+        return None
+
+    args: dict[str, Any] = {}
+    if has_range:
+        a, b = int(range_match.group(1)), int(range_match.group(2))
+        args["start"], args["end"] = (a, b) if a <= b else (b, a)
+    if gc_target is not None:
+        args["gc_target"] = gc_target
+    if avoid:
+        # De-dup preserving order.
+        seen: set[str] = set()
+        args["avoid_motifs"] = [m for m in avoid if not (m in seen or seen.add(m))]
+
+    length_match = re.search(r"\b(longer|shorter)\b(?:\s+by\s+(\d+))?", text)
+    if length_match:
+        magnitude = int(length_match.group(2)) if length_match.group(2) else 12
+        args["length_delta"] = magnitude if length_match.group(1) == "longer" else -magnitude
+
+    return args
 
 
 def parse_explicit_edit(message: str) -> tuple[int, str] | None:
