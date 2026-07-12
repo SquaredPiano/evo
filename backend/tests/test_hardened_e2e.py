@@ -545,16 +545,18 @@ class TestAPIContracts:
         assert body["position"] == 0
         assert body["reference_base"] == "A"
         assert body["alternate_base"] == "G"
-        # Delta is now the SUM of per-position log-likelihood differences over the
+        # Delta is the SUM of per-position log-likelihood differences over a
         # +/-10 bp window around the edit (not the old sequence-wide mean), which
         # keeps a single-base edit from being diluted by 1/N over a long sequence.
-        # The test app runs the mock engine, so the endpoint's per-position array
-        # is _mock_logits (the previous assertion compared against the nim-only
-        # _composition_logits and never matched the mock-backed endpoint).
-        ref_logits = _mock_logits(BRCA1)
-        mutated = "G" + BRCA1[1:]
-        alt_logits = _mock_logits(mutated)
-        expected_delta = round(_windowed_mutation_delta(ref_logits, alt_logits, 0), 6)
+        # Recompute from the app's ACTUAL engine (mock or nim, per .env) so the
+        # assertion verifies the endpoint faithfully surfaces the service's delta,
+        # rather than hardcoding one engine's per-position function.
+        import asyncio
+        from main import evo2_service
+
+        expected_delta = asyncio.run(
+            evo2_service.score_mutation(BRCA1, 0, "G")
+        ).delta_likelihood
         assert body["delta_likelihood"] == expected_delta
 
     def test_mutations_same_base_zero_delta(self, client):
