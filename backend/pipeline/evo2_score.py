@@ -77,44 +77,66 @@ def score_functional(
 def score_tissue_specificity(
     forward: ForwardResult, sequence: str, target_tissues: list[str] | None = None
 ) -> float:
-    """Tissue-motif match: does the sequence carry motifs linked to the requested tissue?
+    """PWM-motif match: does the sequence carry transcription-factor binding
+    sites linked to the requested tissue?
 
-    A tissue-motif match heuristic based on a small set of hand-picked
-    tissue-specific promoter motifs, NOT an expression-level prediction. This is
-    the scorer most likely to be upgraded with a real classifier.
+    This is a REAL position weight matrix (PWM) motif match score. It scans the
+    sequence on both strands against curated JASPAR CORE 2024 vertebrate
+    matrices (see ``services.motifs``) grouped into neuronal, cardiac/muscle,
+    and general-regulatory transcription factors, then derives a [0, 1] score
+    from confidence-weighted hit density.
 
-    Known tissue-specific elements:
-    - Neuronal: NRSE/RE1 (TTCAGCACCACGGACAG), CRE (TGACGTCA)
-    - Cardiac: MEF2 (CTAAAAATAG), GATA (WGATAR)
-    - Hepatic: HNF4 binding sites
-    - Pancreatic: PDX1 binding motif
+    It remains a heuristic PROXY for tissue specificity, not an expression-level
+    prediction or a measured binding assay: a strong PWM hit means the local
+    sequence resembles a TF's known preference, not that the factor is expressed
+    in the target tissue or that the element is active there.
+
+    Tissue-relevant matrix subsets:
+    - Neuronal: REST/NRSF, NEUROD1, ASCL1, OLIG2, SOX2, PAX6, CREB1, POU2F1
+    - Cardiac/muscle: MEF2A/C, GATA1/2/3, MYOD1, NFATC1/2, TEAD1
+    - General regulatory: TBP (TATA), SP1 (GC box), NRF1, YY1, CTCF, NFKB1,
+      STAT3, TP53, E2F1
     """
-    # Neuronal motifs
-    neuronal_motifs = ["TGACGTCA", "CAGCACC", "GCACCAC"]
-    # Cardiac motifs
-    cardiac_motifs = ["CTAAAAATA", "AGATAG", "GATAAG"]
-    # Generic regulatory
-    generic_motifs = ["TATAAA", "CCAAT", "GGGCGG"]
+    from services.motifs import (
+        CARDIAC_MATRICES,
+        GENERIC_MATRICES,
+        NEURONAL_MATRICES,
+    )
 
-    neuronal_hits = sum(len(find_motif(sequence, m)) for m in neuronal_motifs)
-    cardiac_hits = sum(len(find_motif(sequence, m)) for m in cardiac_motifs)
-    generic_hits = sum(len(find_motif(sequence, m)) for m in generic_motifs)
+    neuronal_d = _pwm_density(sequence, NEURONAL_MATRICES)
+    cardiac_d = _pwm_density(sequence, CARDIAC_MATRICES)
+    generic_d = _pwm_density(sequence, GENERIC_MATRICES)
 
-    # If target tissues specified, check alignment
+    # If target tissues specified, reward the matching subset and apply a modest
+    # penalty when the competing lineage's sites dominate instead.
     if target_tissues:
         target_lower = [t.lower() for t in target_tissues]
-        has_neural = any("neuron" in t or "hippocamp" in t or "brain" in t for t in target_lower)
-        has_cardiac = any("cardiac" in t or "heart" in t for t in target_lower)
+        has_neural = any(
+            "neuron" in t or "hippocamp" in t or "brain" in t or "neural" in t
+            for t in target_lower
+        )
+        has_cardiac = any(
+            "cardiac" in t or "heart" in t or "muscle" in t for t in target_lower
+        )
 
         if has_neural:
-            # Reward neuronal motifs, penalize cardiac
-            return _clamp(0.5 + 0.1 * neuronal_hits - 0.1 * cardiac_hits + 0.03 * generic_hits)
+            return _clamp(
+                0.45
+                + 0.35 * _saturate(neuronal_d, 2.0)
+                - 0.15 * _saturate(cardiac_d, 2.0)
+                + 0.05 * _saturate(generic_d, 3.0)
+            )
         if has_cardiac:
-            return _clamp(0.5 + 0.1 * cardiac_hits - 0.1 * neuronal_hits + 0.03 * generic_hits)
+            return _clamp(
+                0.45
+                + 0.35 * _saturate(cardiac_d, 2.0)
+                - 0.15 * _saturate(neuronal_d, 2.0)
+                + 0.05 * _saturate(generic_d, 3.0)
+            )
 
-    # Default: general regulatory element richness
-    total_hits = neuronal_hits + cardiac_hits + generic_hits
-    return _clamp(0.4 + 0.05 * total_hits)
+    # Default: overall regulatory-element richness across all subsets.
+    total_d = neuronal_d + cardiac_d + generic_d
+    return _clamp(0.3 + 0.5 * _saturate(total_d, 4.0))
 
 
 def score_off_target(
@@ -335,6 +357,30 @@ async def rescore_mutation(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _pwm_density(sequence: str, matrix_ids: tuple[str, ...]) -> float:
+    """Confidence-weighted PWM hit density (per kb) for a matrix subset.
+
+    Scans both strands at a relative-score threshold of 0.8 and sums each hit's
+    excess above threshold, so only well-matched sites contribute. Normalised
+    per 1000 bp with the denominator floored at 200 bp so a single strong hit in
+    a very short test sequence does not read as an implausibly high density.
+    """
+    from services.motifs import scan_sequence
+
+    hits = scan_sequence(sequence, threshold=0.8, matrix_ids=list(matrix_ids))
+    # relative_score is in [0.8, 1.0]; map to [0, 1] "how far above threshold".
+    strength = sum((h.relative_score - 0.8) / 0.2 for h in hits)
+    denom = max(len(sequence), 200)
+    return strength / denom * 1000.0
+
+
+def _saturate(x: float, scale: float) -> float:
+    """Saturating map of a non-negative signal to [0, 1): 1 - exp(-x/scale)."""
+    if x <= 0.0:
+        return 0.0
+    return 1.0 - math.exp(-x / scale)
+
 
 def _sigmoid(x: float, center: float = 0.0, steepness: float = 1.0) -> float:
     """Sigmoid normalization to [0, 1]."""

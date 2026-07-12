@@ -103,7 +103,10 @@ class TestAssembly:
         seq = "TATAAA" + "G" * 40 + "GGGCGG"
         out = await assemble_region_evidence(seq, gene=None)
         assert all(e.source == "regulatory" for e in out)
-        assert any(e.identifier == "TATA_box" for e in out)
+        # PWM behavior: features are now real TF binding-site hits (name = TF),
+        # so the TATA box surfaces as a TBP (TATA-binding protein) match rather
+        # than a "TATA_box" substring label.
+        assert any(e.identifier == "TBP" for e in out)
 
     @pytest.mark.asyncio
     async def test_clinvar_merged_and_coordinate_filtered(self):

@@ -1,16 +1,20 @@
-"""Regulatory visualization payload builder for non-coding design modes."""
+"""Regulatory visualization payload builder for non-coding design modes.
+
+Regulatory features are real transcription-factor binding-site matches found by
+position weight matrix (PWM) scanning against curated JASPAR CORE 2024 vertebrate
+matrices (see ``services.motifs``), not short-substring pattern matches. Each
+feature is a PWM hit: name = TF, [start, end) = the matched window, score = the
+PWM relative score in [0, 1]. A hit means the local sequence resembles that TF's
+known binding preference, not that the factor binds or is active here.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-MOTIFS: dict[str, str] = {
-    "TATA_box": "TATAAA",
-    "CAAT_box": "CCAAT",
-    "GC_box": "GGGCGG",
-    "polyA_signal": "AATAAA",
-    "CpG": "CG",
-}
+# Relative-score threshold for reporting a binding site on the regulatory map.
+# Matches the default used by services.motifs.scan_sequence.
+_PWM_THRESHOLD = 0.8
 
 
 @dataclass(frozen=True)
@@ -28,18 +32,6 @@ class GCWindow:
     gc: float
 
 
-def _find_occurrences(sequence: str, motif: str) -> list[int]:
-    out: list[int] = []
-    start = 0
-    while True:
-        idx = sequence.find(motif, start)
-        if idx < 0:
-            break
-        out.append(idx)
-        start = idx + 1
-    return out
-
-
 def _window_gc(sequence: str, start: int, end: int) -> float:
     window = sequence[start:end]
     if not window:
@@ -52,18 +44,25 @@ def build_regulatory_map(sequence: str) -> dict[str, object]:
     seq = sequence.upper()
     features: list[RegulatoryFeature] = []
 
-    for name, motif in MOTIFS.items():
-        for start in _find_occurrences(seq, motif):
-            end = start + len(motif)
-            motif_len_bonus = min(0.2, len(motif) / 40.0)
+    # Real PWM binding-site hits on both strands. The name is the TF, the score
+    # is the PWM relative score in [0, 1]. Scanning is best-effort: if the motif
+    # backend is unavailable the map still returns GC/hotspot structure.
+    try:
+        from services.motifs import scan_sequence
+
+        for hit in scan_sequence(seq, threshold=_PWM_THRESHOLD):
             features.append(
                 RegulatoryFeature(
-                    name=name,
-                    start=start,
-                    end=end,
-                    score=round(0.55 + motif_len_bonus, 4),
+                    name=hit.tf_name,
+                    start=hit.start,
+                    end=hit.end,
+                    score=round(float(hit.relative_score), 4),
                 )
             )
+    except Exception:  # pragma: no cover - defensive; scanning is best-effort
+        features = []
+
+    features.sort(key=lambda f: (f.start, f.name))
 
     window_size = 24
     step = 6

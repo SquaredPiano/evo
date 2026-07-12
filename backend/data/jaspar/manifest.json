@@ -1,0 +1,137 @@
+{
+  "source": "JASPAR CORE 2024 vertebrates",
+  "api": "https://jaspar.elixir.no/api/v1/matrix",
+  "count": 26,
+  "matrices": [
+    {
+      "matrix_id": "MA0035.5",
+      "tf_name": "GATA1",
+      "query": "GATA1"
+    },
+    {
+      "matrix_id": "MA0036.4",
+      "tf_name": "GATA2",
+      "query": "GATA2"
+    },
+    {
+      "matrix_id": "MA0037.5",
+      "tf_name": "Gata3",
+      "query": "GATA3"
+    },
+    {
+      "matrix_id": "MA0052.5",
+      "tf_name": "MEF2A",
+      "query": "MEF2A"
+    },
+    {
+      "matrix_id": "MA0497.2",
+      "tf_name": "MEF2C",
+      "query": "MEF2C"
+    },
+    {
+      "matrix_id": "MA0624.3",
+      "tf_name": "Nfatc1",
+      "query": "NFATC1"
+    },
+    {
+      "matrix_id": "MA0152.3",
+      "tf_name": "Nfatc2",
+      "query": "NFATC2"
+    },
+    {
+      "matrix_id": "MA0138.3",
+      "tf_name": "REST",
+      "query": "REST"
+    },
+    {
+      "matrix_id": "MA0090.4",
+      "tf_name": "TEAD1",
+      "query": "TEAD1"
+    },
+    {
+      "matrix_id": "MA0499.3",
+      "tf_name": "MYOD1",
+      "query": "MYOD1"
+    },
+    {
+      "matrix_id": "MA1109.2",
+      "tf_name": "NEUROD1",
+      "query": "NEUROD1"
+    },
+    {
+      "matrix_id": "MA1100.3",
+      "tf_name": "ASCL1",
+      "query": "ASCL1"
+    },
+    {
+      "matrix_id": "MA0069.1",
+      "tf_name": "PAX6",
+      "query": "PAX6"
+    },
+    {
+      "matrix_id": "MA0143.5",
+      "tf_name": "SOX2",
+      "query": "SOX2"
+    },
+    {
+      "matrix_id": "MA0678.1",
+      "tf_name": "OLIG2",
+      "query": "OLIG2"
+    },
+    {
+      "matrix_id": "MA0785.2",
+      "tf_name": "POU2F1",
+      "query": "POU2F1"
+    },
+    {
+      "matrix_id": "MA0108.3",
+      "tf_name": "TBP",
+      "query": "TBP"
+    },
+    {
+      "matrix_id": "MA0018.5",
+      "tf_name": "CREB1",
+      "query": "CREB1"
+    },
+    {
+      "matrix_id": "MA0079.5",
+      "tf_name": "SP1",
+      "query": "SP1"
+    },
+    {
+      "matrix_id": "MA0506.3",
+      "tf_name": "Nrf1",
+      "query": "NRF1"
+    },
+    {
+      "matrix_id": "MA0095.4",
+      "tf_name": "Yy1",
+      "query": "YY1"
+    },
+    {
+      "matrix_id": "MA0139.2",
+      "tf_name": "CTCF",
+      "query": "CTCF"
+    },
+    {
+      "matrix_id": "MA0105.4",
+      "tf_name": "NFKB1",
+      "query": "NFKB1"
+    },
+    {
+      "matrix_id": "MA0144.3",
+      "tf_name": "STAT3",
+      "query": "STAT3"
+    },
+    {
+      "matrix_id": "MA0106.3",
+      "tf_name": "TP53",
+      "query": "TP53"
+    },
+    {
+      "matrix_id": "MA0024.3",
+      "tf_name": "E2F1",
+      "query": "E2F1"
+    }
+  ]
+}
