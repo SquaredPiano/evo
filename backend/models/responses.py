@@ -132,3 +132,34 @@ class LiteratureIndexResponse(BaseModel):
     embedding_backend: str
     query: str | None = None
     total_available: int = 0
+
+
+class TmResponse(BaseModel):
+    """Melting-temperature result (nearest-neighbor + Wallace cross-check)."""
+    sequence: str
+    length: int
+    gc_fraction: float
+    method: str                        # headline method: "nearest-neighbor" | "wallace"
+    tm_celsius: float                  # headline Tm
+    tm_nn_celsius: float | None        # nearest-neighbor Tm (None if not computable)
+    tm_wallace_celsius: float          # Wallace-rule Tm
+    na_molar: float
+    oligo_molar: float
+    delta_h_kcal: float | None         # NN total enthalpy, kcal/mol
+    delta_s_cal: float | None          # NN total entropy incl. salt, cal/mol/K
+    note: str
+
+
+class ProteinParamsResponse(BaseModel):
+    """Protein physicochemical descriptors (ProtParam-style, deterministic)."""
+    sequence: str
+    length: int
+    molecular_weight: float            # Da
+    theoretical_pi: float
+    aromaticity: float                 # fraction F+W+Y
+    gravy: float                       # grand average hydropathy (Kyte-Doolittle)
+    positively_charged: int            # R + K
+    negatively_charged: int            # D + E
+    composition: dict[str, float]      # residue -> fraction
+    unknown_residues: int
+    note: str

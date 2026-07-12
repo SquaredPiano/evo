@@ -556,6 +556,67 @@ export async function scanOffTargets(
 }
 
 // ---------------------------------------------------------------------------
+// Melting temperature (Tm) and protein parameters (deterministic primitives)
+// ---------------------------------------------------------------------------
+
+export interface TmResult {
+  sequence: string;
+  length: number;
+  gc_fraction: number;
+  method: string;                 // "nearest-neighbor" | "wallace"
+  tm_celsius: number;
+  tm_nn_celsius: number | null;
+  tm_wallace_celsius: number;
+  na_molar: number;
+  oligo_molar: number;
+  delta_h_kcal: number | null;
+  delta_s_cal: number | null;
+  note: string;
+}
+
+/** POST /api/tm - Nearest-neighbor (SantaLucia 1998) Tm + Wallace cross-check. */
+export async function computeTm(
+  sequence: string,
+  opts?: { naMolar?: number; oligoMolar?: number }
+): Promise<TmResult> {
+  const body: Record<string, unknown> = { sequence };
+  if (opts?.naMolar != null) body.na_molar = opts.naMolar;
+  if (opts?.oligoMolar != null) body.oligo_molar = opts.oligoMolar;
+  const res = await fetch(`${API_BASE}/api/tm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Tm calculation failed: ${res.status}`);
+  return res.json();
+}
+
+export interface ProteinParamsResult {
+  sequence: string;
+  length: number;
+  molecular_weight: number;       // Da
+  theoretical_pi: number;
+  aromaticity: number;
+  gravy: number;
+  positively_charged: number;
+  negatively_charged: number;
+  composition: Record<string, number>;
+  unknown_residues: number;
+  note: string;
+}
+
+/** POST /api/protein-params - MW, pI, aromaticity, GRAVY, composition (ProtParam-style). */
+export async function computeProteinParams(sequence: string): Promise<ProteinParamsResult> {
+  const res = await fetch(`${API_BASE}/api/protein-params`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sequence }),
+  });
+  if (!res.ok) throw new Error(`Protein parameter calculation failed: ${res.status}`);
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 // Scoring calibration (ClinVar ground-truth validation)
 // ---------------------------------------------------------------------------
 

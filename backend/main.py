@@ -28,9 +28,11 @@ from models.requests import (
     LiteratureSearchRequest,
     MutationRequest,
     OffTargetRequest,
+    ProteinParamsRequest,
     RegionEvidenceRequest,
     SessionBootstrapRequest,
     StructureRequest,
+    TmRequest,
     VariantAnnotationRequest,
 )
 from models.responses import (
@@ -47,7 +49,9 @@ from models.responses import (
     LiteratureSearchResponse,
     LiteratureHit,
     MutationResponse,
+    ProteinParamsResponse,
     StructureResponse,
+    TmResponse,
 )
 from models.sessions import SessionSnapshot
 from config import SessionStoreMode, StructureMode, settings
@@ -669,6 +673,66 @@ async def offtarget_analysis(request: OffTargetRequest) -> dict[str, object]:
             for h in result.hits
         ],
     }
+
+
+@app.post("/api/tm", response_model=TmResponse)
+async def melting_temperature(request: TmRequest) -> TmResponse:
+    """Melting temperature (Tm) for a DNA oligo/duplex.
+
+    Nearest-neighbor (SantaLucia 1998) headline value with a Wallace-rule
+    cross-check. Deterministic; no external calls.
+    """
+    from services.tm import compute_tm
+
+    try:
+        r = compute_tm(
+            request.sequence,
+            na_molar=request.na_molar,
+            oligo_molar=request.oligo_molar,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return TmResponse(
+        sequence=r.sequence,
+        length=r.length,
+        gc_fraction=r.gc_fraction,
+        method=r.method,
+        tm_celsius=r.tm_celsius,
+        tm_nn_celsius=r.tm_nn_celsius,
+        tm_wallace_celsius=r.tm_wallace_celsius,
+        na_molar=r.na_molar,
+        oligo_molar=r.oligo_molar,
+        delta_h_kcal=r.delta_h_kcal,
+        delta_s_cal=r.delta_s_cal,
+        note=r.note,
+    )
+
+
+@app.post("/api/protein-params", response_model=ProteinParamsResponse)
+async def protein_parameters(request: ProteinParamsRequest) -> ProteinParamsResponse:
+    """Protein physicochemical descriptors (MW, pI, aromaticity, GRAVY, composition).
+
+    Deterministic ProtParam-style arithmetic over hardcoded published tables.
+    """
+    from services.protein_params import compute_protein_params
+
+    try:
+        r = compute_protein_params(request.sequence)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ProteinParamsResponse(
+        sequence=r.sequence,
+        length=r.length,
+        molecular_weight=r.molecular_weight,
+        theoretical_pi=r.theoretical_pi,
+        aromaticity=r.aromaticity,
+        gravy=r.gravy,
+        positively_charged=r.positively_charged,
+        negatively_charged=r.negatively_charged,
+        composition=r.composition,
+        unknown_residues=r.unknown_residues,
+        note=r.note,
+    )
 
 
 @app.post("/api/optimize/codons")

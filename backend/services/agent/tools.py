@@ -828,28 +828,77 @@ async def tool_delete_bases(
 
 
 # Common restriction enzymes with their recognition sequences
-_RESTRICTION_ENZYMES: dict[str, str] = {
-    "EcoRI": "GAATTC",
-    "BamHI": "GGATCC",
-    "HindIII": "AAGCTT",
-    "NotI": "GCGGCCGC",
-    "XhoI": "CTCGAG",
-    "NdeI": "CATATG",
-    "SalI": "GTCGAC",
-    "XbaI": "TCTAGA",
-    "SpeI": "ACTAGT",
-    "PstI": "CTGCAG",
-    "KpnI": "GGTACC",
-    "SacI": "GAGCTC",
-    "NcoI": "CCATGG",
-    "BglII": "AGATCT",
-    "ClaI": "ATCGAT",
-    "EcoRV": "GATATC",
-    "SmaI": "CCCGGG",
-    "ApaI": "GGGCCC",
-    "MluI": "ACGCGT",
-    "NheI": "GCTAGC",
+# Built-in enzyme set. Each entry: recognition site (5'->3', IUPAC ambiguity
+# allowed) plus the top-strand 5' cut offset within the recognition site (bases
+# from the start of the site to the cut). The absolute cut coordinate is
+# match_start + cut_offset. cut_offset is None when the cut position is not
+# encoded here.
+_RESTRICTION_ENZYMES: dict[str, dict[str, object]] = {
+    "EcoRI":   {"site": "GAATTC",   "cut_offset": 1},  # G^AATTC
+    "BamHI":   {"site": "GGATCC",   "cut_offset": 1},  # G^GATCC
+    "HindIII": {"site": "AAGCTT",   "cut_offset": 1},  # A^AGCTT
+    "NotI":    {"site": "GCGGCCGC", "cut_offset": 2},  # GC^GGCCGC
+    "XhoI":    {"site": "CTCGAG",   "cut_offset": 1},  # C^TCGAG
+    "NdeI":    {"site": "CATATG",   "cut_offset": 2},  # CA^TATG
+    "SalI":    {"site": "GTCGAC",   "cut_offset": 1},  # G^TCGAC
+    "XbaI":    {"site": "TCTAGA",   "cut_offset": 1},  # T^CTAGA
+    "SpeI":    {"site": "ACTAGT",   "cut_offset": 1},  # A^CTAGT
+    "PstI":    {"site": "CTGCAG",   "cut_offset": 5},  # CTGCA^G
+    "KpnI":    {"site": "GGTACC",   "cut_offset": 5},  # GGTAC^C
+    "SacI":    {"site": "GAGCTC",   "cut_offset": 5},  # GAGCT^C
+    "NcoI":    {"site": "CCATGG",   "cut_offset": 1},  # C^CATGG
+    "BglII":   {"site": "AGATCT",   "cut_offset": 1},  # A^GATCT
+    "ClaI":    {"site": "ATCGAT",   "cut_offset": 2},  # AT^CGAT
+    "EcoRV":   {"site": "GATATC",   "cut_offset": 3},  # GAT^ATC (blunt)
+    "SmaI":    {"site": "CCCGGG",   "cut_offset": 3},  # CCC^GGG (blunt)
+    "ApaI":    {"site": "GGGCCC",   "cut_offset": 5},  # GGGCC^C
+    "MluI":    {"site": "ACGCGT",   "cut_offset": 1},  # A^CGCGT
+    "NheI":    {"site": "GCTAGC",   "cut_offset": 1},  # G^CTAGC
 }
+
+# IUPAC nucleotide ambiguity -> the set of bases it matches.
+_IUPAC_BASES: dict[str, str] = {
+    "A": "A", "C": "C", "G": "G", "T": "T",
+    "R": "AG", "Y": "CT", "S": "GC", "W": "AT", "K": "GT", "M": "AC",
+    "B": "CGT", "D": "AGT", "H": "ACT", "V": "ACG", "N": "ACGT",
+}
+
+# IUPAC complement (for reverse-complementing a degenerate recognition site).
+_IUPAC_COMPLEMENT: dict[str, str] = {
+    "A": "T", "T": "A", "C": "G", "G": "C",
+    "R": "Y", "Y": "R", "S": "S", "W": "W", "K": "M", "M": "K",
+    "B": "V", "V": "B", "D": "H", "H": "D", "N": "N",
+}
+
+
+def _iupac_revcomp(site: str) -> str:
+    """Reverse-complement an IUPAC recognition sequence."""
+    return "".join(_IUPAC_COMPLEMENT.get(b, "N") for b in reversed(site.upper()))
+
+
+def _iupac_find(seq: str, pattern: str) -> list[int]:
+    """All start positions where ``pattern`` (IUPAC) matches ``seq`` (ACGTN).
+
+    Overlapping matches are reported. Ambiguity codes in the pattern expand to
+    their base sets; a plain-ACGT pattern reduces to an exact substring scan.
+    """
+    seq = seq.upper()
+    pat = pattern.upper()
+    plen = len(pat)
+    if plen == 0 or plen > len(seq):
+        return []
+    sets = [_IUPAC_BASES.get(c, "") for c in pat]
+    positions: list[int] = []
+    for i in range(len(seq) - plen + 1):
+        window = seq[i : i + plen]
+        if all(window[j] in sets[j] for j in range(plen)):
+            positions.append(i)
+    return positions
+
+
+def _is_palindrome(site: str) -> bool:
+    """A recognition site is palindromic when it equals its reverse complement."""
+    return site.upper() == _iupac_revcomp(site)
 
 
 async def tool_regenerate_region(
@@ -991,15 +1040,19 @@ async def tool_restriction_sites(
     enzymes: list[str] | None = None,
     **_kwargs: Any,
 ) -> ToolExecution:
-    """Find restriction enzyme cut sites in the sequence."""
-    from services.translation import find_motif
+    """Find restriction enzyme cut sites in the sequence.
 
+    Scans BOTH strands, expands IUPAC ambiguity in recognition sequences (so
+    degenerate sites match), reports the actual top-strand cut coordinate when
+    the enzyme's cut offset is known, and flags cutter MULTIPLICITY (single vs
+    multi cutter) - the key cloning question.
+    """
     target_enzymes = _RESTRICTION_ENZYMES
     if enzymes:
         # Filter to requested enzymes (case-insensitive match)
         requested = {e.lower(): e for e in enzymes}
         target_enzymes = {
-            name: site for name, site in _RESTRICTION_ENZYMES.items()
+            name: data for name, data in _RESTRICTION_ENZYMES.items()
             if name.lower() in requested
         }
         if not target_enzymes:
@@ -1010,28 +1063,69 @@ async def tool_restriction_sites(
 
     seq_upper = sequence.upper()
     found: list[dict[str, object]] = []
-    for enzyme_name, recognition_site in sorted(target_enzymes.items()):
-        positions = find_motif(seq_upper, recognition_site)
-        if positions:
-            found.append({
-                "enzyme": enzyme_name,
-                "recognition_site": recognition_site,
-                "positions": positions,
-                "count": len(positions),
-            })
+    single_cutters: list[str] = []
+    for enzyme_name, data in sorted(target_enzymes.items()):
+        recognition_site = str(data["site"])
+        cut_offset = data.get("cut_offset")
+        palindrome = _is_palindrome(recognition_site)
+
+        fwd = _iupac_find(seq_upper, recognition_site)
+        if palindrome:
+            # A palindromic site reads the same on both strands - the forward
+            # scan already captures every physical cut site. Avoid double-count.
+            rev: list[int] = []
+            positions = list(fwd)
+        else:
+            # Non-palindromic: bottom-strand occurrences are distinct sites,
+            # found by scanning the forward strand for the reverse complement.
+            rev = _iupac_find(seq_upper, _iupac_revcomp(recognition_site))
+            positions = sorted(set(fwd) | set(rev))
+
+        if not positions:
+            continue
+
+        cut_positions: list[int] | None = None
+        if isinstance(cut_offset, int):
+            # Absolute top-strand cut coordinate = match start + 5' cut offset.
+            cut_positions = [p + cut_offset for p in positions]
+
+        count = len(positions)
+        is_single = count == 1
+        if is_single:
+            single_cutters.append(enzyme_name)
+
+        found.append({
+            # --- existing contract (unchanged) ---
+            "enzyme": enzyme_name,
+            "recognition_site": recognition_site,
+            "positions": positions,
+            "count": count,
+            # --- additive richer info ---
+            "forward_positions": fwd,
+            "reverse_positions": rev,
+            "palindromic": palindrome,
+            "cut_offset": cut_offset if isinstance(cut_offset, int) else None,
+            "cut_positions": cut_positions,
+            "multiplicity": "single" if is_single else "multi",
+            "is_single_cutter": is_single,
+        })
 
     if found:
         site_summary = ", ".join(
             f"{entry['enzyme']} ({entry['count']}×)" for entry in found[:5]
         )
         rest = f" (+{len(found) - 5} more)" if len(found) > 5 else ""
-        summary = f"Found {len(found)} enzyme(s): {site_summary}{rest}"
+        cutter_note = (
+            f" Single-cutter(s): {', '.join(single_cutters)}."
+            if single_cutters else " No single-cutters."
+        )
+        summary = f"Found {len(found)} enzyme(s): {site_summary}{rest}.{cutter_note}"
     else:
         summary = f"No restriction sites found ({len(target_enzymes)} enzymes checked)."
 
     note = (
-        f"Restriction site scan on candidate #{candidate_id} ({len(sequence)} bp): "
-        f"{summary}"
+        f"Restriction site scan on candidate #{candidate_id} ({len(sequence)} bp), "
+        f"both strands, IUPAC-aware: {summary}"
     )
 
     structured_result = {
@@ -1039,6 +1133,7 @@ async def tool_restriction_sites(
         "sequence_length": len(sequence),
         "enzymes_checked": len(target_enzymes),
         "total_sites": sum(int(entry["count"]) for entry in found),
+        "single_cutters": single_cutters,
         "sites": found,
     }
 
