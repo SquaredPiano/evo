@@ -2,8 +2,25 @@
 
 Owner of storage impl: **Mohammed** (Mongo + DigitalOcean). This doc defines the
 contract so persistence drops in without touching the frontend workspace or the
-reprompt/evidence features already built. Nothing here is built yet — it is the
-seam.
+reprompt/evidence features already built.
+
+> **Status — backend seam IMPLEMENTED** (MongoDB, `backend/services/mongo_store.py`).
+> The REST endpoints below (`GET /api/sessions`, `GET/PUT/DELETE /api/sessions/{id}`)
+> and a `SessionSnapshotStore` interface are live and tested; all degrade to safe
+> no-ops when `MONGODB_URI` is unset or Atlas is unreachable. **Only the frontend
+> seams (autosave / resume / New Chat) below remain to wire.** Deviations from the
+> original sketch:
+> - The `Protocol` is named **`SessionSnapshotStore`**, not `SessionStore`, to
+>   avoid colliding with the existing Redis hot-store `SessionStore` in
+>   `services/session_store.py` (a different concern).
+> - The pre-existing `GET /api/sessions/{user_id}` (Redis id listing) moved to
+>   **`GET /api/users/{user_id}/sessions`** so `/api/sessions/{id}` can serve the
+>   snapshot. Two tests were updated to the new path.
+> - Snapshot docs use the frontend's camelCase field names verbatim and are
+>   permissive (unknown fields round-trip), so the client can evolve the store
+>   shape without a backend change.
+> - A separate **design-run history** layer also lands (`design_runs` collection,
+>   `GET /api/history/{session_id}`) — additive, independent of this contract.
 
 ## Why
 Today a "session" is two disconnected things:

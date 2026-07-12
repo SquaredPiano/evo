@@ -8,6 +8,10 @@ from pydantic import BaseModel
 
 class DesignAcceptedResponse(BaseModel):
     session_id: str
+    # Durable id for this run — the client keeps it as the parent_run_id of the
+    # next reprompt so the history thread chains correctly. Present even when
+    # persistence is disabled (Mongo just won't have a matching document).
+    run_id: str
     status: str = "pipeline_started"
     ws_url: str
 

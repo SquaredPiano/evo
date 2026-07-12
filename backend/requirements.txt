@@ -10,6 +10,11 @@ httpx>=0.27.0
 redis>=5.0
 celery>=5.4
 
+# Durable persistence (MongoDB Atlas) — optional; app runs Redis-only without it.
+# AsyncMongoClient (native async) needs pymongo>=4.9; dnspython resolves mongodb+srv URIs.
+pymongo>=4.9
+dnspython>=2.6
+
 # Compute
 numpy>=1.26.0
 
