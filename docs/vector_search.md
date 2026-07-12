@@ -88,6 +88,40 @@ evidence = await attach_literature_evidence(
 )
 ```
 
+## Chat retrieval integration
+
+The design-generation pipeline's retrieval stage
+(`pipeline/orchestrator.py::_emit_retrieval`, called from
+`run_generation_pipeline`) previously populated its `"pubmed"` retrieval
+bucket only from `services.pubmed.search_literature()` — a plain keyword
+search. It now also merges in relevance-filtered `LiteratureIndex.search()`
+hits, deduplicated by pmid against whatever the keyword search already found,
+into that same `articles` list. This is the list the frontend's
+`lib/evidence.ts` already turns into `evidence_links` for chat, and
+`services/agent/graph.py`'s `RESPONDER_PROMPT` already knows how to cite —
+so semantically-retrieved, real, post-2025 papers now reach chat citations
+with no frontend or agent-prompt changes.
+
+Before merging, it calls `ensure_indexed(spec.target_gene, ...)` first (same
+as `LiteratureRagProvider.fetch()` does for the region-evidence path), so any
+gene the user designs around gets backfilled on first use, not just
+pre-warmed ones.
+
+Relevance filtering (`_filter_relevant_literature_hits` in orchestrator.py):
+an absolute floor (top hit must score ≥ 0.55) gates whether anything is cited
+at all — this catches the case a purely relative cutoff can't, where every
+hit in a batch is uniformly weak (an off-topic query still returns *a* best
+hit, just a mediocre one). Hits that clear the floor are then kept if they
+score within 70% of the top hit. Both numbers are a first pass, calibrated
+against this index's real observed local-hash-embedder scores (~0.62–0.67 for
+an on-topic BRCA1 query, ~0.49 for an off-topic one) — re-check them if
+`EMBEDDING_API_KEY` switches the index to a different embedder, since cosine
+scores from different embedders aren't on the same scale.
+
+`run_followup_pipeline` (the edit/follow-up path) has no retrieval step at
+all and so isn't part of this — only the initial design-generation retrieval
+feeds chat's evidence links.
+
 ## On-demand ingestion (any gene, not just pre-indexed ones)
 
 Previously, literature only existed in the index for genes someone had
@@ -173,3 +207,10 @@ network or Atlas required. `backend/tests/test_main_api.py`'s
 `test_literature_prewarm_does_not_block_startup` asserts the startup pre-warm
 task is genuinely non-blocking (a deliberately slow stub must not delay app
 startup past a tight wall-clock bound).
+
+`backend/tests/test_orchestrator.py` covers the chat-retrieval merge: the
+relevance filter's floor/relative-cutoff logic in isolation, real merge +
+pmid-dedup behavior against a fake `LiteratureIndex` double (asserting the
+actual call arguments, not just that a call happened), weak matches being
+excluded outright, the `result.pubmed is None` fallback path, and that
+behavior is unchanged when no `literature_index` is passed at all.
