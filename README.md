@@ -90,6 +90,24 @@ allowlist or the store stays disabled. (The former `GET /api/sessions/{user_id}`
 Redis listing moved to `GET /api/users/{user_id}/sessions` to free the
 `/api/sessions/{id}` route for snapshots.)
 
+**Semantic literature search (optional).** Research articles (PubMed) are
+embedded and searched by meaning, so a design can pull the papers most relevant
+to a gene, region, or free-text question.
+
+- `POST /api/literature/index` — fetch + embed PubMed articles for a `gene`,
+  and/or index supplied `articles` directly.
+- `POST /api/literature/search` — semantic query (optional `gene` filter),
+  returning ranked hits with real PubMed links.
+
+Two graceful-degradation axes keep it working with zero setup: **embeddings**
+are hybrid (a real embedding API when `EMBEDDING_API_KEY` is set, else a
+deterministic local feature-hashing embedder), and the **index** uses MongoDB
+Atlas `$vectorSearch` when a vector index is provisioned, else an in-memory
+cosine fallback. It also plugs into the region→evidence seam
+(`LiteratureRagProvider`) so retrieved papers appear as `source="literature"`
+evidence. Details in `docs/vector_search.md`. Implementation:
+`backend/services/embeddings.py`, `backend/services/literature_index.py`.
+
 ---
 
 ## Stack

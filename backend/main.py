@@ -24,6 +24,8 @@ from models.requests import (
     ExperimentRecordRequest,
     ExperimentRevertRequest,
     FollowupEditRequest,
+    LiteratureIndexRequest,
+    LiteratureSearchRequest,
     MutationRequest,
     OffTargetRequest,
     RegionEvidenceRequest,
@@ -41,6 +43,9 @@ from models.responses import (
     DesignAcceptedResponse,
     FollowupAcceptedResponse,
     HealthResponse,
+    LiteratureIndexResponse,
+    LiteratureSearchResponse,
+    LiteratureHit,
     MutationResponse,
     StructureResponse,
 )
@@ -70,6 +75,8 @@ from services.experiment_tracker import (
     ExperimentVersionNotFoundError,
 )
 from services.mongo_store import create_mongo_store
+from services.embeddings import create_embedder
+from services.literature_index import LiteratureIndex
 from ws.manager import WebSocketManager
 from ws.events import (
     CandidateStatusData,
@@ -129,6 +136,11 @@ copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
 # in the lifespan handler, so importing/instantiating here is always safe.
 mongo_store = create_mongo_store(settings)
 experiment_tracker = ExperimentTracker(session_store, mongo_store=mongo_store)
+# Semantic vector search over research literature. The embedder is chosen by the
+# hybrid policy (real API when a key is set, deterministic local otherwise); the
+# index uses Atlas $vectorSearch when available and falls back to in-memory.
+embedder = create_embedder(settings)
+literature_index = LiteratureIndex(embedder=embedder, mongo_store=mongo_store)
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 MAX_SESSION_CONTEXT_ENTRIES = 512
 
@@ -899,6 +911,70 @@ async def session_history(session_id: str) -> dict[str, object]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Semantic literature search (vector search)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/literature/index", response_model=LiteratureIndexResponse)
+async def literature_index_endpoint(request: LiteratureIndexRequest) -> LiteratureIndexResponse:
+    """Embed and index research literature for semantic search.
+
+    Provide ``gene`` to fetch + index PubMed articles, and/or ``articles`` to
+    index supplied records directly. At least one is required.
+    """
+    if not request.gene and not request.articles:
+        raise HTTPException(status_code=422, detail="provide 'gene' and/or 'articles' to index")
+
+    query: str | None = None
+    total_available = 0
+
+    if request.articles:
+        result = await literature_index.index_articles(
+            [a.model_dump() for a in request.articles], gene=request.gene
+        )
+        total_available = len(request.articles)
+
+    if request.gene:
+        pubmed_result, query, total_available = await literature_index.index_from_pubmed(
+            gene=request.gene,
+            therapeutic_context=request.therapeutic_context,
+            design_type=request.design_type,
+            max_results=request.max_results,
+        )
+        # When both sources were given, report the combined indexed count.
+        indexed = (result.indexed if request.articles else 0) + pubmed_result.indexed
+        persisted = pubmed_result.persisted or (request.articles and result.persisted)
+        return LiteratureIndexResponse(
+            indexed=indexed,
+            persisted=bool(persisted),
+            embedding_backend=literature_index.embedder_name,
+            query=query,
+            total_available=total_available,
+        )
+
+    return LiteratureIndexResponse(
+        indexed=result.indexed,
+        persisted=result.persisted,
+        embedding_backend=literature_index.embedder_name,
+        query=query,
+        total_available=total_available,
+    )
+
+
+@app.post("/api/literature/search", response_model=LiteratureSearchResponse)
+async def literature_search_endpoint(request: LiteratureSearchRequest) -> LiteratureSearchResponse:
+    """Semantic search over indexed literature. Empty index → empty hit list."""
+    result = await literature_index.search(request.query, k=request.k, gene=request.gene)
+    return LiteratureSearchResponse(
+        query=request.query,
+        backend=result.backend,
+        embedding_backend=literature_index.embedder_name,
+        count=len(result.hits),
+        hits=[LiteratureHit(**hit) for hit in result.hits],
+    )
+
+
 @app.get("/api/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     payload = await evo2_service.health()
@@ -921,6 +997,10 @@ async def health_detail() -> dict[str, object]:
         "structure_mode": settings.structure_mode.value,
         "llm_available": llm_service.llm_available(),
         "evo2_mode": settings.evo2_mode.value,
+        "embedding_backend": embedder.name,
+        "embedding_dim": settings.embedding_dim,
+        "vector_index": settings.vector_index_name,
+        "durable_persistence": mongo_store.ready,
     }
 
 

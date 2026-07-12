@@ -48,10 +48,20 @@ class SessionSnapshotStore(Protocol):
 class MongoStore:
     """Best-effort durable store. All ops degrade to no-ops when unavailable."""
 
-    def __init__(self, *, uri: str, db_name: str, connect_timeout_ms: int = 5000) -> None:
+    def __init__(
+        self,
+        *,
+        uri: str,
+        db_name: str,
+        connect_timeout_ms: int = 5000,
+        vector_index_name: str = "literature_vector_index",
+        vector_dim: int = 256,
+    ) -> None:
         self._uri = uri
         self._db_name = db_name
         self._connect_timeout_ms = connect_timeout_ms
+        self._vector_index_name = vector_index_name
+        self._vector_dim = vector_dim
         # Configured means a URI is present; ready means we actually connected.
         self.configured = bool(uri)
         self._ready = False
@@ -105,6 +115,50 @@ class MongoStore:
             [("session_id", ASCENDING), ("candidate_id", ASCENDING)]
         )
         await self._db.experiment_versions.create_index([("version_id", ASCENDING)], unique=True)
+        # `literature` holds embedded research articles for semantic search.
+        await self._db.literature.create_index([("gene", ASCENDING)])
+        await self._db.literature.create_index([("pmid", ASCENDING)])
+        # Best-effort Atlas Vector Search index (Atlas only; a no-op elsewhere).
+        await self._ensure_vector_index()
+
+    async def _ensure_vector_index(self) -> None:
+        """Create the literature vector-search index on Atlas if missing.
+
+        Fully best-effort and self-contained: Atlas Search index management is
+        unsupported on self-hosted / local MongoDB and on older servers, so
+        EVERY failure is swallowed here. Without this index, ``$vectorSearch``
+        simply errors at query time and the caller falls back to in-memory
+        cosine similarity — the feature still works, just not at Atlas scale.
+        """
+        try:
+            from pymongo.operations import SearchIndexModel
+
+            existing = [ix["name"] async for ix in self._db.literature.list_search_indexes()]
+            if self._vector_index_name in existing:
+                return
+            model = SearchIndexModel(
+                definition={
+                    "fields": [
+                        {
+                            "type": "vector",
+                            "path": "embedding",
+                            "numDimensions": self._vector_dim,
+                            "similarity": "cosine",
+                        },
+                        {"type": "filter", "path": "gene"},
+                    ]
+                },
+                name=self._vector_index_name,
+                type="vectorSearch",
+            )
+            await self._db.literature.create_search_index(model)
+            logger.info("Created Atlas vector index '%s' on literature.", self._vector_index_name)
+        except Exception:  # noqa: BLE001 - non-Atlas / old server / perms: fall back silently
+            logger.info(
+                "Atlas vector index unavailable — literature search will use in-memory cosine "
+                "fallback. (Provision '%s' on Atlas to enable $vectorSearch.)",
+                self._vector_index_name,
+            )
 
     async def close(self) -> None:
         if self._client is not None:
@@ -305,6 +359,79 @@ class MongoStore:
         except Exception:  # noqa: BLE001
             logger.warning("MongoStore.save_experiment_version failed for %s", version_id, exc_info=True)
 
+    # ── research literature (semantic vector search) ─────────────────────────
+    async def save_literature_docs(self, docs: list[dict[str, Any]]) -> bool:
+        """Upsert embedded literature docs (idempotent by doc_id). Best-effort."""
+        if not self._ready or not docs:
+            return False
+        try:
+            from pymongo import ReplaceOne
+
+            ops = [
+                ReplaceOne({"_id": d["doc_id"]}, {**d, "_id": d["doc_id"]}, upsert=True)
+                for d in docs
+                if d.get("doc_id")
+            ]
+            if not ops:
+                return False
+            await self._db.literature.bulk_write(ops, ordered=False)
+            return True
+        except Exception:  # noqa: BLE001
+            logger.warning("MongoStore.save_literature_docs failed (%d docs)", len(docs), exc_info=True)
+            return False
+
+    async def vector_search_literature(
+        self,
+        query_vector: list[float],
+        *,
+        k: int = 5,
+        gene: str | None = None,
+        num_candidates: int | None = None,
+    ) -> list[dict[str, Any]] | None:
+        """Atlas ``$vectorSearch`` over the literature collection.
+
+        Returns a list of matching docs (each with a ``score``), or ``None`` to
+        signal the caller to fall back to in-memory search — which is what
+        happens whenever the vector index isn't provisioned (the aggregation
+        errors) or the query otherwise fails. Never raises.
+        """
+        if not self._ready:
+            return None
+        search_stage: dict[str, Any] = {
+            "index": self._vector_index_name,
+            "path": "embedding",
+            "queryVector": query_vector,
+            "numCandidates": num_candidates or max(50, k * 10),
+            "limit": k,
+        }
+        if gene:
+            search_stage["filter"] = {"gene": gene}
+        pipeline = [
+            {"$vectorSearch": search_stage},
+            {"$set": {"score": {"$meta": "vectorSearchScore"}}},
+            {"$project": {"embedding": 0}},
+        ]
+        try:
+            cursor = await self._db.literature.aggregate(pipeline)
+            return [self._clean(doc) async for doc in cursor]
+        except Exception:  # noqa: BLE001 - no index / unsupported → in-memory fallback
+            logger.info("Atlas $vectorSearch unavailable — using in-memory literature search.")
+            return None
+
+    async def list_literature_docs(
+        self, *, gene: str | None = None, limit: int = 2000
+    ) -> list[dict[str, Any]]:
+        """Load literature docs (keeping embeddings) for the in-memory fallback."""
+        if not self._ready:
+            return []
+        query = {"gene": gene} if gene else {}
+        try:
+            cursor = self._db.literature.find(query).limit(limit)
+            return [self._clean(doc) async for doc in cursor]
+        except Exception:  # noqa: BLE001
+            logger.warning("MongoStore.list_literature_docs failed", exc_info=True)
+            return []
+
     # ── cleanup (used by the maintenance script / admin) ─────────────────────
     async def delete_session_data(self, session_id: str) -> dict[str, int]:
         if not self._ready:
@@ -336,4 +463,6 @@ def create_mongo_store(settings: Any) -> MongoStore:
         uri=settings.mongodb_uri,
         db_name=settings.mongodb_db_name,
         connect_timeout_ms=settings.mongodb_connect_timeout_ms,
+        vector_index_name=getattr(settings, "vector_index_name", "literature_vector_index"),
+        vector_dim=getattr(settings, "embedding_dim", 256),
     )

@@ -233,3 +233,35 @@ class ExperimentDiffRequest(BaseModel):
 class ExperimentRevertRequest(BaseModel):
     session_id: str
     version_id: str = Field(..., min_length=1, description="Version to revert to")
+
+
+class LiteratureArticle(BaseModel):
+    """An article to index directly (bypasses the PubMed fetch)."""
+    title: str = Field(..., min_length=1)
+    abstract: str = ""
+    pmid: str | None = None
+    year: str = ""
+    journal: str = ""
+    authors: list[str] = Field(default_factory=list)
+    url: str | None = None
+    gene: str | None = None
+
+
+class LiteratureIndexRequest(BaseModel):
+    """Index research literature for semantic search.
+
+    Provide ``gene`` to fetch + index PubMed articles, and/or ``articles`` to
+    index supplied records directly. At least one of the two is required.
+    """
+    gene: str | None = Field(None, description="Gene symbol to fetch PubMed literature for")
+    therapeutic_context: str | None = None
+    design_type: str | None = None
+    max_results: int = Field(5, ge=1, le=50, description="Max PubMed articles to fetch")
+    articles: list[LiteratureArticle] = Field(default_factory=list)
+
+
+class LiteratureSearchRequest(BaseModel):
+    """Semantic search over indexed research literature."""
+    query: str = Field(..., min_length=1, description="Natural-language query")
+    k: int = Field(5, ge=1, le=50, description="Number of results to return")
+    gene: str | None = Field(None, description="Optional gene filter")

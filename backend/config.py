@@ -83,6 +83,22 @@ class Settings(BaseSettings):
     # Fail-fast connection budget so a bad/blocked URI never hangs startup.
     mongodb_connect_timeout_ms: int = 5000
 
+    # --- Semantic vector search (research literature) ---
+    # Powers /api/literature/search. HYBRID embeddings: when an embedding API
+    # key is set, real embeddings are used; otherwise a deterministic local
+    # feature-hashing embedder keeps search working offline (lower quality).
+    # Both backends emit vectors of EMBEDDING_DIM so ONE Atlas vector index
+    # fits either — but don't mix backends in one populated index (re-index if
+    # you switch). embedding_api_key falls back to the legacy openai_api_key.
+    embedding_api_key: str = ""
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dim: int = 256
+    # Name of the MongoDB Atlas Vector Search index over the `literature`
+    # collection. Provision it on the cluster to enable $vectorSearch; without
+    # it, search transparently falls back to in-memory cosine similarity.
+    vector_index_name: str = "literature_vector_index"
+
     # Hugging Face
     hugging_face_token: str = ""
 
