@@ -6,7 +6,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { ArrowRight, Dna, Gauge, Boxes, Sparkles } from "lucide-react";
-import EvoLogo from "@/components/brand/EvoLogo";
+import ProteusLogo from "@/components/brand/ProteusLogo";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -95,7 +95,7 @@ export default function Home() {
         className="fixed top-0 w-full z-50 flex justify-between items-center px-6 md:px-10 h-16"
         style={{ background: "color-mix(in srgb, var(--surface-base) 88%, transparent)", backdropFilter: "blur(14px)", borderBottom: "1px solid var(--ghost-border)" }}
       >
-        <EvoLogo size="md" />
+        <ProteusLogo size="md" />
         <div className="flex items-center gap-2">
           <a
             href="https://github.com/evo-genomics/evo"
@@ -224,7 +224,7 @@ export default function Home() {
             className="inline-flex rounded-full items-center gap-2 px-9 py-4 text-[13px] font-medium tracking-tight transition-smooth hover:-translate-x-0.5 hover:-translate-y-0.5"
             style={{ background: "var(--honey-500)", color: "var(--ink)", border: "none", boxShadow: "0 12px 30px -10px rgba(245,158,11,0.4)" }}
           >
-            Open Evo IDE <ArrowRight size={18} />
+            Open Proteus IDE <ArrowRight size={18} />
           </Link>
         </div>
       </section>
@@ -232,7 +232,7 @@ export default function Home() {
       {/* ── FOOTER ── */}
       <footer className="py-10 px-8" style={{ background: "var(--surface-base)", borderTop: "1px solid var(--ghost-border)" }}>
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
-          <EvoLogo size="sm" />
+          <ProteusLogo size="sm" />
           <span className="label-caps">Genomic Design IDE · Powered by Evo 2 + ESMFold</span>
         </div>
       </footer>

@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -55,21 +55,21 @@ function pdbForCandidate(
 }
 
 export default function CompareView() {
-  const candidates = useEvoStore((s) => s.candidates);
-  const regions = useEvoStore((s) => s.regions);
-  const setViewMode = useEvoStore((s) => s.setViewMode);
-  const setActiveCandidateId = useEvoStore((s) => s.setActiveCandidateId);
-  const analysisResult = useEvoStore((s) => s.analysisResult);
-  const activePdb = useEvoStore((s) => s.activePdb);
-  const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
-  const theme = useEvoStore((s) => s.theme);
-  const setChatOpen = useEvoStore((s) => s.setChatOpen);
-  const setChatDraft = useEvoStore((s) => s.setChatDraft);
+  const candidates = useProteusStore((s) => s.candidates);
+  const regions = useProteusStore((s) => s.regions);
+  const setViewMode = useProteusStore((s) => s.setViewMode);
+  const setActiveCandidateId = useProteusStore((s) => s.setActiveCandidateId);
+  const analysisResult = useProteusStore((s) => s.analysisResult);
+  const activePdb = useProteusStore((s) => s.activePdb);
+  const activeCandidateId = useProteusStore((s) => s.activeCandidateId);
+  const theme = useProteusStore((s) => s.theme);
+  const setChatOpen = useProteusStore((s) => s.setChatOpen);
+  const setChatDraft = useProteusStore((s) => s.setChatDraft);
 
-  const compareLeftId = useEvoStore((s) => s.compareLeftId);
-  const compareRightId = useEvoStore((s) => s.compareRightId);
-  const setCompareLeftId = useEvoStore((s) => s.setCompareLeftId);
-  const setCompareRightId = useEvoStore((s) => s.setCompareRightId);
+  const compareLeftId = useProteusStore((s) => s.compareLeftId);
+  const compareRightId = useProteusStore((s) => s.compareRightId);
+  const setCompareLeftId = useProteusStore((s) => s.setCompareLeftId);
+  const setCompareRightId = useProteusStore((s) => s.setCompareRightId);
 
   // Effective selection with sensible fallbacks (top two ranked candidates).
   const leftId = compareLeftId ?? candidates[0]?.id ?? null;

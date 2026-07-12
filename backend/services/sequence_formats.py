@@ -205,7 +205,7 @@ def export_genbank(
     *,
     sequence: str,
     locus: str = "EVO_SEQ",
-    definition: str = "Evo-designed sequence",
+    definition: str = "Proteus-designed sequence",
     organism: str = "synthetic construct",
     features: list[dict[str, object]] | None = None,
     scores: dict[str, float] | None = None,
@@ -225,7 +225,7 @@ def export_genbank(
 
     # Scores as comment
     if scores:
-        lines.append("COMMENT     Evo candidate scores:")
+        lines.append("COMMENT     Proteus candidate scores:")
         for key, val in scores.items():
             lines.append(f"            {key}: {val:.4f}")
 

@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MutationEffect, Nucleotide } from "@/types";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
@@ -41,8 +41,8 @@ export default function MutationPanel({
 }: MutationPanelProps) {
   const [position, setPosition] = useState("");
   const [alternate, setAlternate] = useState<Nucleotide | null>(null);
-  const selectedPosition = useEvoStore((s) => s.selectedPosition);
-  const structureRefolding = useEvoStore((s) => s.structureRefolding);
+  const selectedPosition = useProteusStore((s) => s.selectedPosition);
+  const structureRefolding = useProteusStore((s) => s.structureRefolding);
 
   // Auto-fill position when user clicks a base in the sequence
   useEffect(() => {

@@ -8,7 +8,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { listExperiments, revertExperiment, type ExperimentVersion } from "@/lib/api";
 
 function formatTime(ts: number | string): string {
@@ -18,10 +18,10 @@ function formatTime(ts: number | string): string {
 }
 
 export default function ExperimentHistory() {
-  const sessionId = useEvoStore((s) => s.sessionId);
-  const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
-  const setEditedSequence = useEvoStore((s) => s.setEditedSequence);
-  const editHistory = useEvoStore((s) => s.editHistory);
+  const sessionId = useProteusStore((s) => s.sessionId);
+  const activeCandidateId = useProteusStore((s) => s.activeCandidateId);
+  const setEditedSequence = useProteusStore((s) => s.setEditedSequence);
+  const editHistory = useProteusStore((s) => s.editHistory);
 
   const [versions, setVersions] = useState<ExperimentVersion[]>([]);
   const [busy, setBusy] = useState(false);

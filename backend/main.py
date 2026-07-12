@@ -1,4 +1,4 @@
-"""FastAPI entrypoint for the Evo backend - genomic design IDE."""
+"""FastAPI entrypoint for the Proteus backend - genomic design IDE."""
 
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ async def _lifespan(app: FastAPI) -> _AsyncIterator[None]:
     await session_store.close()
     await mongo_store.close()
 
-app = FastAPI(title="Evo Backend", version="1.0.0", lifespan=_lifespan)
+app = FastAPI(title="Proteus Backend", version="1.0.0", lifespan=_lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -626,7 +626,7 @@ async def export_genbank_endpoint(request: Request) -> PlainTextResponse:
     gb_text = export_genbank(
         sequence=sequence,
         locus=body.get("locus", "EVO_SEQ"),
-        definition=body.get("definition", "Evo-designed sequence"),
+        definition=body.get("definition", "Proteus-designed sequence"),
         organism=body.get("organism", "synthetic construct"),
         features=body.get("features"),
         scores=body.get("scores"),

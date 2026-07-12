@@ -12,7 +12,7 @@ import {
   Wrench, History,
 } from "lucide-react";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { getSession } from "@/lib/api";
 import { useSessionAutosave } from "@/hooks/useSessionAutosave";
 import { useSequenceAnalysis } from "@/hooks/useSequenceAnalysis";
@@ -144,13 +144,13 @@ export default function AnalyzePage() {
 }
 
 function AnalyzePageInner() {
-  const viewMode = useEvoStore((s) => s.viewMode);
-  const rawSequence = useEvoStore((s) => s.rawSequence);
-  const bases = useEvoStore((s) => s.bases);
-  const regions = useEvoStore((s) => s.regions);
-  const scores = useEvoStore((s) => s.scores);
-  const analysisResult = useEvoStore((s) => s.analysisResult);
-  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
+  const viewMode = useProteusStore((s) => s.viewMode);
+  const rawSequence = useProteusStore((s) => s.rawSequence);
+  const bases = useProteusStore((s) => s.bases);
+  const regions = useProteusStore((s) => s.regions);
+  const scores = useProteusStore((s) => s.scores);
+  const analysisResult = useProteusStore((s) => s.analysisResult);
+  const retrievalStatuses = useProteusStore((s) => s.retrievalStatuses);
   // Gene symbol from NCBI retrieval - scopes ClinVar region-evidence in AnnotationTrack.
   const activeGene = (() => {
     const ncbi = retrievalStatuses.find((r) => r.source === "ncbi")?.result as
@@ -159,37 +159,37 @@ function AnalyzePageInner() {
     const sym = ncbi?.symbol ?? ncbi?.gene;
     return typeof sym === "string" && sym && sym !== "Gene" ? sym : null;
   })();
-  const selectedPosition = useEvoStore((s) => s.selectedPosition);
-  const activePdb = useEvoStore((s) => s.activePdb);
-  const highlightResidues = useEvoStore((s) => s.highlightResidues);
-  const mutationEffect = useEvoStore((s) => s.mutationEffect);
-  const mutationLoading = useEvoStore((s) => s.mutationLoading);
-  const editHistory = useEvoStore((s) => s.editHistory);
-  const setViewMode = useEvoStore((s) => s.setViewMode);
-  const setSelectedPosition = useEvoStore((s) => s.setSelectedPosition);
-  const setActivePdb = useEvoStore((s) => s.setActivePdb);
-  const setHighlightResidues = useEvoStore((s) => s.setHighlightResidues);
-  const addEditEntry = useEvoStore((s) => s.addEditEntry);
-  const saveVersion = useEvoStore((s) => s.saveVersion);
-  const revertVersion = useEvoStore((s) => s.revertVersion);
-  const candidates = useEvoStore((s) => s.candidates);
-  const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
-  const chatOpen = useEvoStore((s) => s.chatOpen);
-  const toggleChat = useEvoStore((s) => s.toggleChat);
-  const setChatOpen = useEvoStore((s) => s.setChatOpen);
-  const setChatDraft = useEvoStore((s) => s.setChatDraft);
-  const setComposerPrefill = useEvoStore((s) => s.setComposerPrefill);
-  const hydrateFromSnapshot = useEvoStore((s) => s.hydrateFromSnapshot);
+  const selectedPosition = useProteusStore((s) => s.selectedPosition);
+  const activePdb = useProteusStore((s) => s.activePdb);
+  const highlightResidues = useProteusStore((s) => s.highlightResidues);
+  const mutationEffect = useProteusStore((s) => s.mutationEffect);
+  const mutationLoading = useProteusStore((s) => s.mutationLoading);
+  const editHistory = useProteusStore((s) => s.editHistory);
+  const setViewMode = useProteusStore((s) => s.setViewMode);
+  const setSelectedPosition = useProteusStore((s) => s.setSelectedPosition);
+  const setActivePdb = useProteusStore((s) => s.setActivePdb);
+  const setHighlightResidues = useProteusStore((s) => s.setHighlightResidues);
+  const addEditEntry = useProteusStore((s) => s.addEditEntry);
+  const saveVersion = useProteusStore((s) => s.saveVersion);
+  const revertVersion = useProteusStore((s) => s.revertVersion);
+  const candidates = useProteusStore((s) => s.candidates);
+  const activeCandidateId = useProteusStore((s) => s.activeCandidateId);
+  const chatOpen = useProteusStore((s) => s.chatOpen);
+  const toggleChat = useProteusStore((s) => s.toggleChat);
+  const setChatOpen = useProteusStore((s) => s.setChatOpen);
+  const setChatDraft = useProteusStore((s) => s.setChatDraft);
+  const setComposerPrefill = useProteusStore((s) => s.setComposerPrefill);
+  const hydrateFromSnapshot = useProteusStore((s) => s.hydrateFromSnapshot);
   const theme = "light" as const;
 
   // Debounced, best-effort autosave of the current session to the durable store.
   useSessionAutosave();
-  const wsStatus = useEvoStore((s) => s.wsStatus);
-  const seedSource = useEvoStore((s) => s.seedSource);
-  const scoringNote = useEvoStore((s) => s.scoringNote);
-  const structureModel = useEvoStore((s) => s.structureModel);
-  const explanation = useEvoStore((s) => s.explanation);
-  const toggleStoryMode = useEvoStore((s) => s.toggleStoryMode);
+  const wsStatus = useProteusStore((s) => s.wsStatus);
+  const seedSource = useProteusStore((s) => s.seedSource);
+  const scoringNote = useProteusStore((s) => s.scoringNote);
+  const structureModel = useProteusStore((s) => s.structureModel);
+  const explanation = useProteusStore((s) => s.explanation);
+  const toggleStoryMode = useProteusStore((s) => s.toggleStoryMode);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -285,7 +285,7 @@ function AnalyzePageInner() {
 
   // Inline editor: local (optimistic) sequence edits - insert/delete/typing.
   const handleSequenceChange = useCallback((next: string) => {
-    useEvoStore.getState().setEditedSequence(next);
+    useProteusStore.getState().setEditedSequence(next);
   }, []);
   // Inline editor: single-base mutate that hits the backend instant-rescore path.
   const handleRescoreBase = useCallback((pos: number, base: string) => {
@@ -300,7 +300,7 @@ function AnalyzePageInner() {
     setRescoring(true);
     try {
       const result = await import("@/lib/api").then(m => m.analyzeSequence(rawSequence));
-      useEvoStore.getState().setAnalysisResult(result);
+      useProteusStore.getState().setAnalysisResult(result);
     } catch { /* keep current data */ }
     setRescoring(false);
   }, [rawSequence, rescoring]);

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
-HELIX_USER_AGENT = "Evo/1.0 (genomic-design-ide)"
+HELIX_USER_AGENT = "Proteus/1.0 (genomic-design-ide)"
 
 
 def eutils_params(params: dict[str, object]) -> dict[str, object]:

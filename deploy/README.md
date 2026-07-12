@@ -1,4 +1,4 @@
-# Deploying Evo on a DigitalOcean Droplet
+# Deploying Proteus on a DigitalOcean Droplet
 
 A single Droplet runs all three services (backend + Redis + frontend) with
 `docker compose`. Live engines: OpenRouter (LLM), NVIDIA Evo2 40B, ESMFold,

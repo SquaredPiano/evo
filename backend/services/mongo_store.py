@@ -314,7 +314,7 @@ class MongoStore:
     async def put_session_snapshot(self, snapshot: dict[str, Any]) -> bool:
         """Upsert a full session snapshot (debounced client autosave).
 
-        The snapshot is the frontend ``useEvoStore`` state; the client owns its
+        The snapshot is the frontend ``useProteusStore`` state; the client owns its
         shape, so we round-trip it verbatim and only derive cheap summary fields
         (candidateCount / length / updatedAt) for the listing endpoint. Returns
         True when it was actually stored (False when persistence is disabled).

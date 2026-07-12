@@ -7,7 +7,7 @@ import {
   FlaskConical, Box, Search, Pencil, Sun,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 
 /* ─── Steps ─── */
 
@@ -23,7 +23,7 @@ interface TutorialStep {
 const STEPS: TutorialStep[] = [
   {
     id: "welcome",
-    title: "Welcome to Evo",
+    title: "Welcome to Proteus",
     description: "Let's walk through the workflow. Click an example sequence below (or paste your own), then hit Analyze.",
     icon: Dna,
   },
@@ -83,8 +83,8 @@ const LS_KEY = "evo-tutorial-completed";
 
 export default function TutorialOverlay({ isOpen, onClose, onViewChange }: TutorialOverlayProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const viewMode = useEvoStore((s) => s.viewMode);
-  const analysisResult = useEvoStore((s) => s.analysisResult);
+  const viewMode = useProteusStore((s) => s.viewMode);
+  const analysisResult = useProteusStore((s) => s.analysisResult);
   const step = STEPS[currentStep];
 
   // Reset on open

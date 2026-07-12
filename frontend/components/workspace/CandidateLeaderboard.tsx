@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { ChevronRight, ArrowRight, GitCompare, SlidersHorizontal } from "lucide-react";
 import { motion } from "framer-motion";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
@@ -27,15 +27,15 @@ function verdictColor(verdict: "Strong" | "Promising" | "Weak"): string {
 }
 
 export default function CandidateLeaderboard() {
-  const candidates = useEvoStore((s) => s.candidates);
-  const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
-  const setActiveCandidateId = useEvoStore((s) => s.setActiveCandidateId);
-  const setViewMode = useEvoStore((s) => s.setViewMode);
-  const setChatOpen = useEvoStore((s) => s.setChatOpen);
-  const setChatDraft = useEvoStore((s) => s.setChatDraft);
-  const compareLeftId = useEvoStore((s) => s.compareLeftId);
-  const setCompareLeftId = useEvoStore((s) => s.setCompareLeftId);
-  const setCompareRightId = useEvoStore((s) => s.setCompareRightId);
+  const candidates = useProteusStore((s) => s.candidates);
+  const activeCandidateId = useProteusStore((s) => s.activeCandidateId);
+  const setActiveCandidateId = useProteusStore((s) => s.setActiveCandidateId);
+  const setViewMode = useProteusStore((s) => s.setViewMode);
+  const setChatOpen = useProteusStore((s) => s.setChatOpen);
+  const setChatDraft = useProteusStore((s) => s.setChatDraft);
+  const compareLeftId = useProteusStore((s) => s.compareLeftId);
+  const setCompareLeftId = useProteusStore((s) => s.setCompareLeftId);
+  const setCompareRightId = useProteusStore((s) => s.setCompareRightId);
 
   // Simple by default: the four heuristic score columns stay hidden until the
   // reader opts into depth. Local-only, resets on remount.

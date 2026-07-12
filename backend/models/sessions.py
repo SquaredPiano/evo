@@ -1,7 +1,7 @@
 """Session snapshot models - the resumable session-persistence contract.
 
 Defined by docs/session_persistence_interface.md. A snapshot is the frontend
-``useEvoStore`` state captured per session id so a session can be *resumed*
+``useProteusStore`` state captured per session id so a session can be *resumed*
 (full UI state restored) rather than re-run. The client owns the shape, so the
 snapshot model is deliberately permissive (``extra="allow"``): new store fields
 round-trip without a backend change. Only the summary fields are relied on here.

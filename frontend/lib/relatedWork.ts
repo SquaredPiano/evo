@@ -1,9 +1,9 @@
 /**
- * Related work for the Evo IDE.
+ * Related work for the Proteus IDE.
  *
  * Two clearly-separated kinds of "related work":
  *  1. FOUNDATIONAL_WORK - a small, hand-curated, ALWAYS-shown bibliography of the
- *     models and resources Evo is built on. This is NOT run-specific: it is the
+ *     models and resources Proteus is built on. This is NOT run-specific: it is the
  *     same for every design. No DOIs/PMIDs are invented - where an exact
  *     identifier is uncertain we link the canonical project/paper page instead.
  *  2. Run literature - the live NCBI / PubMed / ClinVar records fetched for the
@@ -20,7 +20,7 @@ export interface FoundationalRef {
   year: string;
   venue: string;
   url: string;
-  /** One line: why this paper/resource is load-bearing inside Evo. */
+  /** One line: why this paper/resource is load-bearing inside Proteus. */
   why: string;
 }
 

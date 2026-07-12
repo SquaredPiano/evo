@@ -1,5 +1,5 @@
 /**
- * API client for the Evo backend.
+ * API client for the Proteus backend.
  *
  * INTEGRATION GUIDE:
  * - Set NEXT_PUBLIC_API_URL env var to point to the GPU-hosted backend
@@ -625,7 +625,7 @@ export async function revertExperiment(
 // ---------------------------------------------------------------------------
 //
 // Matches docs/session_persistence_interface.md + backend/models/sessions.py.
-// A snapshot is the serialized useEvoStore state per session id, so a session
+// A snapshot is the serialized useProteusStore state per session id, so a session
 // can be *resumed* (state restored) rather than re-run. Everything degrades:
 // when the backend has no Mongo URI, list -> [], get -> 404, put/delete succeed
 // as no-ops. Callers treat network errors as "persistence unavailable".

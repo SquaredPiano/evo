@@ -3,7 +3,7 @@
 /**
  * StoryMode - a self-serve, judge-facing glossary drawer.
  *
- * Plain-English + HONEST definitions of every term Evo puts on screen. The
+ * Plain-English + HONEST definitions of every term Proteus puts on screen. The
  * stance is deliberate: we never upgrade heuristics into clinical claims. The
  * "wow" is the closed loop + live engines + honesty, not the numbers.
  *
@@ -12,7 +12,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { X, BookOpen } from "lucide-react";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 
 interface GlossaryEntry {
   term: string;
@@ -75,8 +75,8 @@ const GLOSSARY: GlossaryEntry[] = [
 ];
 
 export default function StoryMode() {
-  const open = useEvoStore((s) => s.storyModeOpen);
-  const setOpen = useEvoStore((s) => s.setStoryModeOpen);
+  const open = useProteusStore((s) => s.storyModeOpen);
+  const setOpen = useProteusStore((s) => s.setStoryModeOpen);
 
   return (
     <AnimatePresence>

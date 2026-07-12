@@ -1,22 +1,22 @@
 "use client";
 
 /**
- * Evo Brand Mark + Wordmark
+ * Proteus Brand Mark + Wordmark
  *
  * The mark is a single-stroke arc: a smooth curve from thick to thin,
  * suggesting a genomic turn and a precision measurement instrument.
  * An interface glyph, not a literal DNA double helix.
  *
  * Usage:
- *   <EvoLogo />                    - mark + wordmark (nav default)
- *   <EvoLogo variant="mark" />     - mark only (favicon, app icon, collapsed nav)
- *   <EvoLogo variant="wordmark" /> - wordmark only (footer, docs)
- *   <EvoLogo size="lg" />          - larger (hero, splash)
+ *   <ProteusLogo />                    - mark + wordmark (nav default)
+ *   <ProteusLogo variant="mark" />     - mark only (favicon, app icon, collapsed nav)
+ *   <ProteusLogo variant="wordmark" /> - wordmark only (footer, docs)
+ *   <ProteusLogo size="lg" />          - larger (hero, splash)
  *
  * Color: uses currentColor. Set the parent's text color.
  */
 
-interface EvoLogoProps {
+interface ProteusLogoProps {
   variant?: "full" | "mark" | "wordmark";
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -58,16 +58,16 @@ function Wordmark({ className }: { className?: string }) {
       className={`font-semibold tracking-[-0.03em] select-none ${className ?? ""}`}
       style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
     >
-      Evo
+      Proteus
     </span>
   );
 }
 
-export default function EvoLogo({
+export default function ProteusLogo({
   variant = "full",
   size = "md",
   className = "",
-}: EvoLogoProps) {
+}: ProteusLogoProps) {
   const s = SIZES[size];
 
   if (variant === "mark") {

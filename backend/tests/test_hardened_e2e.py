@@ -489,7 +489,7 @@ class TestGenBankHardened:
         )
         assert "functional: 0.8523" in result
         assert "combined: 0.7101" in result
-        assert "COMMENT     Evo candidate scores:" in result
+        assert "COMMENT     Proteus candidate scores:" in result
 
 
 # ---------------------------------------------------------------------------

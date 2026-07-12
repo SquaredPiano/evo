@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { normalizeSequence, isValidSequence, gcContent } from "@/lib/sequenceUtils";
 import { pushSessionEntry } from "@/lib/sessionHistory";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { validatePdbText, MAX_PDB_BYTES } from "@/lib/pdbValidate";
 import type { ImportedSequence } from "@/lib/api";
 import { ArrowRight, Upload, Dna, Sparkles, Clock, Box } from "lucide-react";
@@ -57,12 +57,12 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
   const [pdbNote, setPdbNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pdbRef = useRef<HTMLInputElement>(null);
-  const composerPrefill = useEvoStore((s) => s.composerPrefill);
-  const setComposerPrefill = useEvoStore((s) => s.setComposerPrefill);
-  const setImportSource = useEvoStore((s) => s.setImportSource);
-  const setActivePdb = useEvoStore((s) => s.setActivePdb);
-  const setStructureModel = useEvoStore((s) => s.setStructureModel);
-  const setViewMode = useEvoStore((s) => s.setViewMode);
+  const composerPrefill = useProteusStore((s) => s.composerPrefill);
+  const setComposerPrefill = useProteusStore((s) => s.setComposerPrefill);
+  const setImportSource = useProteusStore((s) => s.setImportSource);
+  const setActivePdb = useProteusStore((s) => s.setActivePdb);
+  const setStructureModel = useProteusStore((s) => s.setStructureModel);
+  const setViewMode = useProteusStore((s) => s.setViewMode);
 
   useEffect(() => {
     if (!composerPrefill) return;
@@ -310,7 +310,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                 setValidationError(null);
               }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask Evo to design…"
+              placeholder="Ask Proteus to design…"
               spellCheck={false}
               className="w-full min-h-[132px] px-5 py-4 text-[15px] resize-none outline-none leading-relaxed"
               style={{ background: "transparent", color: "var(--ink)" }}

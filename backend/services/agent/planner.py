@@ -25,7 +25,7 @@ from services.agent.parsing import (
 logger = logging.getLogger("evo")
 
 # Prompt for the OpenRouter JSON planner.
-PLANNER_JSON_PROMPT = """You are the planning brain for Evo, a genomic design IDE assistant.
+PLANNER_JSON_PROMPT = """You are the planning brain for Proteus, a genomic design IDE assistant.
 Return ONLY strict JSON with this exact shape:
 {"actions":[{"tool":"<tool_name>","args":{...}}]}
 

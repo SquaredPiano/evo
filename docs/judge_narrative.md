@@ -1,4 +1,4 @@
-# Evo - Judge Cheat-Sheet
+# Proteus - Judge Cheat-Sheet
 
 Printable one-pager. The stance across the whole product: **the wow is the closed
 loop + live engines + honesty, not the numbers.** Every score on screen is a
@@ -8,7 +8,7 @@ hypothesis or a ranking heuristic - never a clinical claim.
 
 ## 1. ~60-second spoken demo script
 
-> "Evo is a genomic design IDE. The wow here is the **closed loop with live
+> "Proteus is a genomic design IDE. The wow here is the **closed loop with live
 > engines, and radical honesty about what each number means** - not the scores
 > themselves.
 >

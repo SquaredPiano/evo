@@ -2,14 +2,14 @@
 
 import { useCallback } from "react";
 import { editBase, fetchStructure, predictMutation } from "@/lib/api";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { parseSequence } from "@/lib/sequenceUtils";
 
 export function useMutationSim() {
-  const mutationEffect = useEvoStore((s) => s.mutationEffect);
-  const mutationLoading = useEvoStore((s) => s.mutationLoading);
-  const setMutationEffect = useEvoStore((s) => s.setMutationEffect);
-  const setMutationLoading = useEvoStore((s) => s.setMutationLoading);
+  const mutationEffect = useProteusStore((s) => s.mutationEffect);
+  const mutationLoading = useProteusStore((s) => s.mutationLoading);
+  const setMutationEffect = useProteusStore((s) => s.setMutationEffect);
+  const setMutationLoading = useProteusStore((s) => s.setMutationLoading);
 
   const simulate = useCallback(
     async (sequence: string, position: number, alternateBase: string) => {
@@ -17,7 +17,7 @@ export function useMutationSim() {
       setMutationEffect(null);
 
       try {
-        const store = useEvoStore.getState();
+        const store = useProteusStore.getState();
         store.saveVersion();
 
         let effect;
@@ -66,7 +66,7 @@ export function useMutationSim() {
         // window from the backend so the heatmap (LikelihoodGraph / SequenceEditor)
         // updates immediately instead of showing stale colors.
         const mutated = sequence.slice(0, position) + alternateBase + sequence.slice(position + 1);
-        const latest = useEvoStore.getState();
+        const latest = useProteusStore.getState();
         let nextScores = latest.scores;
         if (perPositionPatch && perPositionPatch.length) {
           nextScores = [...latest.scores];
@@ -81,7 +81,7 @@ export function useMutationSim() {
           likelihoodScore: nextScores[i]?.score,
         }));
         store.setSequence(mutated);
-        useEvoStore.setState({ bases: newBases, scores: nextScores });
+        useProteusStore.setState({ bases: newBases, scores: nextScores });
 
         // Scores are in - release the blocking spinner NOW. A single-base edit
         // should feel instant instead of waiting ~10-90s on protein folding.
@@ -91,14 +91,14 @@ export function useMutationSim() {
         // visible meanwhile; only swap it in once the new fold lands.
         if (refold) {
           void (async () => {
-            useEvoStore.getState().setStructureRefolding(true);
+            useProteusStore.getState().setStructureRefolding(true);
             try {
               const pdb = await fetchStructure(0, mutated.length, mutated);
-              useEvoStore.getState().setActivePdb(pdb);
+              useProteusStore.getState().setActivePdb(pdb);
             } catch {
               // Structure prediction may fail - keep old PDB
             } finally {
-              useEvoStore.getState().setStructureRefolding(false);
+              useProteusStore.getState().setStructureRefolding(false);
             }
           })();
         }

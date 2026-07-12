@@ -1,7 +1,7 @@
-"""Unified LLM client for Evo - every model call routes through OpenRouter.
+"""Unified LLM client for Proteus - every model call routes through OpenRouter.
 
 OpenRouter exposes an OpenAI-compatible Chat Completions API, so a single
-httpx-based async client covers all of Evo's LLM needs:
+httpx-based async client covers all of Proteus's LLM needs:
 
   - `complete_text()`   - one-shot completion returning plain text
   - `stream_text()`     - token/chunk streaming via SSE (for explanations)
@@ -33,7 +33,7 @@ _ATTRIBUTION_HEADERS = {
     "HTTP-Referer": "https://github.com/evo-genomics/evo",
     # HTTP header values must be latin-1/ASCII encodable - keep this plain ASCII
     # (no em dash) or httpx raises UnicodeEncodeError when building the request.
-    "X-Title": "Evo - Genomic Design IDE",
+    "X-Title": "Proteus - Genomic Design IDE",
 }
 
 

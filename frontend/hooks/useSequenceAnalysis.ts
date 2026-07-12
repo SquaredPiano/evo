@@ -2,16 +2,16 @@
 
 import { useCallback } from "react";
 import { analyzeSequence, bootstrapSession } from "@/lib/api";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 
 export function useSequenceAnalysis() {
-  const pipelineStatus = useEvoStore((s) => s.pipelineStatus);
-  const error = useEvoStore((s) => s.error);
-  const analysisResult = useEvoStore((s) => s.analysisResult);
-  const setAnalysisResult = useEvoStore((s) => s.setAnalysisResult);
-  const setPipelineStatus = useEvoStore((s) => s.setPipelineStatus);
-  const setViewMode = useEvoStore((s) => s.setViewMode);
-  const setError = useEvoStore((s) => s.setError);
+  const pipelineStatus = useProteusStore((s) => s.pipelineStatus);
+  const error = useProteusStore((s) => s.error);
+  const analysisResult = useProteusStore((s) => s.analysisResult);
+  const setAnalysisResult = useProteusStore((s) => s.setAnalysisResult);
+  const setPipelineStatus = useProteusStore((s) => s.setPipelineStatus);
+  const setViewMode = useProteusStore((s) => s.setViewMode);
+  const setError = useProteusStore((s) => s.setError);
 
   const analyze = useCallback(
     async (sequence: string) => {
@@ -26,7 +26,7 @@ export function useSequenceAnalysis() {
         // Bind the analyzed sequence to a backend session so the agent edits the right DNA.
         try {
           const boot = await bootstrapSession(sequence);
-          useEvoStore.getState().setSessionId(boot.session_id);
+          useProteusStore.getState().setSessionId(boot.session_id);
         } catch {
           // Agent can still bootstrap via sequence on first chat message.
         }
@@ -42,7 +42,7 @@ export function useSequenceAnalysis() {
   );
 
   const reset = useCallback(() => {
-    useEvoStore.getState().reset();
+    useProteusStore.getState().reset();
   }, []);
 
   return {

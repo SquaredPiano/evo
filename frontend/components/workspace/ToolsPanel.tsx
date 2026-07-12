@@ -8,7 +8,7 @@
  */
 
 import { useState } from "react";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
 import {
   scanOffTargets,
@@ -56,10 +56,10 @@ function Label({ children }: { children: React.ReactNode }) {
 }
 
 export default function ToolsPanel() {
-  const rawSequence = useEvoStore((s) => s.rawSequence);
-  const setEditedSequence = useEvoStore((s) => s.setEditedSequence);
-  const candidates = useEvoStore((s) => s.candidates);
-  const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
+  const rawSequence = useProteusStore((s) => s.rawSequence);
+  const setEditedSequence = useProteusStore((s) => s.setEditedSequence);
+  const candidates = useProteusStore((s) => s.candidates);
+  const activeCandidateId = useProteusStore((s) => s.activeCandidateId);
 
   const [tab, setTab] = useState<Tab>("offtarget");
   const [busy, setBusy] = useState(false);

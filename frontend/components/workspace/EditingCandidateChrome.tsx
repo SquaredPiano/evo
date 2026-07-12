@@ -14,7 +14,7 @@
  */
 
 import { Pencil } from "lucide-react";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { getCandidateDisplay } from "@/lib/candidateDisplay";
 
 interface Props {
@@ -23,10 +23,10 @@ interface Props {
 }
 
 export default function EditingCandidateChrome({ variant = "pill", className }: Props) {
-  const candidates = useEvoStore((s) => s.candidates);
-  const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
-  const rawSequence = useEvoStore((s) => s.rawSequence);
-  const editCount = useEvoStore((s) => s.editHistory.length);
+  const candidates = useProteusStore((s) => s.candidates);
+  const activeCandidateId = useProteusStore((s) => s.activeCandidateId);
+  const rawSequence = useProteusStore((s) => s.rawSequence);
+  const editCount = useProteusStore((s) => s.editHistory.length);
 
   const display = getCandidateDisplay(candidates, activeCandidateId);
   if (!display.hasCandidate) return null;

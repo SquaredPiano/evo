@@ -153,7 +153,7 @@ function WorkspaceSidebar({
           </span>
           <div className="min-w-0">
             <span className="text-[14px] font-semibold tracking-tight block" style={{ color: "var(--ink)" }}>
-              Evo
+              Proteus
             </span>
             <span className="text-[10px] block" style={{ color: "var(--text-faint)" }}>
               Workspace

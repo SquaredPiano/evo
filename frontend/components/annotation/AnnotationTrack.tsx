@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { RegionEvidence, SequenceRegion } from "@/types";
 import RegionHighlight from "@/components/sequence/RegionHighlight";
 import RegionEvidenceCard from "@/components/annotation/RegionEvidenceCard";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 
 interface AnnotationTrackProps {
   regions: SequenceRegion[];
@@ -26,14 +26,14 @@ export default function AnnotationTrack({
   evidence,
   gene = null,
 }: AnnotationTrackProps) {
-  const rawSequence = useEvoStore((s) => s.rawSequence);
-  const storeEvidence = useEvoStore((s) => s.regionEvidence);
-  const loadRegionEvidence = useEvoStore((s) => s.loadRegionEvidence);
-  const selectedRegion = useEvoStore((s) => s.selectedRegion);
-  const setSelectedRegion = useEvoStore((s) => s.setSelectedRegion);
-  const setSelectedPosition = useEvoStore((s) => s.setSelectedPosition);
-  const setChatOpen = useEvoStore((s) => s.setChatOpen);
-  const setChatDraft = useEvoStore((s) => s.setChatDraft);
+  const rawSequence = useProteusStore((s) => s.rawSequence);
+  const storeEvidence = useProteusStore((s) => s.regionEvidence);
+  const loadRegionEvidence = useProteusStore((s) => s.loadRegionEvidence);
+  const selectedRegion = useProteusStore((s) => s.selectedRegion);
+  const setSelectedRegion = useProteusStore((s) => s.setSelectedRegion);
+  const setSelectedPosition = useProteusStore((s) => s.setSelectedPosition);
+  const setChatOpen = useProteusStore((s) => s.setChatOpen);
+  const setChatDraft = useProteusStore((s) => s.setChatDraft);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   // Clicking a region bar SELECTS that range for a region-aware Helio ask, then

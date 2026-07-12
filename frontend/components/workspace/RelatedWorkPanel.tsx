@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * RelatedWorkPanel - two clearly-separated zones so a judge can tell what Evo is
+ * RelatedWorkPanel - two clearly-separated zones so a judge can tell what Proteus is
  * built on from what it fetched for THIS run:
  *
  *   Zone 1 "Foundational"  - static, always shown (badge: not run-specific).
@@ -11,7 +11,7 @@
  * Honesty is the point: context literature never rewrites the generated DNA.
  */
 
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { buildEvidenceLinks } from "@/lib/evidence";
 import { FOUNDATIONAL_WORK, partitionRunLiterature } from "@/lib/relatedWork";
 
@@ -60,7 +60,7 @@ function LinkRow({ label, sublabel, url, source }: { label: string; sublabel?: s
 }
 
 export default function RelatedWorkPanel({ compact = false }: { compact?: boolean }) {
-  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
+  const retrievalStatuses = useProteusStore((s) => s.retrievalStatuses);
 
   const evidenceMap = Object.fromEntries(
     retrievalStatuses.filter((r) => r.status === "complete" && r.result).map((r) => [r.source, r.result]),
@@ -79,7 +79,7 @@ export default function RelatedWorkPanel({ compact = false }: { compact?: boolea
           <Badge>not run-specific</Badge>
         </div>
         <p className="text-[11px] mb-3 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-          The models and resources Evo is built on. Same for every design.
+          The models and resources Proteus is built on. Same for every design.
         </p>
         <ul className={compact ? "space-y-2.5" : "grid sm:grid-cols-2 gap-3"}>
           {FOUNDATIONAL_WORK.map((ref) => (

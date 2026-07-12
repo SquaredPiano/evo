@@ -1,11 +1,11 @@
-# Evo - a genomic design IDE
+# Proteus - a genomic design IDE
 
-**Cursor for DNA.** Describe a design goal in plain English, and Evo generates
+**Cursor for DNA.** Describe a design goal in plain English, and Proteus generates
 candidate DNA sequences with a genomic foundation model, scores them, folds the
 top ones into 3D protein structures, and hands you a real inline editor to
 tweak bases and re-score in real time.
 
-Evo is a v2 rebuild of an earlier hackathon project (Helix). The goal of this
+Proteus is a v2 rebuild of an earlier hackathon project (Helix). The goal of this
 revision was not more features - it was to make the existing ones **honest and
 usable**: a real inline editor, every backend capability reachable from the UI,
 a single well-behaved LLM gateway, and an interface that never claims an engine
@@ -15,7 +15,7 @@ is live when it is actually simulated.
 
 ## What's real vs. simulated
 
-Evo runs fully offline in a deterministic **mock** mode with zero API keys, and
+Proteus runs fully offline in a deterministic **mock** mode with zero API keys, and
 each subsystem independently upgrades to a live engine when you provide a key.
 The app tells you which mode is active - the engine pill in the workspace
 sidebar reflects the backend's real state, and the intake screen lists engine
@@ -75,7 +75,7 @@ config change (`LLM_MODEL`).
 **Durable persistence (optional).** Redis stays the hot store for a live run
 (streaming, TTL'd). Set `MONGODB_URI` and MongoDB adds two durable layers:
 
-- **Resumable session snapshots** - the full `useEvoStore` state per session
+- **Resumable session snapshots** - the full `useProteusStore` state per session
   (candidates, chat, scores, structure, edits…), so a session is *resumed*, not
   re-run. `GET /api/sessions` (summaries), `GET/PUT/DELETE /api/sessions/{id}`.
   This implements the contract in `docs/session_persistence_interface.md`.

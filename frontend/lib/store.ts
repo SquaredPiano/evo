@@ -67,7 +67,7 @@ interface ImportSource {
   featureCount?: number;
 }
 
-interface EvoState {
+interface ProteusState {
   viewMode: ViewMode;
   pipelineStatus: PipelineStatus;
   pipelineStage: string;
@@ -254,7 +254,7 @@ const initialState = {
   regionEvidenceKey: null as string | null,
 };
 
-export const useEvoStore = create<EvoState>((set, get) => ({
+export const useProteusStore = create<ProteusState>((set, get) => ({
   ...initialState,
 
   toggleTheme: () => {

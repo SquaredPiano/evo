@@ -15,7 +15,7 @@ from ws.manager import WebSocketManager
 
 logger = logging.getLogger("evo")
 
-SYSTEM_PROMPT = """You are a genomic design analyst for Evo, a genomic design IDE. \
+SYSTEM_PROMPT = """You are a genomic design analyst for Proteus, a genomic design IDE. \
 Given a candidate DNA sequence, its scoring results, and the researcher's design goal, \
 write a concise mechanistic explanation (3-5 sentences) covering:
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { Check, Loader2, AlertCircle } from "lucide-react";
 
 const STAGES = [
@@ -14,16 +14,16 @@ const STAGES = [
 ];
 
 export default function PipelineStatus() {
-  const pipelineStatus = useEvoStore((s) => s.pipelineStatus);
-  const completedStages = useEvoStore((s) => s.completedStages);
-  const pipelineStage = useEvoStore((s) => s.pipelineStage);
-  const sessionId = useEvoStore((s) => s.sessionId);
-  const generationTokenCount = useEvoStore((s) => s.generationTokenCount);
-  const generatingSequence = useEvoStore((s) => s.generatingSequence);
-  const candidates = useEvoStore((s) => s.candidates);
-  const seedSource = useEvoStore((s) => s.seedSource);
-  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
-  const error = useEvoStore((s) => s.error);
+  const pipelineStatus = useProteusStore((s) => s.pipelineStatus);
+  const completedStages = useProteusStore((s) => s.completedStages);
+  const pipelineStage = useProteusStore((s) => s.pipelineStage);
+  const sessionId = useProteusStore((s) => s.sessionId);
+  const generationTokenCount = useProteusStore((s) => s.generationTokenCount);
+  const generatingSequence = useProteusStore((s) => s.generatingSequence);
+  const candidates = useProteusStore((s) => s.candidates);
+  const seedSource = useProteusStore((s) => s.seedSource);
+  const retrievalStatuses = useProteusStore((s) => s.retrievalStatuses);
+  const error = useProteusStore((s) => s.error);
 
   if (pipelineStatus !== "analyzing") return null;
 

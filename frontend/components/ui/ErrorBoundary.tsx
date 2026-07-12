@@ -24,7 +24,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("[Evo ErrorBoundary]", error, info.componentStack);
+    console.error("[Proteus ErrorBoundary]", error, info.componentStack);
   }
 
   handleReset = () => {

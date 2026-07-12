@@ -34,7 +34,7 @@ listable on a home/summary screen, resumable instead of re-runnable, and a real
 "New Chat".
 
 ## What one session must persist (the resumable snapshot)
-Source of truth is `useEvoStore` (`frontend/lib/store.ts`). A session record should
+Source of truth is `useProteusStore` (`frontend/lib/store.ts`). A session record should
 capture, per session id:
 
 | Field | Type | Notes |

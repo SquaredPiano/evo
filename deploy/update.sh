@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Evo auto-deploy - pull the latest `main` and rebuild ONLY when it changed.
+# Proteus auto-deploy - pull the latest `main` and rebuild ONLY when it changed.
 #
 # Safe to run on a timer (cron/systemd). Properties:
 #   * No change  -> exits fast, no rebuild, no downtime.

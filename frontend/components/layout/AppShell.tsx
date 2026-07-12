@@ -25,7 +25,7 @@ export default function AppShell({ children, sequenceName }: AppShellProps) {
             className="text-[12px] font-bold tracking-[-0.04em] uppercase transition-opacity hover:opacity-80"
             style={{ color: "var(--text-primary)" }}
           >
-            Evo
+            Proteus
           </Link>
 
           {sequenceName && (

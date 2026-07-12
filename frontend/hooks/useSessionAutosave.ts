@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { putSession } from "@/lib/api";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 
 /**
  * Debounced, best-effort autosave of the current session snapshot.
@@ -18,10 +18,10 @@ import { useEvoStore } from "@/lib/store";
  * harmless; a network failure is swallowed.
  */
 export function useSessionAutosave(debounceMs = 1500): void {
-  const sessionId = useEvoStore((s) => s.sessionId);
-  const rawSequence = useEvoStore((s) => s.rawSequence);
-  const candidateCount = useEvoStore((s) => s.candidates.length);
-  const chatCount = useEvoStore((s) => s.chatMessages.length);
+  const sessionId = useProteusStore((s) => s.sessionId);
+  const rawSequence = useProteusStore((s) => s.rawSequence);
+  const candidateCount = useProteusStore((s) => s.candidates.length);
+  const chatCount = useProteusStore((s) => s.chatMessages.length);
 
   const lastSavedKey = useRef<string | null>(null);
 
@@ -35,7 +35,7 @@ export function useSessionAutosave(debounceMs = 1500): void {
     if (key === lastSavedKey.current) return;
 
     const timer = setTimeout(() => {
-      const snapshot = useEvoStore.getState().snapshotFromStore();
+      const snapshot = useProteusStore.getState().snapshotFromStore();
       if (!snapshot.sessionId) return;
       putSession(snapshot)
         .then(() => {

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from "react";
 import { submitDesign } from "@/lib/api";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { parseSequence } from "@/lib/sequenceUtils";
 import type { LikelihoodScore } from "@/types";
 
@@ -26,30 +26,30 @@ export function useDesignPipeline() {
   const candidateSequenceRef = useRef<Record<number, string>>({});
   const candidateScoresRef = useRef<Record<number, LikelihoodScore[]>>({});
 
-  const setPipelineStatus = useEvoStore((s) => s.setPipelineStatus);
-  const setPipelineStage = useEvoStore((s) => s.setPipelineStage);
-  const setViewMode = useEvoStore((s) => s.setViewMode);
-  const setSessionId = useEvoStore((s) => s.setSessionId);
-  const setError = useEvoStore((s) => s.setError);
-  const addCompletedStage = useEvoStore((s) => s.addCompletedStage);
-  const appendGeneratingToken = useEvoStore((s) => s.appendGeneratingToken);
-  const appendExplanation = useEvoStore((s) => s.appendExplanation);
-  const updateRetrievalStatus = useEvoStore((s) => s.updateRetrievalStatus);
-  const setRetrievalStatuses = useEvoStore((s) => s.setRetrievalStatuses);
-  const setActivePdb = useEvoStore((s) => s.setActivePdb);
-  const setAnalysisResult = useEvoStore((s) => s.setAnalysisResult);
+  const setPipelineStatus = useProteusStore((s) => s.setPipelineStatus);
+  const setPipelineStage = useProteusStore((s) => s.setPipelineStage);
+  const setViewMode = useProteusStore((s) => s.setViewMode);
+  const setSessionId = useProteusStore((s) => s.setSessionId);
+  const setError = useProteusStore((s) => s.setError);
+  const addCompletedStage = useProteusStore((s) => s.addCompletedStage);
+  const appendGeneratingToken = useProteusStore((s) => s.appendGeneratingToken);
+  const appendExplanation = useProteusStore((s) => s.appendExplanation);
+  const updateRetrievalStatus = useProteusStore((s) => s.updateRetrievalStatus);
+  const setRetrievalStatuses = useProteusStore((s) => s.setRetrievalStatuses);
+  const setActivePdb = useProteusStore((s) => s.setActivePdb);
+  const setAnalysisResult = useProteusStore((s) => s.setAnalysisResult);
 
   const startDesign = useCallback(
     async (goal: string) => {
       // Reset streaming state
-      const store = useEvoStore.getState();
+      const store = useProteusStore.getState();
       store.reset();
 
       setPipelineStatus("analyzing");
       setViewMode("pipeline");
       setPipelineStage("intent");
-      useEvoStore.getState().setSeedSource(null);
-      useEvoStore.getState().setScoringNote(
+      useProteusStore.getState().setSeedSource(null);
+      useProteusStore.getState().setScoringNote(
         "Generation is real Evo 2, and generated candidates carry the model's own confidence (sampled_probs). The 4D scores are composition and motif signals, not clinical assays. ClinVar and PubMed are context cards; they do not rewrite DNA."
       );
       setRetrievalStatuses([
@@ -67,18 +67,18 @@ export function useDesignPipeline() {
           numCandidates: 4,
           runProfile: "live",
           truthMode: "real_only",
-          seedSequence: useEvoStore.getState().rawSequence || undefined,
+          seedSequence: useProteusStore.getState().rawSequence || undefined,
           targetLength: 480,
         });
         setSessionId(sessionId);
 
         // Step 2: Open WebSocket
-        useEvoStore.getState().setWsStatus("connecting");
+        useProteusStore.getState().setWsStatus("connecting");
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          useEvoStore.getState().setWsStatus("connected");
+          useProteusStore.getState().setWsStatus("connected");
         };
 
         ws.onmessage = (event) => {
@@ -94,9 +94,9 @@ export function useDesignPipeline() {
         };
 
         ws.onerror = () => {
-          useEvoStore.getState().setWsStatus("disconnected");
-          useEvoStore.getState().setPipelineStatus("error");
-          useEvoStore.getState().setViewMode("input");
+          useProteusStore.getState().setWsStatus("disconnected");
+          useProteusStore.getState().setPipelineStatus("error");
+          useProteusStore.getState().setViewMode("input");
           setError("WebSocket connection error");
           try {
             ws.close();
@@ -106,14 +106,14 @@ export function useDesignPipeline() {
         };
 
         ws.onclose = () => {
-          const store = useEvoStore.getState();
+          const store = useProteusStore.getState();
           if (!pipelineCompletedRef.current && store.pipelineStatus === "analyzing") {
             store.setPipelineStatus("error");
             store.setViewMode("input");
             store.setError("Pipeline stream ended unexpectedly. Please retry.");
           }
           wsRef.current = null;
-          useEvoStore.getState().setWsStatus("disconnected");
+          useProteusStore.getState().setWsStatus("disconnected");
         };
       } catch {
         setPipelineStatus("error");
@@ -133,7 +133,7 @@ export function useDesignPipeline() {
 
   // ── Event dispatcher ──
   function handleEvent(msg: { event: string; data: Record<string, unknown> }) {
-    const store = useEvoStore.getState();
+    const store = useProteusStore.getState();
 
     switch (msg.event) {
       case "intent_parsed": {
@@ -352,7 +352,7 @@ export function useDesignPipeline() {
             ...base,
             likelihoodScore: perPosition[i]?.score,
           }));
-          useEvoStore.setState({ scores: perPosition, bases, rawSequence: nextCandidate.sequence });
+          useProteusStore.setState({ scores: perPosition, bases, rawSequence: nextCandidate.sequence });
         }
         break;
       }

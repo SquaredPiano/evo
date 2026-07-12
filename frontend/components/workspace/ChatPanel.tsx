@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { useEvoStore } from "@/lib/store";
+import { useProteusStore } from "@/lib/store";
 import { X, Send, Sparkles, Check, Loader2, AlertCircle, RefreshCw, PenLine, MapPin } from "lucide-react";
 import { buildEvidenceLinks } from "@/lib/evidence";
 import { getCandidateDisplay } from "@/lib/candidateDisplay";
@@ -87,23 +87,23 @@ interface GuidedPrompt {
 }
 
 export default function ChatPanel() {
-  const chatMessages = useEvoStore((s) => s.chatMessages);
-  const addChatMessage = useEvoStore((s) => s.addChatMessage);
-  const clearChat = useEvoStore((s) => s.clearChat);
-  const toggleChat = useEvoStore((s) => s.toggleChat);
-  const rawSequence = useEvoStore((s) => s.rawSequence);
+  const chatMessages = useProteusStore((s) => s.chatMessages);
+  const addChatMessage = useProteusStore((s) => s.addChatMessage);
+  const clearChat = useProteusStore((s) => s.clearChat);
+  const toggleChat = useProteusStore((s) => s.toggleChat);
+  const rawSequence = useProteusStore((s) => s.rawSequence);
   const { startDesign } = useDesignPipeline();
-  const viewMode = useEvoStore((s) => s.viewMode);
-  const candidates = useEvoStore((s) => s.candidates);
-  const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
-  const selectedPosition = useEvoStore((s) => s.selectedPosition);
-  const selectedRegion = useEvoStore((s) => s.selectedRegion);
-  const editHistoryLength = useEvoStore((s) => s.editHistory.length);
-  const chatDraft = useEvoStore((s) => s.chatDraft);
-  const setChatDraft = useEvoStore((s) => s.setChatDraft);
-  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
-  const seedSource = useEvoStore((s) => s.seedSource);
-  const scoringNote = useEvoStore((s) => s.scoringNote);
+  const viewMode = useProteusStore((s) => s.viewMode);
+  const candidates = useProteusStore((s) => s.candidates);
+  const activeCandidateId = useProteusStore((s) => s.activeCandidateId);
+  const selectedPosition = useProteusStore((s) => s.selectedPosition);
+  const selectedRegion = useProteusStore((s) => s.selectedRegion);
+  const editHistoryLength = useProteusStore((s) => s.editHistory.length);
+  const chatDraft = useProteusStore((s) => s.chatDraft);
+  const setChatDraft = useProteusStore((s) => s.setChatDraft);
+  const retrievalStatuses = useProteusStore((s) => s.retrievalStatuses);
+  const seedSource = useProteusStore((s) => s.seedSource);
+  const scoringNote = useProteusStore((s) => s.scoringNote);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [agentPhase, setAgentPhase] = useState<"idle" | "thinking" | "executing" | "reflecting">("idle");
@@ -290,7 +290,7 @@ export default function ChatPanel() {
 
   /** Apply candidate_update from the backend agent to the store */
   const applyAgentUpdate = async (update: Record<string, any>) => {
-    const s = useEvoStore.getState();
+    const s = useProteusStore.getState();
     const candidateId = update.candidate_id ?? s.activeCandidateId ?? 0;
 
     // TRUE REGENERATION: capture the region diff BEFORE the sequence is replaced.
@@ -309,7 +309,7 @@ export default function ChatPanel() {
           ...b,
           likelihoodScore: update.per_position_scores?.[i]?.score ?? s.scores[i]?.score,
         }));
-        useEvoStore.setState({
+        useProteusStore.setState({
           bases: newBases,
           scores: Array.isArray(update.per_position_scores)
             ? update.per_position_scores.map((row: any) => ({
@@ -348,17 +348,17 @@ export default function ChatPanel() {
         candidates.push(nextCandidate);
       }
       candidates.sort((a, b) => b.overall - a.overall);
-      useEvoStore.getState().setCandidates(candidates);
-      useEvoStore.getState().setActiveCandidateId(candidateId);
+      useProteusStore.getState().setCandidates(candidates);
+      useProteusStore.getState().setActiveCandidateId(candidateId);
     }
     if (update.pdb_data && typeof update.pdb_data === "string" && update.pdb_data.length > 10) {
-      useEvoStore.getState().setActivePdb(update.pdb_data);
+      useProteusStore.getState().setActivePdb(update.pdb_data);
     } else if (update.sequence) {
       // Backend didn't return PDB - trigger a refold on the new sequence
       try {
         const { fetchStructure } = await import("@/lib/api");
         const pdb = await fetchStructure(0, update.sequence.length, update.sequence);
-        useEvoStore.getState().setActivePdb(pdb);
+        useProteusStore.getState().setActivePdb(pdb);
       } catch { /* structure optional */ }
     }
     if (update.mutation && typeof update.mutation.position === "number") {
@@ -411,7 +411,7 @@ export default function ChatPanel() {
     setToolResults([]);
     setIterations(0);
 
-    const s = useEvoStore.getState();
+    const s = useProteusStore.getState();
     const lc = msg.toLowerCase();
 
     // Ensure a backend session exists before any agent/tool work.
@@ -424,7 +424,7 @@ export default function ChatPanel() {
           candidateId: s.activeCandidateId ?? 0,
         });
         sessionId = boot.session_id;
-        useEvoStore.getState().setSessionId(sessionId);
+        useProteusStore.getState().setSessionId(sessionId);
       } catch {
         /* agent endpoint can still bootstrap via sequence body */
       }
@@ -465,7 +465,7 @@ export default function ChatPanel() {
         try {
           const { analyzeSequence } = await import("@/lib/api");
           const result = await analyzeSequence(s.rawSequence);
-          useEvoStore.getState().setAnalysisResult(result);
+          useProteusStore.getState().setAnalysisResult(result);
           setActiveToolCalls([{ tool: "analyzeSequence", status: "ok", summary: `Rescored ${result.perPositionScores.length} positions` }]);
           addChatMessage({ role: "assistant", content: `Rescored ${result.perPositionScores.length} positions. ${result.predictedProteins.length} protein(s) predicted. Check the Overview for updated results.` });
         } catch {
@@ -488,7 +488,7 @@ export default function ChatPanel() {
         try {
           const { fetchStructure } = await import("@/lib/api");
           const pdb = await fetchStructure(0, s.rawSequence.length, s.rawSequence);
-          useEvoStore.getState().setActivePdb(pdb);
+          useProteusStore.getState().setActivePdb(pdb);
           setActiveToolCalls([{ tool: "fetchStructure", status: "ok", summary: "ESMFold structure ready" }]);
           addChatMessage({ role: "assistant", content: "Structure re-folded with ESMFold. Open the Structure view to inspect it - drag to orbit, scroll to zoom, click a residue only after a short tap (drags won't select)." });
         } catch {
@@ -522,7 +522,7 @@ export default function ChatPanel() {
     // ── BACKEND AGENT: send everything else to the agentic copilot ──
     try {
       setAgentPhase("thinking");
-      const historyPayload = useEvoStore
+      const historyPayload = useProteusStore
         .getState()
         .chatMessages
         .slice(-64)
@@ -614,7 +614,7 @@ export default function ChatPanel() {
 
       if (data.candidate_update) {
         setAgentPhase("reflecting");
-        useEvoStore.getState().saveVersion();
+        useProteusStore.getState().saveVersion();
         await applyAgentUpdate(data.candidate_update);
       }
 
@@ -676,7 +676,7 @@ export default function ChatPanel() {
     <div className="w-full sm:w-[380px] shrink-0 flex flex-col h-full"
       style={{ background: "var(--surface-raised)", borderLeft: "1px solid var(--ghost-border)" }}
       role="complementary"
-      aria-label="Evo copilot">
+      aria-label="Proteus copilot">
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 h-16 shrink-0"
