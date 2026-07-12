@@ -17,7 +17,7 @@ from services.translation import find_orfs, translate
 logger = logging.getLogger(__name__)
 
 ESMFOLD_API_URL = "https://api.esmatlas.com/foldSequence/v1/pdb/"
-MIN_PROTEIN_LENGTH = 40
+MIN_PROTEIN_LENGTH = 16
 MAX_RETRIES = 2
 PDB_RECORD_PREFIXES = {
     "HEADER",
@@ -115,7 +115,7 @@ def _select_protein_for_folding(dna_sequence: str) -> str:
     if len(cleaned_dna) < 9:
         return ""
 
-    orfs = find_orfs(cleaned_dna, min_length=45)
+    orfs = find_orfs(cleaned_dna, min_length=24)
     if orfs:
         best_orf = max(orfs, key=lambda o: len(o.protein))
         if best_orf.protein:

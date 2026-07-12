@@ -22,16 +22,16 @@ interface InlineStructureCardProps {
   onResidueHover?: (residueSeq: number | null) => void;
 }
 
-/** Shared dark stage used for the loading and skeleton states. */
+/** Shared light stage used for the loading and skeleton states. */
 function ViewerStage({ label, spinning = false }: { label: string; spinning?: boolean }) {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ background: "#0A0A0A" }}>
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ background: "var(--surface-base)" }}>
       {spinning ? (
-        <Loader2 size={22} className="animate-spin" style={{ color: "var(--honey-400)" }} aria-hidden="true" />
+        <Loader2 size={22} className="animate-spin" style={{ color: "var(--accent)" }} aria-hidden="true" />
       ) : (
-        <Box size={26} style={{ color: "var(--honey-400)", opacity: 0.7 }} aria-hidden="true" />
+        <Box size={26} style={{ color: "var(--accent)", opacity: 0.7 }} aria-hidden="true" />
       )}
-      <span className="text-[11px]" style={{ color: "rgba(250,249,246,0.6)" }}>{label}</span>
+      <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>{label}</span>
     </div>
   );
 }
@@ -65,7 +65,7 @@ export default function InlineStructureCard({
       {/* Live 3D stage: real mini scene when a fold exists, honest states otherwise. */}
       <div
         className="relative mx-3 rounded-2xl overflow-hidden"
-        style={{ height: 240, background: "#0A0A0A", boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05)" }}
+        style={{ height: 240, background: "var(--surface-base)", boxShadow: "inset 0 0 0 1px rgba(15,15,15,0.06)" }}
       >
         {hasStructure ? (
           <ProteinViewer
@@ -73,19 +73,19 @@ export default function InlineStructureCard({
             highlightResidues={highlightResidues}
             onResidueClick={onResidueClick}
             onResidueHover={onResidueHover}
-            theme="dark"
+            theme="light"
             structureModel={structureModel}
           />
         ) : folding ? (
           <ViewerStage label="Folding with ESMFold…" spinning />
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-6 text-center" style={{ background: "#0A0A0A" }}>
-            <Box size={26} style={{ color: "var(--honey-400)", opacity: 0.55 }} aria-hidden="true" />
-            <span className="text-[12px] font-medium" style={{ color: "rgba(250,249,246,0.78)" }}>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-6 text-center" style={{ background: "var(--surface-base)" }}>
+            <Box size={26} style={{ color: "var(--accent)", opacity: 0.55 }} aria-hidden="true" />
+            <span className="text-[12px] font-medium" style={{ color: "var(--text-primary)" }}>
               No folded structure for this design
             </span>
-            <span className="text-[11px] leading-snug max-w-[240px]" style={{ color: "rgba(250,249,246,0.45)" }}>
-              ESMFold needs a coding ORF of roughly 40 or more amino acids. Short or non-coding sequences will not fold.
+            <span className="text-[11px] leading-snug max-w-[240px]" style={{ color: "var(--text-muted)" }}>
+              ESMFold needs a coding ORF of roughly 16 or more amino acids. Short or non-coding sequences will not fold.
             </span>
           </div>
         )}

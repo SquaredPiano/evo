@@ -265,23 +265,31 @@ async def _emit_structure(
     session_id: str,
     candidate_id: int,
     sequence: str,
-    pdb_data: str,
+    pdb_data: str | None,
     confidence: float | None,
     spec: DesignSpec,
     model: str = "esmfold",
 ) -> dict[str, object] | None:
-    """Emit structure + optional regulatory map events. Returns regulatory_map or None."""
-    await manager.send_event(
-        session_id,
-        StructureReadyEvent(
-            data=StructureReadyData(
-                candidate_id=candidate_id,
-                pdb_data=pdb_data,
-                confidence=confidence,
-                model=model,
-            )
-        ).to_json(),
-    )
+    """Emit structure + optional regulatory map events. Returns regulatory_map or None.
+
+    A missing fold (``pdb_data is None``) is not a failure: we skip the
+    StructureReady event (there is no real fold to show, and we never fabricate
+    one) but still emit the regulatory map and mark the candidate structured, so
+    a candidate that scored fine but could not fold still completes with its
+    scores and an honest empty structure.
+    """
+    if pdb_data is not None:
+        await manager.send_event(
+            session_id,
+            StructureReadyEvent(
+                data=StructureReadyData(
+                    candidate_id=candidate_id,
+                    pdb_data=pdb_data,
+                    confidence=confidence,
+                    model=model,
+                )
+            ).to_json(),
+        )
 
     regulatory_map: dict[str, object] | None = None
     if not _uses_protein_structure(spec.design_type):
@@ -622,15 +630,10 @@ async def run_generation_pipeline(
                 generated, candidate_id, profile.structure_timeout,
             )
 
-            if pdb_data is None:
-                reason = structure_error or "structure_unavailable"
-                candidate = await _mark_failed(candidate_id, generated, reason, "structure")
-                runtime[candidate_id] = candidate
-                async with runtime_lock:
-                    finished_structure += 1
-                    await tracker.set("structure", "active", finished_structure / candidate_count)
-                return
-
+            # A missing fold does NOT discard a candidate that already generated
+            # and scored: keep it with its scores and an honest null structure
+            # (pdb_data stays None, never fabricated). Only real generation or
+            # scoring failures fail the candidate, which happens above.
             regulatory_map = await _emit_structure(
                 manager, session_id, candidate_id, generated, pdb_data, confidence, spec,
                 model=structure_model,
@@ -788,45 +791,10 @@ async def run_followup_pipeline(
         base, candidate_id, profile.structure_timeout,
     )
 
-    if pdb_data is None:
-        reason = structure_error or "structure_unavailable"
-        await manager.send_event(
-            session_id,
-            CandidateStatusEvent(
-                data=CandidateStatusData(
-                    candidate_id=candidate_id,
-                    status="failed",
-                    reason=reason,
-                )
-            ).to_json(),
-        )
-        await tracker.set("structure", "failed", 1.0)
-        await tracker.set("complete", "done", 1.0)
-        await manager.send_event(
-            session_id,
-            PipelineCompleteEvent(
-                data=PipelineCompleteData(
-                    requested_candidates=1,
-                    completed_candidates=0,
-                    failed_candidates=1,
-                    candidates=[
-                        {
-                            "id": candidate_id,
-                            "status": "failed",
-                            "sequence": base,
-                            "scores": scores.to_dict(),
-                            "pdb_data": None,
-                            "regulatory_map": None,
-                            "confidence": None,
-                            "error": reason,
-                            "provenance": followup_provenance,
-                        },
-                    ],
-                )
-            ).to_json(),
-        )
-        return steps
-
+    # A missing fold does NOT fail the regenerated candidate: it keeps its
+    # scores and completes with an honest null structure (never a fabricated
+    # fold). _emit_structure skips the StructureReady event when pdb_data is
+    # None but still emits the regulatory map and marks it structured.
     regulatory_map = await _emit_structure(
         manager, session_id, candidate_id, base, pdb_data, confidence, spec,
         model=structure_model,

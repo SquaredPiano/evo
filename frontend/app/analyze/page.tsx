@@ -250,7 +250,7 @@ function AnalyzePageInner() {
       return;
     }
     // Analyze may return ORF metadata without PDB - fold via /api/structure (ESMFold).
-    if (analysisResult && !activePdb && rawSequence && rawSequence.length >= 30) {
+    if (analysisResult && !activePdb && rawSequence && rawSequence.length >= 24) {
       let cancelled = false;
       setFoldState("folding");
       (async () => {
@@ -983,7 +983,7 @@ function AnalyzePageInner() {
                       ) : activePdb ? (
                         <>Structure source: <strong>{structureModel ?? "unknown"}</strong>. Colors are per-residue <ScienceTooltip term="plddt">pLDDT</ScienceTooltip> when the fold is from ESMFold.</>
                       ) : (
-                        <>No structure yet. ESMFold needs an ORF of at least ~40 amino acids. Short or non-coding designs will not fold.</>
+                        <>No structure yet. ESMFold needs an ORF of at least ~16 amino acids. Short or non-coding designs will not fold.</>
                       )}
                     </p>
                   </div>

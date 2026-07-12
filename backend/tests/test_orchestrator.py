@@ -397,11 +397,12 @@ async def test_followup_pipeline_uses_provided_base_sequence() -> None:
 
 
 @pytest.mark.asyncio
-async def test_followup_pipeline_fails_closed_when_structure_prediction_raises(
+async def test_followup_pipeline_keeps_candidate_when_structure_prediction_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """FAIL-LOUD: when ESMFold raises there is no synthetic fold; the candidate
-    fails honestly with a null structure."""
+    """A missing fold does not discard a scored candidate. When ESMFold raises we
+    never fabricate a fold: the candidate completes with an honest null structure
+    but keeps its scores (only real generation/scoring failures fail it)."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
     await manager.connect(ws, "session-follow-structure-fail")
@@ -423,9 +424,12 @@ async def test_followup_pipeline_fails_closed_when_structure_prediction_raises(
 
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
-    assert complete["data"]["failed_candidates"] == 1
-    assert complete["data"]["candidates"][0]["status"] == "failed"
-    assert complete["data"]["candidates"][0]["pdb_data"] is None
+    assert complete["data"]["failed_candidates"] == 0
+    candidate = complete["data"]["candidates"][0]
+    assert candidate["status"] == "structured"
+    # No fabricated fold - honest null structure with scores retained.
+    assert candidate["pdb_data"] is None
+    assert candidate["scores"]
 
 
 @pytest.mark.asyncio
@@ -503,11 +507,12 @@ async def test_stage_status_never_regresses() -> None:
 
 
 @pytest.mark.asyncio
-async def test_demo_profile_fails_closed_when_structure_unavailable(
+async def test_demo_profile_keeps_candidate_when_structure_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """FAIL-LOUD: demo profile no longer backfills a mock structure. When ESMFold
-    returns nothing, the candidate fails honestly with a null structure."""
+    """Demo profile never backfills a mock structure. When ESMFold returns nothing
+    the candidate is not discarded: it completes with an honest null structure and
+    keeps its scores."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
     await manager.connect(ws, "session-demo-fallback")
@@ -528,16 +533,20 @@ async def test_demo_profile_fails_closed_when_structure_unavailable(
 
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
-    assert complete["data"]["failed_candidates"] == 1
-    assert complete["data"]["candidates"][0]["status"] == "failed"
-    assert complete["data"]["candidates"][0]["pdb_data"] is None
+    assert complete["data"]["failed_candidates"] == 0
+    candidate = complete["data"]["candidates"][0]
+    assert candidate["status"] == "structured"
+    # Honest null structure - never a fabricated fold.
+    assert candidate["pdb_data"] is None
+    assert candidate["scores"]
 
 
 @pytest.mark.asyncio
-async def test_live_profile_fails_closed_when_structure_unavailable(
+async def test_live_profile_keeps_candidate_when_structure_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """FAIL-LOUD: live profile also fails closed with no synthetic structure."""
+    """Live profile also keeps a scored candidate on a missing fold, with no
+    synthetic structure - honest null structure, scores retained."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
     await manager.connect(ws, "session-live-fail")
@@ -558,8 +567,10 @@ async def test_live_profile_fails_closed_when_structure_unavailable(
 
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
-    assert complete["data"]["failed_candidates"] == 1
-    assert complete["data"]["candidates"][0]["status"] == "failed"
+    assert complete["data"]["failed_candidates"] == 0
+    candidate = complete["data"]["candidates"][0]
+    assert candidate["status"] == "structured"
+    assert candidate["pdb_data"] is None
 
 
 @pytest.mark.asyncio
