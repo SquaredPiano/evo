@@ -1,7 +1,7 @@
 "use client";
 
 import { useEvoStore } from "@/lib/store";
-import { ChevronRight, ArrowRight } from "lucide-react";
+import { ChevronRight, ArrowRight, GitCompare } from "lucide-react";
 import { motion } from "framer-motion";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
@@ -24,6 +24,21 @@ export default function CandidateLeaderboard() {
   const setViewMode = useEvoStore((s) => s.setViewMode);
   const setChatOpen = useEvoStore((s) => s.setChatOpen);
   const setChatDraft = useEvoStore((s) => s.setChatDraft);
+  const compareLeftId = useEvoStore((s) => s.compareLeftId);
+  const setCompareLeftId = useEvoStore((s) => s.setCompareLeftId);
+  const setCompareRightId = useEvoStore((s) => s.setCompareRightId);
+
+  // Two-click compare: first row picks A, a different second row picks B and
+  // jumps to the compare view.
+  const handleCompare = (id: number) => {
+    if (compareLeftId !== null && id !== compareLeftId) {
+      setCompareRightId(id);
+      setViewMode("compare");
+    } else {
+      setCompareLeftId(id);
+      setCompareRightId(null);
+    }
+  };
 
   const topCandidate = candidates[0];
   const laySummary = topCandidate
@@ -107,13 +122,15 @@ export default function CandidateLeaderboard() {
             <span className="w-8" />
           </div>
           {candidates.map((c, i) => (
-            <motion.button key={c.id}
+            <motion.div key={c.id}
               onClick={() => { setActiveCandidateId(c.id); setViewMode("explorer"); }}
+              role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveCandidateId(c.id); setViewMode("explorer"); } }}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.08 + i * 0.06, type: "spring" as const, stiffness: 300, damping: 26 }}
               whileHover={{ scale: 1.005, x: 2 }}
-              className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-black/[0.03] rounded-full mx-1"
+              className="w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors hover:bg-black/[0.03] rounded-full mx-1 cursor-pointer"
               style={{
                 background: activeCandidateId === c.id ? "rgba(245,158,11,0.12)" : "transparent",
               }}>
@@ -134,8 +151,18 @@ export default function CandidateLeaderboard() {
               <span className="w-20 text-right text-[13px] font-mono" style={{ color: c.scores.offTarget > 0.03 ? "var(--base-t)" : "var(--accent)" }}>{(c.scores.offTarget * 100).toFixed(1)}%</span>
               <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--base-g)" }}>{(c.scores.novelty * 100).toFixed(0)}%</span>
               <span className="w-20 text-right text-base font-semibold font-mono" style={{ color: "var(--text-primary)" }}>{c.overall.toFixed(1)}</span>
-              <ChevronRight size={14} className="w-8 shrink-0" style={{ color: "var(--text-faint)" }} aria-hidden="true" />
-            </motion.button>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleCompare(c.id); }}
+                title={compareLeftId === c.id ? "Pinned as A — pick another to compare" : compareLeftId !== null ? "Compare against A" : "Pick as A to compare"}
+                aria-label="Compare this candidate"
+                className="w-8 shrink-0 flex items-center justify-center rounded-full py-1 transition-colors hover:bg-black/[0.06]"
+                style={{ color: compareLeftId === c.id ? "var(--accent)" : "var(--text-faint)" }}>
+                {compareLeftId === c.id
+                  ? <span className="text-[11px] font-mono font-semibold">A</span>
+                  : <GitCompare size={14} aria-hidden="true" />}
+              </button>
+              <ChevronRight size={14} className="w-6 shrink-0" style={{ color: "var(--text-faint)" }} aria-hidden="true" />
+            </motion.div>
           ))}
         </div>
       </div>

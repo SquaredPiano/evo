@@ -84,6 +84,9 @@ interface EvoState {
   composerPrefill: { mode: "design" | "paste"; value: string } | null;
   candidates: Candidate[];
   activeCandidateId: number | null;
+  /** Candidate comparison: which two candidates are pinned in CompareView. */
+  compareLeftId: number | null;
+  compareRightId: number | null;
 
   // Streaming pipeline state
   sessionId: string | null;
@@ -133,6 +136,8 @@ interface EvoState {
   setComposerPrefill: (prefill: { mode: "design" | "paste"; value: string } | null) => void;
   setCandidates: (candidates: Candidate[]) => void;
   setActiveCandidateId: (id: number | null) => void;
+  setCompareLeftId: (id: number | null) => void;
+  setCompareRightId: (id: number | null) => void;
   setSessionId: (id: string | null) => void;
   appendGeneratingToken: (token: string) => void;
   appendExplanation: (text: string) => void;
@@ -176,6 +181,8 @@ const initialState = {
   composerPrefill: null as { mode: "design" | "paste"; value: string } | null,
   candidates: [] as Candidate[],
   activeCandidateId: null as number | null,
+  compareLeftId: null as number | null,
+  compareRightId: null as number | null,
   sessionId: null as string | null,
   generatingSequence: "",
   explanation: "",
@@ -303,6 +310,8 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   setChatDraft: (draft) => set({ chatDraft: draft }),
   setComposerPrefill: (prefill) => set({ composerPrefill: prefill }),
   setCandidates: (candidates) => set({ candidates }),
+  setCompareLeftId: (id) => set({ compareLeftId: id }),
+  setCompareRightId: (id) => set({ compareRightId: id }),
   setActiveCandidateId: (id) => {
     const state = get();
     const candidate = state.candidates.find((c) => c.id === id);
