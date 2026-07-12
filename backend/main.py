@@ -1384,7 +1384,14 @@ def _design_uses_protein_structure(design_type: str | None) -> bool:
     return any(token in key for token in ("coding", "protein", "peptide", "orf"))
 
 def _build_ws_url(http_request: Request, session_id: str) -> str:
-    ws_scheme = "wss" if http_request.url.scheme == "https" else "ws"
+    # Behind a TLS-terminating reverse proxy (e.g. Caddy) the request reaches us
+    # over plain HTTP, so http_request.url.scheme is "http" even when the browser
+    # is on HTTPS. Trust X-Forwarded-Proto (set by the proxy) to choose ws:// vs
+    # wss://; otherwise an HTTPS page receives a ws:// URL and the browser blocks
+    # it as mixed content.
+    forwarded_proto = http_request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+    scheme = forwarded_proto or http_request.url.scheme
+    ws_scheme = "wss" if scheme == "https" else "ws"
     host = http_request.headers.get("host") or http_request.url.netloc
     return f"{ws_scheme}://{host}/ws/pipeline/{session_id}"
 

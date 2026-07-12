@@ -146,6 +146,20 @@ def test_design_ws_url_uses_wss_for_https() -> None:
     assert body["ws_url"] == f"wss://helix.example.com/ws/pipeline/{session_id}"
 
 
+def test_design_ws_url_honors_x_forwarded_proto() -> None:
+    # Behind a TLS-terminating proxy the request arrives over http but the
+    # browser is on https; X-Forwarded-Proto must drive the ws:// vs wss:// choice.
+    client = TestClient(app)
+    session_id = "proxied-session"
+    res = client.post(
+        "/api/design",
+        json={"goal": "Design BDNF enhancer", "session_id": session_id},
+        headers={"X-Forwarded-Proto": "https", "Host": "proteus.example.com"},
+    )
+    assert res.status_code == 202
+    assert res.json()["ws_url"] == f"wss://proteus.example.com/ws/pipeline/{session_id}"
+
+
 def test_followup_endpoint() -> None:
     client = TestClient(app)
     client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": "abc"})
