@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MutationEffect, Nucleotide } from "@/types";
 import { useEvoStore } from "@/lib/store";
+import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
 
 interface MutationPanelProps {
   sequence: string;
@@ -73,6 +74,7 @@ export default function MutationPanel({
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
+      <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">
           Mutation
@@ -85,6 +87,8 @@ export default function MutationPanel({
             </span>
           </span>
         )}
+      </div>
+        <EditingCandidateChrome variant="subline" />
       </div>
 
       {/* Position input */}

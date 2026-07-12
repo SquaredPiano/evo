@@ -55,6 +55,7 @@ export default function CompareView() {
   const candidates = useEvoStore((s) => s.candidates);
   const regions = useEvoStore((s) => s.regions);
   const setViewMode = useEvoStore((s) => s.setViewMode);
+  const setActiveCandidateId = useEvoStore((s) => s.setActiveCandidateId);
   const analysisResult = useEvoStore((s) => s.analysisResult);
   const activePdb = useEvoStore((s) => s.activePdb);
   const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
@@ -152,7 +153,7 @@ export default function CompareView() {
               sequences diverge; the table below scores each metric head-to-head.
             </p>
           </div>
-          <button onClick={() => setViewMode("ide")}
+          <button onClick={() => { setActiveCandidateId(candA.id); setViewMode("ide"); }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02] shrink-0"
             style={{ background: "var(--accent)", color: "var(--ink)" }}>
             Edit in Studio <ArrowRight size={14} />

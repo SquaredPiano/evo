@@ -139,6 +139,12 @@ export default function CandidateLeaderboard() {
               </span>
               <span className="flex-1">
                 <span className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>Candidate_{c.id.toString().padStart(3, "0")}</span>
+                {activeCandidateId === c.id && (
+                  <span className="text-[9px] font-semibold uppercase tracking-wider ml-2 px-1.5 py-0.5 rounded-full align-middle"
+                    style={{ background: "color-mix(in oklch, var(--accent), transparent 82%)", color: "var(--accent)" }}>
+                    Editing
+                  </span>
+                )}
                 <span className="text-[11px] font-mono ml-2" style={{ color: "var(--text-faint)" }}>{c.sequence.length} bp</span>
                 {c.status !== "scored" && (
                   <span className="text-[10px] font-mono ml-2" style={{ color: c.status === "failed" ? "var(--base-t)" : "var(--text-faint)" }}>

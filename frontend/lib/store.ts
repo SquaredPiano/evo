@@ -291,11 +291,12 @@ export const useEvoStore = create<EvoState>((set, get) => ({
 
     const activeCandidateId = state.activeCandidateId ?? candidates[0]?.id ?? null;
 
+    // A fresh run arrives from the pipeline/input screens. Anything else
+    // (Rescore from Sequence/Edit) is an in-place update of the same session.
+    const freshRun = state.viewMode === "pipeline" || state.viewMode === "input";
+
     // Only leave the pipeline/input screens — never yank Sequence/Edit → Structure.
-    const nextView =
-      state.viewMode === "pipeline" || state.viewMode === "input"
-        ? "analyze"
-        : state.viewMode;
+    const nextView = freshRun ? "analyze" : state.viewMode;
 
     set({
       analysisResult: result,
@@ -307,6 +308,8 @@ export const useEvoStore = create<EvoState>((set, get) => ({
       candidates,
       activeCandidateId,
       error: null,
+      // Stale compare pins from a previous run must not carry into a new one.
+      ...(freshRun ? { compareLeftId: null, compareRightId: null } : {}),
     });
   },
 

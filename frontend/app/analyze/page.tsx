@@ -32,6 +32,8 @@ import CompareView from "@/components/workspace/CompareView";
 import MutationDiff from "@/components/mutation/MutationDiff";
 import RelatedWorkPanel from "@/components/workspace/RelatedWorkPanel";
 import StoryMode from "@/components/analysis/StoryMode";
+import SequenceScrubber from "@/components/sequence/SequenceScrubber";
+import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
 
 import { ScienceTooltip, ScienceInfo } from "@/components/ui/ScienceTooltip";
 import TutorialOverlay, { isTutorialCompleted } from "@/components/ui/TutorialOverlay";
@@ -54,6 +56,11 @@ const VIEW_LABELS = {
 } as const;
 
 const VALID_VIEWS = ["input", "pipeline", "analyze", "structure", "leaderboard", "explorer", "ide", "compare"];
+
+// Views where edits actually apply to the active candidate — these get the
+// "Editing candidate #N" pill. Read-only surfaces (overview, variants grid,
+// compare, pipeline, input) deliberately do not.
+const EDIT_CAPABLE_VIEWS: string[] = ["explorer", "ide", "structure"];
 
 /* ─── Motion presets ─────────────────────────────────────────────────── */
 
@@ -284,6 +291,16 @@ function AnalyzePageInner() {
     }
   }, [clickedResidue, setHighlightResidues]);
 
+  // One source of truth: when the playhead (selectedPosition) moves — from the
+  // scrubber, the LikelihoodGraph, the editor caret, or a region jump — mirror
+  // it onto the 3D residue highlight so the structure tracks the sequence.
+  // Uses the same residue↔base mapping as handleResidueClick ((resi-1)*3).
+  useEffect(() => {
+    if (selectedPosition === null) return;
+    const residue = Math.floor(selectedPosition / 3) + 1;
+    setHighlightResidues([residue]);
+  }, [selectedPosition, setHighlightResidues]);
+
   // Mobile sidebar collapse
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -350,12 +367,15 @@ function AnalyzePageInner() {
                 {VIEW_LABELS[viewMode]}
               </span>
             )}
+            {EDIT_CAPABLE_VIEWS.includes(viewMode) && (
+              <EditingCandidateChrome variant="pill" />
+            )}
           </div>
           <div className="flex items-center gap-1 lg:gap-3 overflow-x-auto">
             {viewMode !== "input" && viewMode !== "pipeline" && (
               <>
                 <div className="hidden md:flex gap-1 lg:hidden" role="tablist" aria-label="View tabs">
-                  {(["analyze", "explorer", "structure", "ide", "leaderboard"] as const).map((m) => (
+                  {(["analyze", "explorer", "structure", "leaderboard", "compare"] as const).map((m) => (
                     <motion.button key={m} onClick={() => setViewMode(m)}
                       role="tab"
                       aria-selected={viewMode === m}
@@ -945,10 +965,10 @@ function AnalyzePageInner() {
               {/* IDE toolbar */}
               <div className="h-10 shrink-0 flex items-center justify-between px-5"
                 style={{ background: "var(--surface-raised)" }}>
-                <div className="flex items-center gap-4">
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>SEQUENCE</span>
+                <div className="flex items-center gap-3">
+                  <EditingCandidateChrome variant="pill" />
                   <span className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
-                    <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> | {editHistory.length} <ScienceTooltip term="mutation">edit{editHistory.length !== 1 ? "s" : ""}</ScienceTooltip>
+                    <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> · {editHistory.length} <ScienceTooltip term="mutation">edit{editHistory.length !== 1 ? "s" : ""}</ScienceTooltip>
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -977,9 +997,18 @@ function AnalyzePageInner() {
                       sequence={rawSequence}
                       regions={regions}
                       perPositionScores={scores}
+                      selectedPosition={selectedPosition}
                       onSequenceChange={handleSequenceChange}
                       onRescoreBase={handleRescoreBase}
                       onSelectPosition={setSelectedPosition}
+                    />
+                  </div>
+                  {/* Playhead: scrubs selectedPosition across the whole sequence */}
+                  <div className="shrink-0 px-5 py-2.5" style={{ background: "var(--surface-raised)", borderTop: "1px solid var(--ghost-border)" }}>
+                    <SequenceScrubber
+                      length={rawSequence.length}
+                      position={selectedPosition}
+                      onChange={setSelectedPosition}
                     />
                   </div>
                   <div className="h-36 shrink-0 px-5 py-3" style={{ background: "var(--surface-raised)" }}>
