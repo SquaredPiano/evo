@@ -19,6 +19,7 @@ from models.requests import (
     BaseEditRequest,
     CalibrationRequest,
     CodonOptimizationRequest,
+    CrisprOffTargetRequest,
     DesignRequest,
     ExperimentDiffRequest,
     ExperimentRecordRequest,
@@ -44,6 +45,7 @@ from models.responses import (
     AgentToolCallResponse,
     BaseEditResponse,
     CandidateScoresResponse,
+    CrisprOffTargetResponse,
     DesignAcceptedResponse,
     FollowupAcceptedResponse,
     HairpinModel,
@@ -51,7 +53,9 @@ from models.responses import (
     LiteratureIndexResponse,
     LiteratureSearchResponse,
     LiteratureHit,
+    MismatchModel,
     MutationResponse,
+    OffTargetSiteModel,
     PrimerDesignResponse,
     PrimerModel,
     PrimerPairModel,
@@ -680,6 +684,58 @@ async def offtarget_analysis(request: OffTargetRequest) -> dict[str, object]:
             for h in result.hits
         ],
     }
+
+
+@app.post("/api/crispr-offtarget", response_model=CrisprOffTargetResponse)
+async def crispr_offtarget_analysis(request: CrisprOffTargetRequest) -> CrisprOffTargetResponse:
+    """CRISPR off-target scoring against the SUPPLIED reference only.
+
+    CFD (Doench 2016) + MIT (Hsu 2013). Scans both strands of the reference for
+    guide+PAM sites within the mismatch tolerance and returns per-site CFD/MIT
+    scores plus a MIT-style aggregate guide specificity. This is NOT a
+    genome-wide scan and makes no genome-wide guarantee.
+    """
+    from services.crispr_offtarget import analyze_offtargets
+
+    try:
+        report = analyze_offtargets(
+            guide=request.guide,
+            reference=request.reference,
+            pam=request.pam,
+            max_mismatches=request.max_mismatches,
+            max_sites=request.max_sites,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return CrisprOffTargetResponse(
+        guide=report.guide,
+        pam_pattern=report.pam_pattern,
+        reference_length=report.reference_length,
+        max_mismatches=report.max_mismatches,
+        strands_searched=report.strands_searched,
+        total_sites=report.total_sites,
+        off_target_count=report.off_target_count,
+        specificity_score=report.specificity_score,
+        sites=[
+            OffTargetSiteModel(
+                position=s.position,
+                strand=s.strand,
+                protospacer=s.protospacer,
+                pam=s.pam,
+                mismatch_count=s.mismatch_count,
+                mismatches=[
+                    MismatchModel(position=m.position, guide_base=m.guide_base, target_base=m.target_base)
+                    for m in s.mismatches
+                ],
+                cfd_score=round(s.cfd_score, 6),
+                mit_score=round(s.mit_score, 4),
+            )
+            for s in report.sites
+        ],
+        method=report.method,
+        note=report.note,
+    )
 
 
 @app.post("/api/tm", response_model=TmResponse)

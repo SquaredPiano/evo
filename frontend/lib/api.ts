@@ -689,6 +689,72 @@ export async function scanOffTargets(
 }
 
 // ---------------------------------------------------------------------------
+// CRISPR off-target scoring (CFD + MIT) against a supplied reference
+// ---------------------------------------------------------------------------
+
+export interface CrisprMismatch {
+  position: number;   // 1..20 (20 = PAM-proximal)
+  guide_base: string;
+  target_base: string;
+}
+
+export interface CrisprOffTargetSite {
+  position: number;   // 0-based start of protospacer on the forward strand
+  strand: "+" | "-";
+  protospacer: string;
+  pam: string;
+  mismatch_count: number;
+  mismatches: CrisprMismatch[];
+  cfd_score: number;  // 0..1 (Doench 2016)
+  mit_score: number;  // 0..100 (Hsu 2013 single-guide hit score)
+}
+
+export interface CrisprOffTargetResult {
+  guide: string;
+  pam_pattern: string;
+  reference_length: number;
+  max_mismatches: number;
+  strands_searched: string;
+  total_sites: number;
+  off_target_count: number;
+  specificity_score: number;   // MIT-style aggregate, 0..100 (100 = most specific)
+  sites: CrisprOffTargetSite[];
+  method: string;
+  note: string;
+}
+
+/**
+ * POST /api/crispr-offtarget - CFD (Doench 2016) + MIT (Hsu 2013) off-target
+ * scoring against the SUPPLIED reference only (both strands). Not a genome-wide scan.
+ */
+export async function analyzeCrisprOffTargets(
+  guide: string,
+  reference: string,
+  opts?: { pam?: string; maxMismatches?: number; maxSites?: number }
+): Promise<CrisprOffTargetResult> {
+  const body: Record<string, unknown> = { guide, reference };
+  if (opts?.pam != null) body.pam = opts.pam;
+  if (opts?.maxMismatches != null) body.max_mismatches = opts.maxMismatches;
+  if (opts?.maxSites != null) body.max_sites = opts.maxSites;
+  const res = await fetch(`${API_BASE}/api/crispr-offtarget`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = `${res.status}`;
+    try {
+      const j = await res.json();
+      if (j?.detail) detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+    } catch {
+      /* keep status */
+    }
+    throw new Error(`CRISPR off-target analysis failed: ${detail}`);
+  }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
 // Melting temperature (Tm) and protein parameters (deterministic primitives)
 // ---------------------------------------------------------------------------
 

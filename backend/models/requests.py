@@ -290,6 +290,58 @@ class OffTargetRequest(BaseModel):
         return _validate_sequence(v)
 
 
+_VALID_PAM_CODES = frozenset("ATCGNRYSWKMBDHV")
+
+
+class CrisprOffTargetRequest(BaseModel):
+    """CRISPR off-target scoring against a SUPPLIED reference sequence.
+
+    Scores candidate off-target sites for an SpCas9 guide with CFD (Doench 2016)
+    and MIT (Hsu 2013). Searches only the supplied reference (both strands); it
+    is not a genome-wide scan.
+    """
+    guide: str = Field(..., description="20 nt SpCas9 spacer/protospacer (A/C/G/T)")
+    reference: str = Field(..., description="Reference DNA to search (both strands scanned)")
+    pam: str = Field("NGG", description="IUPAC PAM located 3' of the protospacer (default NGG)")
+    max_mismatches: int = Field(4, ge=0, le=6, description="Max protospacer mismatches to accept")
+    max_sites: int = Field(200, ge=1, le=2000, description="Max ranked sites to return")
+
+    @field_validator("guide")
+    @classmethod
+    def validate_guide(cls, v: str) -> str:
+        g = v.upper().strip()
+        if len(g) != 20:
+            raise ValueError(f"Guide must be exactly 20 nt; got {len(g)}")
+        bad = set(g) - frozenset("ACGT")
+        if bad:
+            raise ValueError(f"Guide must be unambiguous A/C/G/T; invalid: {sorted(bad)}")
+        return g
+
+    @field_validator("reference")
+    @classmethod
+    def validate_reference(cls, v: str) -> str:
+        seq = "".join(v.upper().split())
+        if not seq:
+            raise ValueError("Reference must not be empty")
+        if len(seq) > MAX_SEQUENCE_LENGTH:
+            raise ValueError(f"Reference exceeds {MAX_SEQUENCE_LENGTH} nt")
+        bad = set(seq) - VALID_BASES
+        if bad:
+            raise ValueError(f"Invalid nucleotides in reference: {sorted(bad)}")
+        return seq
+
+    @field_validator("pam")
+    @classmethod
+    def validate_pam(cls, v: str) -> str:
+        p = v.upper().strip()
+        if not (2 <= len(p) <= 8):
+            raise ValueError("PAM must be 2-8 IUPAC symbols")
+        bad = set(p) - _VALID_PAM_CODES
+        if bad:
+            raise ValueError(f"PAM has invalid IUPAC codes: {sorted(bad)}")
+        return p
+
+
 class ExperimentRecordRequest(BaseModel):
     session_id: str
     candidate_id: int = 0
