@@ -48,13 +48,13 @@ export default function StructureControls({
         </IconButton>
       )}
 
-      {/* pLDDT legend */}
+      {/* pLDDT legend — AlphaFold / ESMFold standard confidence bands */}
       <div className="flex items-center gap-2 ml-auto">
         {[
-          { color: "var(--accent)", label: ">90" },
-          { color: "var(--base-c)", label: ">70" },
-          { color: "var(--base-g)", label: ">50" },
-          { color: "var(--base-t)", label: "<50" },
+          { color: "#0053D6", label: ">90" },
+          { color: "#65CBF3", label: ">70" },
+          { color: "#FFDB13", label: ">50" },
+          { color: "#FF7D45", label: "<50" },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1">
             <span
