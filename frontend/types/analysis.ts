@@ -10,7 +10,9 @@ export interface MutationEffect {
   referenceBase: string;
   alternateBase: string;
   deltaLikelihood: number;
-  predictedImpact: "benign" | "moderate" | "deleterious";
+  // Model-likelihood label for a single-base edit (sign of the delta LL), not a
+  // clinical pathogenicity call.
+  predictedImpact: "more_likely" | "neutral" | "less_likely";
 }
 
 export interface PredictedProtein {

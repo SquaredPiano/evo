@@ -8,9 +8,9 @@ interface MutationDiffProps {
 }
 
 const IMPACT_COLORS: Record<MutationEffect["predictedImpact"], string> = {
-  benign: "var(--impact-benign)",
-  moderate: "var(--impact-moderate)",
-  deleterious: "var(--impact-deleterious)",
+  more_likely: "var(--impact-benign)",
+  neutral: "var(--impact-moderate)",
+  less_likely: "var(--impact-deleterious)",
 };
 
 export default function MutationDiff({ effect }: MutationDiffProps) {

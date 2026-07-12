@@ -29,7 +29,7 @@ class BaseEditResponse(BaseModel):
     reference_base: str
     new_base: str
     delta_likelihood: float
-    predicted_impact: str  # "benign" | "moderate" | "deleterious"
+    predicted_impact: str  # "more_likely" | "neutral" | "less_likely"
     updated_scores: CandidateScoresResponse
     # Fast-path additions: let the frontend update sequence + heatmap immediately
     # without waiting on (or blocking) the slow structure refold.
@@ -45,7 +45,7 @@ class MutationResponse(BaseModel):
     reference_base: str
     alternate_base: str
     delta_likelihood: float
-    predicted_impact: str
+    predicted_impact: str  # "more_likely" | "neutral" | "less_likely"
 
 
 class FollowupAcceptedResponse(BaseModel):

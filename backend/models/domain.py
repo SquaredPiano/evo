@@ -23,23 +23,33 @@ class AnnotationType(str, Enum):
 
 
 class Impact(str, Enum):
-    BENIGN = "benign"
-    MODERATE = "moderate"
-    DELETERIOUS = "deleterious"
+    """How a single-base edit shifts sequence likelihood under the model.
+
+    This is a model-likelihood label, NOT a clinical pathogenicity call. A
+    de-novo candidate has no wild-type reference, so ClinVar vocabulary
+    (benign/deleterious) does not apply here.
+    """
+
+    MORE_LIKELY = "more_likely"
+    NEUTRAL = "neutral"
+    LESS_LIKELY = "less_likely"
 
     @staticmethod
     def from_delta(delta: float) -> Impact:
-        """Classify mutation impact from delta log-likelihood.
+        """Classify a single-base edit from its SIGNED delta log-likelihood.
 
-        Thresholds from Evo2 paper: |delta| < 0.001 benign,
-        0.001-0.005 moderate, > 0.005 deleterious.
+        delta = LL(alt) - LL(ref). The SIGN carries the meaning:
+          delta >  0.001   -> MORE_LIKELY  (model finds the edited base more expected)
+          |delta| <= 0.001 -> NEUTRAL      (little change in model likelihood)
+          delta < -0.001   -> LESS_LIKELY  (model finds the edited base less expected)
+
+        A model-likelihood score, not a clinical assay.
         """
-        abs_delta = abs(delta)
-        if abs_delta < 0.001:
-            return Impact.BENIGN
-        if abs_delta < 0.005:
-            return Impact.MODERATE
-        return Impact.DELETERIOUS
+        if delta > 0.001:
+            return Impact.MORE_LIKELY
+        if delta < -0.001:
+            return Impact.LESS_LIKELY
+        return Impact.NEUTRAL
 
 
 @dataclass(frozen=True)
@@ -68,16 +78,16 @@ class SequenceRegion:
 
 @dataclass(frozen=True)
 class CandidateScores:
-    """Four-dimensional scoring from the Evo2 scoring pipeline."""
+    """Four heuristic signals from the Evo2 scoring pipeline."""
 
-    functional: float  # 0-1, sequence plausibility
-    tissue_specificity: float  # 0-1, match to requested expression pattern
-    off_target: float  # 0-1, risk of unintended effects (lower = better)
-    novelty: float  # 0-1, distance from known sequences
+    functional: float  # 0-1, composition + ORF + motif plausibility heuristic
+    tissue_specificity: float  # 0-1, tissue-motif match heuristic
+    off_target: float  # 0-1, panel k-mer homology + repeat-content heuristic (lower = better); NOT a genome-wide scan
+    novelty: float  # 0-1, composition divergence from human genomic averages + optional edit distance from a reference
 
     @property
     def combined(self) -> float:
-        """Weighted combination for ranking. Higher is better."""
+        """Combined score: weighted blend of the four signals for ranking. Higher is better."""
         return (
             0.40 * self.functional
             + 0.25 * self.tissue_specificity

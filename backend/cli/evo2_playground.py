@@ -74,7 +74,7 @@ def _ll_color(ll: float) -> str:
 
 
 def _impact_color(impact: str) -> str:
-    return {"benign": "green", "moderate": "yellow", "deleterious": "red"}.get(
+    return {"more_likely": "green", "neutral": "yellow", "less_likely": "red"}.get(
         impact, "white"
     )
 

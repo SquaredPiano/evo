@@ -31,7 +31,7 @@ export const ANNOTATION_LABELS: Record<AnnotationType, string> = {
 };
 
 export const IMPACT_COLORS = {
-  benign: "#22c55e",
-  moderate: "#f59e0b",
-  deleterious: "#ef4444",
+  more_likely: "#22c55e",
+  neutral: "#f59e0b",
+  less_likely: "#ef4444",
 } as const;

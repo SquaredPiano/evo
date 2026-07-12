@@ -411,14 +411,14 @@ async def tool_optimize(
 
     if rounds_used == 0:
         note = (
-            f"Optimization '{objective}': evaluated {total_evaluated} variants across 1 round, "
+            f"Optimization '{objective}': evaluated {total_evaluated} sequence edits across 1 round, "
             f"but found no improvement. Sequence unchanged at combined {baseline['combined']:.3f}."
         )
         summary = "No improving mutation found."
     else:
         note = (
             f"Hill-climbing optimization '{objective}': {rounds_used} round(s), "
-            f"{total_evaluated} variants evaluated. "
+            f"{total_evaluated} sequence edits evaluated. "
             f"Combined {baseline['combined']:.3f} → {final['combined']:.3f} ({total_delta:+.3f}). "
             f"Applied {rounds_used} mutation(s)."
         )

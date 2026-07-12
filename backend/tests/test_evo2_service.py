@@ -114,11 +114,18 @@ class TestMutation:
 
     @pytest.mark.asyncio
     async def test_impact_classification(self) -> None:
-        """Verify Impact.from_delta thresholds."""
-        assert Impact.from_delta(0.0005) == Impact.BENIGN
-        assert Impact.from_delta(0.003) == Impact.MODERATE
-        assert Impact.from_delta(0.01) == Impact.DELETERIOUS
-        assert Impact.from_delta(-0.01) == Impact.DELETERIOUS
+        """Verify Impact.from_delta is SIGN-aware: negative delta = less likely
+        under the model, positive = more likely, near-zero = neutral."""
+        # Near-zero magnitude: neutral regardless of sign
+        assert Impact.from_delta(0.0005) == Impact.NEUTRAL
+        assert Impact.from_delta(-0.0005) == Impact.NEUTRAL
+        assert Impact.from_delta(0.0) == Impact.NEUTRAL
+        # Positive delta = model finds the edit MORE likely
+        assert Impact.from_delta(0.003) == Impact.MORE_LIKELY
+        assert Impact.from_delta(0.01) == Impact.MORE_LIKELY
+        # Negative delta = model finds the edit LESS likely
+        assert Impact.from_delta(-0.003) == Impact.LESS_LIKELY
+        assert Impact.from_delta(-0.01) == Impact.LESS_LIKELY
 
     @pytest.mark.asyncio
     async def test_position_out_of_range(

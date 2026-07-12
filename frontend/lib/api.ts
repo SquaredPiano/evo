@@ -212,7 +212,7 @@ export interface BaseEditResult {
   reference_base: string;
   new_base: string;
   delta_likelihood: number;
-  predicted_impact: "benign" | "moderate" | "deleterious";
+  predicted_impact: "more_likely" | "neutral" | "less_likely";
   updated_scores: {
     functional: number;
     tissue_specificity: number;

@@ -1,10 +1,10 @@
-"""Evo2 scoring pipeline - 4-dimensional candidate evaluation.
+"""Evo2 scoring pipeline - four heuristic signals per candidate.
 
 Takes raw Evo2 forward pass output and computes:
-  1. Functional plausibility  (sequence looks biologically real)
-  2. Tissue specificity       (matches requested expression pattern)
-  3. Off-target risk          (resembles known pathogenic variants)
-  4. Novelty                  (distance from known sequences)
+  1. Functional plausibility  (composition + ORF + motif plausibility heuristic)
+  2. Tissue-motif match       (short tissue-motif matches, not expression prediction)
+  3. Panel off-target overlap (panel k-mer homology + repeat-content heuristic, NOT a genome-wide or CRISPR off-target scan)
+  4. Novelty                  (composition divergence from human genomic averages + optional edit distance from a reference)
 
 Each scorer is a standalone function. The pipeline composes them into
 CandidateScores. Designed for easy upgrade: swap any scorer when real
@@ -35,9 +35,10 @@ from services.translation import (
 def score_functional(
     forward: ForwardResult, sequence: str
 ) -> float:
-    """Functional plausibility: is this sequence biologically viable?
+    """Functional plausibility: does this sequence carry gene-like patterns?
 
-    Combines:
+    A composition + ORF + motif plausibility heuristic, not proof of a working
+    protein. Combines:
     - Mean of the forward per-position signal. This is a true Evo2 per-position
       log-likelihood only under EVO2_MODE=local; under nim_api it is the
       deterministic composition/motif signal (see Evo2NIMService.forward), since
@@ -46,7 +47,8 @@ def score_functional(
     - ORF presence bonus (coding potential)
     - Motif presence (regulatory elements)
 
-    This is a composition/motif plausibility heuristic, not a clinical assay.
+    This is a composition + ORF + motif plausibility heuristic, not proof of a
+    working protein and not a clinical assay.
     """
     # Sigmoid-normalize the mean forward signal to [0, 1]
     # Calibrated so -0.3 maps to ~0.85
@@ -75,10 +77,11 @@ def score_functional(
 def score_tissue_specificity(
     forward: ForwardResult, sequence: str, target_tissues: list[str] | None = None
 ) -> float:
-    """Tissue specificity: does the sequence match the requested expression pattern?
+    """Tissue-motif match: does the sequence carry motifs linked to the requested tissue?
 
-    For hackathon v1: heuristic based on known tissue-specific promoter motifs.
-    This is the scorer most likely to be upgraded with a real classifier.
+    A tissue-motif match heuristic based on a small set of hand-picked
+    tissue-specific promoter motifs, NOT an expression-level prediction. This is
+    the scorer most likely to be upgraded with a real classifier.
 
     Known tissue-specific elements:
     - Neuronal: NRSE/RE1 (TTCAGCACCACGGACAG), CRE (TGACGTCA)
@@ -117,11 +120,13 @@ def score_tissue_specificity(
 def score_off_target(
     forward: ForwardResult, sequence: str
 ) -> float:
-    """Off-target risk: does this sequence have unintended effects?
+    """Panel off-target overlap: how much does this sequence resemble a small
+    built-in problem panel?
 
-    Lower is better. Checks:
-    - Known pathogenic motifs
-    - Poly-nucleotide runs (instability)
+    Panel k-mer homology + repeat-content heuristic. This is NOT a genome-wide or
+    CRISPR off-target scan and NOT a clinical risk score. Lower is better. Checks:
+    - k-mer homology to a small repeat/oncogene panel
+    - Poly-nucleotide runs and repeat expansion motifs (instability markers)
     - Extreme positional log-likelihood variance (unstable regions)
     """
     risk = 0.0
@@ -166,10 +171,12 @@ def score_off_target(
 def score_novelty(
     forward: ForwardResult, sequence: str, reference: str | None = None
 ) -> float:
-    """Novelty: how different is this from known sequences?
+    """Novelty: how unusual is this sequence's composition?
 
-    For hackathon v1: based on sequence composition divergence from
-    typical human genomic averages + optional edit distance from reference.
+    Composition divergence from typical human genomic averages, plus optional
+    edit distance from a supplied reference. There is no known-sequence database
+    behind this - it is a composition heuristic, not a similarity search against
+    real genomes.
     """
     # Human genome: ~41% GC content
     gc = gc_content(sequence)

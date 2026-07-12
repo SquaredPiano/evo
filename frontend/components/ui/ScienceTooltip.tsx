@@ -5,7 +5,7 @@ import ReactDOM from "react-dom";
 
 // ---------------------------------------------------------------------------
 // Dictionary of scientific terms with plain-English explanations.
-// Keys are kebab-case identifiers used throughout the Helix UI.
+// Keys are kebab-case identifiers used throughout the Proteus UI.
 // ---------------------------------------------------------------------------
 
 export const SCIENCE_TERMS: Record<
@@ -53,10 +53,10 @@ export const SCIENCE_TERMS: Record<
     explanation:
       "The percentage of bases that are G or C (vs A or T). Most genes have 40\u201360% GC content. Extreme values can cause problems with gene expression or stability.",
   },
-  "overall-viability": {
+  "combined-score": {
     title: "Combined Score",
     explanation:
-      "Weighted blend of the four heuristic dimensions for ranking inside this IDE. A ranking heuristic, not assay-backed viability.",
+      "Weighted blend of the four heuristic signals, used only to rank candidates inside this IDE. A ranking heuristic, not assay-backed viability.",
   },
   cai: {
     title: "CAI - Codon Adaptation Index",
@@ -135,12 +135,12 @@ export const SCIENCE_TERMS: Record<
   exon: {
     title: "Exon",
     explanation:
-      "A section of DNA that codes for protein. Think of it as the \u2018useful paragraphs\u2019 in a book \u2014 these parts get read and turned into protein.",
+      "A section of a gene that is retained in the mature mRNA after splicing. Exons include the protein-coding parts plus the untranslated ends that stay in the final transcript.",
   },
   intron: {
     title: "Intron",
     explanation:
-      "A section of DNA between exons that doesn\u2019t code for protein. It gets removed before the gene is used. Like filler pages in a book that get skipped.",
+      "A section between exons that is spliced out of the RNA transcript before the mRNA is used, so it does not appear in the mature message. Like filler pages removed before the book is read.",
   },
   orf: {
     title: "Open Reading Frame (ORF)",
@@ -199,24 +199,24 @@ export const SCIENCE_TERMS: Record<
 
   // ── Mutations ────────────────────────────────────────────────────────────
   mutation: {
-    title: "Mutation",
+    title: "Substitution effect",
     explanation:
-      "A change in the DNA sequence \u2014 swapping one base for another. Mutations can be harmless (benign), slightly impactful (moderate), or harmful (deleterious).",
+      "Swapping one base for another, then re-scoring the sequence under the model. The result is graded as more likely, neutral, or less likely under the model - a model-likelihood score, not a clinical pathogenicity call.",
   },
-  benign: {
-    title: "Benign Mutation",
+  "more-likely": {
+    title: "More Likely Under the Model",
     explanation:
-      "A DNA change that has little or no effect on the protein\u2019s function. Most mutations in a genome are benign.",
+      "The edited base makes the sequence more expected under Evo 2 (positive delta log-likelihood). A model-likelihood signal, not proof the edit improves function.",
   },
-  deleterious: {
-    title: "Deleterious Mutation",
+  "less-likely": {
+    title: "Less Likely Under the Model",
     explanation:
-      "A DNA change that significantly harms the protein\u2019s function. These are the mutations most associated with genetic diseases.",
+      "The edited base makes the sequence less expected under Evo 2 (negative delta log-likelihood). A model-likelihood signal, not a clinical pathogenicity call.",
   },
   "delta-likelihood": {
     title: "Delta Likelihood (\u0394LL)",
     explanation:
-      "How much a mutation changes the AI\u2019s confidence in the sequence. A large negative change suggests the mutation is harmful; positive means it might improve the sequence.",
+      "How much a single-base edit changes the model\u2019s confidence in the sequence. Negative means the edit is less likely under the model; positive means more likely. A model-likelihood score, not a clinical verdict.",
   },
 };
 
