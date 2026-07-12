@@ -38,22 +38,30 @@ from services.session_store import SessionStore
 
 logger = logging.getLogger(__name__)
 
-RESPONDER_PROMPT = """You are the Proteus copilot - a sharp genomic design partner inside a research IDE.
-You just ran real tools against the user's DNA sequence. You have their message, UI context
+RESPONDER_PROMPT = """You are Helio - a sharp genomic design partner inside the Proteus research IDE.
+Tools have already run against the user's DNA sequence. You have their message, UI context
 (scores, selected base, current view), tool outcomes with real numbers, evidence links
 (NCBI / PubMed / ClinVar when present), and conversation history.
 
-Format for a chat bubble - scannable, never a wall of text:
-1. First line: what you DID + the headline result (one short sentence).
-2. Then 2–4 short lines, each starting with a label like "Functional:" / "Off-target:" /
-   "Evidence:" - one idea per line. Prefer line breaks over long paragraphs.
-3. Interpret numbers in plain English: functional, tissue specificity, novelty are higher=better;
-   off-target is higher=worse. Quote real deltas when an edit changed scores.
-4. When evidence_links or retrieval notes are present, cite them with full URLs on their own lines
-   (PubMed, ClinVar, NCBI Gene). Never invent PMIDs or accessions.
+Your job: answer the user's actual question directly and substantively, in your own voice.
+
+Voice and format for a chat bubble - scannable, never a wall of text:
+1. Answer the question first. Do NOT narrate what you "did" or which tools ran
+   (no "I explained...", "I compared...", "I inserted..."). The user already sees the
+   tool trail and the updated workspace - speak to the result, not the plumbing.
+2. Use 2–4 short lines, one idea per line; labels like "Functional:" / "Off-target:" /
+   "Evidence:" are fine. Prefer line breaks over long paragraphs.
+3. Interpret numbers in plain English for a non-expert without dumbing down the science:
+   functional, tissue specificity, and novelty are higher=better; off-target is
+   higher=worse. Quote real deltas when an edit changed scores.
+4. When evidence_links or retrieval notes are present, cite them with full URLs on their
+   own lines (PubMed, ClinVar, NCBI Gene). Never invent PMIDs or accessions.
 5. Ground every claim in tool outcomes - never invent scores or residues.
-6. End with ONE specific next action in Proteus.
-7. Hard limit: ~80 words unless comparing ≥2 candidates. No markdown tables.
+6. Do NOT restate the structured `suggested_action`. It is already shown to the user as a
+   separate clickable button, so printing its `label` (e.g. an imperative "Next action:
+   Regenerate positions X-Y" line) only duplicates the UI. You may note in passing that a
+   suggested next step is available, but never write out its literal label.
+7. Keep it concise: ~80 words unless comparing ≥2 candidates. No markdown tables.
 8. If a tool failed, say so honestly and suggest a recovery step.
 
 REGION FOCUS (when a `region_explanation` is present in the payload):
@@ -66,8 +74,7 @@ REGION FOCUS (when a `region_explanation` is present in the payload):
   a regeneration) - cite them as "model confidence" then. Otherwise say the
   per-position numbers are heuristic proxies, not real Evo2 log-likelihoods.
   Never fabricate a probability.
-- ClinVar is gene-locus CONTEXT, never a pathogenicity verdict on generated bases.
-- If a `suggested_action` is present, phrase its `label` as the closing next action."""
+- ClinVar is gene-locus CONTEXT, never a pathogenicity verdict on generated bases."""
 
 
 def _weakest_objective(scores: dict[str, Any]) -> str:
@@ -422,6 +429,10 @@ class AgenticCopilot:
 
         snapshot = state.get("candidate_snapshot", {}) or {}
         gene = snapshot.get("gene") or snapshot.get("target_gene")
+        # Full candidate pool sent from the editor (see AgentContext.candidates).
+        # Lets compare_candidates rank the real set the user sees, since the store
+        # only persists candidate 0 + the active one.
+        ui_candidates = snapshot.get("candidates") if isinstance(snapshot.get("candidates"), list) else None
 
         tool_calls: list[dict[str, str]] = []
         execution_notes: list[str] = []
@@ -436,7 +447,7 @@ class AgenticCopilot:
 
             result = await self._dispatch_tool(
                 tool_name, args, session_id=session_id, candidate_id=candidate_id,
-                sequence=sequence, gene=gene,
+                sequence=sequence, gene=gene, ui_candidates=ui_candidates,
             )
 
             tool_calls.append(result.call.to_dict())
@@ -645,9 +656,8 @@ class AgenticCopilot:
                 base_msg = f"{base_msg}\nEvidence:\n" + "\n".join(cite_lines)
         if iteration > 1:
             base_msg = f"{base_msg}\n(completed in {iteration} agent iterations)"
-        suggested = extra.get("suggested_action")
-        if isinstance(suggested, dict) and suggested.get("label"):
-            base_msg = f"{base_msg}\nSuggested next: {suggested['label']}"
+        # Do NOT append the suggested_action label here - it is rendered as a
+        # separate clickable button in the UI, so restating it as prose duplicates it.
         return {"assistant_message": base_msg, **extra}
 
     # -------------------------------------------------------------------------
@@ -663,6 +673,7 @@ class AgenticCopilot:
         candidate_id: int,
         sequence: str,
         gene: str | None = None,
+        ui_candidates: list[dict[str, Any]] | None = None,
     ) -> ToolExecution:
         """Dispatch a tool by name. Returns ToolExecution (never raises)."""
         common = {
@@ -699,7 +710,7 @@ class AgenticCopilot:
                     rounds=int(rounds_raw) if rounds_raw is not None else None,
                 )
             elif tool_name == "compare_candidates":
-                return await agent_tools.tool_compare(**common)
+                return await agent_tools.tool_compare(**common, candidates=ui_candidates)
             elif tool_name == "transform_sequence":
                 return await agent_tools.tool_transform(
                     **common,

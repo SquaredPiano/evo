@@ -122,9 +122,31 @@ export interface RestrictionSitesResult {
   sites: RestrictionSite[];
 }
 
+export interface ScorecardRow {
+  key: string;
+  label: string;
+  value: number;
+  direction: "higher_better" | "lower_better" | string;
+  /** One-line plain-English meaning derived from the real value. */
+  meaning: string;
+}
+
+export interface ScorecardResult {
+  tool: "scorecard";
+  candidate_id: number;
+  length_bp: number;
+  gc_content: number;
+  combined: number;
+  band: string;
+  scores: ScorecardRow[];
+  /** Honest engine provenance (composition heuristics vs real Evo 2). */
+  provenance: string;
+}
+
 export type ToolResult =
   | OffTargetScanResult
   | RestrictionSitesResult
+  | ScorecardResult
   | { tool: string; [key: string]: unknown };
 
 // --- Narrowing helpers (defensive against partial/legacy payloads) --------
@@ -152,6 +174,10 @@ export function isOffTargetScan(r: ToolResult): r is OffTargetScanResult {
 
 export function isRestrictionSites(r: ToolResult): r is RestrictionSitesResult {
   return r.tool === "restriction_sites";
+}
+
+export function isScorecard(r: ToolResult): r is ScorecardResult {
+  return r.tool === "scorecard" && Array.isArray((r as ScorecardResult).scores);
 }
 
 /**

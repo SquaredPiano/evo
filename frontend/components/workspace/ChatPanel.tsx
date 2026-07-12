@@ -118,6 +118,11 @@ export default function ChatPanel() {
   const [streamingText, setStreamingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Synchronous re-entrancy guard. `isTyping` is async React state, so two rapid
+  // sends (e.g. Enter twice, or a suggested-action click during a confirm->act
+  // flow) could both slip past the state check before it flips. This ref closes
+  // that window so a second action can never fire mid-operation.
+  const sendingRef = useRef(false);
 
   const evidenceLinks = useMemo(() => {
     const map = Object.fromEntries(
@@ -392,13 +397,14 @@ export default function ChatPanel() {
   // natural-language message the backend already routes and reuse handleSend -
   // the same path used by every other regen/agent action.
   const handleSuggestedAction = (action: SuggestedAction) => {
-    if (isTyping) return;
+    if (isTyping || sendingRef.current) return;
     void handleSend(messageForSuggestedAction(action));
   };
 
   const handleSend = async (text?: string) => {
     const msg = text ?? input.trim();
-    if (!msg || isTyping) return;
+    if (!msg || isTyping || sendingRef.current) return;
+    sendingRef.current = true;
     addChatMessage({ role: "user", content: msg });
     setInput("");
     setIsTyping(true);
@@ -453,6 +459,7 @@ export default function ChatPanel() {
         });
       }
       setIsTyping(false);
+      sendingRef.current = false;
       setAgentPhase("idle");
       return;
     }
@@ -476,6 +483,7 @@ export default function ChatPanel() {
         addChatMessage({ role: "assistant", content: "No sequence loaded. Submit a sequence first." });
       }
       setIsTyping(false);
+      sendingRef.current = false;
       setAgentPhase("idle");
       return;
     }
@@ -499,6 +507,7 @@ export default function ChatPanel() {
         addChatMessage({ role: "assistant", content: "No sequence to fold." });
       }
       setIsTyping(false);
+      sendingRef.current = false;
       setAgentPhase("idle");
       return;
     }
@@ -514,6 +523,7 @@ export default function ChatPanel() {
           "Launching a fresh design run with your constraints. New candidates will stream into the workspace - I'm keeping this conversation intact.",
       });
       setIsTyping(false);
+      sendingRef.current = false;
       setAgentPhase("idle");
       startDesign(msg);
       return;
@@ -537,14 +547,12 @@ export default function ChatPanel() {
           content: "Load or design a sequence first - I need DNA in the workspace before I can edit, score, or explain.",
         });
         setIsTyping(false);
+        sendingRef.current = false;
         setAgentPhase("idle");
         return;
       }
 
-      const res = await fetch(`${API_BASE}/api/agent/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const requestBody = JSON.stringify({
           session_id: sessionId ?? s.sessionId ?? "local",
           candidate_id: s.activeCandidateId ?? 0,
           message: msg,
@@ -575,9 +583,50 @@ export default function ChatPanel() {
             })),
             seed_source: seedSource ?? undefined,
             scoring_note: scoringNote ?? undefined,
+            // Full candidate pool so "compare candidates" ranks the real set the
+            // user sees. The backend store only persists candidate 0 + the active
+            // one, so it cannot rank 1..N without this.
+            candidates: candidates
+              .filter((c) => c.sequence)
+              .map((c) => ({
+                id: c.id,
+                sequence: c.sequence,
+                scores: {
+                  functional: c.scores.functional,
+                  tissue_specificity: c.scores.tissue,
+                  off_target: c.scores.offTarget,
+                  novelty: c.scores.novelty,
+                },
+                overall: c.overall,
+                combined: c.overall / 100,
+              })),
           },
-        }),
       });
+
+      const postChat = () =>
+        fetch(`${API_BASE}/api/agent/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: requestBody,
+        });
+
+      // 423 = the candidate lock is held by a still-running action. Rather than
+      // surface a raw error, wait briefly and retry once - the backend now
+      // queues the waiter for ~45s, so a transient 423 means the previous op is
+      // just finishing.
+      let res = await postChat();
+      if (res.status === 423) {
+        setAgentPhase("thinking");
+        await new Promise((r) => setTimeout(r, 1500));
+        res = await postChat();
+      }
+      if (res.status === 423) {
+        addChatMessage({
+          role: "assistant",
+          content: "Helio is still working on the previous step - one moment, then try again.",
+        });
+        return;
+      }
 
       if (!res.ok) {
         const errText = await res.text();
@@ -663,6 +712,7 @@ export default function ChatPanel() {
       setStreamingText("");
     } finally {
       setIsTyping(false);
+      sendingRef.current = false;
       setAgentPhase("idle");
     }
   };
