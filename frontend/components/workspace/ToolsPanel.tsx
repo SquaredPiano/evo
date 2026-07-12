@@ -17,6 +17,8 @@ import {
   runCalibration,
   computeTm,
   computeProteinParams,
+  designPrimers,
+  foldSecondaryStructure,
   exportFasta,
   exportGenbank,
   downloadText,
@@ -26,6 +28,8 @@ import {
   type CalibrationReport,
   type TmResult,
   type ProteinParamsResult,
+  type PrimerDesignResult,
+  type SecondaryStructureResult,
 } from "@/lib/api";
 import {
   clinvarVariationUrl,
@@ -35,7 +39,7 @@ import {
 } from "@/lib/evidence";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
-type Tab = "tm" | "offtarget" | "codon" | "protein" | "variants" | "validate" | "export";
+type Tab = "tm" | "primers" | "structure" | "offtarget" | "codon" | "protein" | "variants" | "validate" | "export";
 
 // Standard genetic code (frame-0) for a convenience translation of the current
 // DNA into the protein whose parameters we report. Pure, deterministic.
@@ -94,6 +98,8 @@ export default function ToolsPanel() {
   const [err, setErr] = useState<string | null>(null);
 
   const [tm, setTm] = useState<TmResult | null>(null);
+  const [primers, setPrimers] = useState<PrimerDesignResult | null>(null);
+  const [structure, setStructure] = useState<SecondaryStructureResult | null>(null);
   const [proteinSeq, setProteinSeq] = useState("");
   const [protein, setProtein] = useState<ProteinParamsResult | null>(null);
 
@@ -121,6 +127,14 @@ export default function ToolsPanel() {
 
   const runTm = () => run(async () => {
     setTm(await computeTm(rawSequence));
+  });
+
+  const runPrimers = () => run(async () => {
+    setPrimers(await designPrimers(rawSequence));
+  });
+
+  const runStructure = () => run(async () => {
+    setStructure(await foldSecondaryStructure(rawSequence));
   });
 
   const runProtein = () => run(async () => {
@@ -171,6 +185,8 @@ export default function ToolsPanel() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "tm", label: "Tm" },
+    { id: "primers", label: "Primers" },
+    { id: "structure", label: "Structure (RNA)" },
     { id: "offtarget", label: "Off-target" },
     { id: "codon", label: "Codon opt" },
     { id: "protein", label: "Protein" },
@@ -228,6 +244,91 @@ export default function ToolsPanel() {
           )}
           <div className="text-[10px]" style={{ color: "var(--text-faint)" }}>
             Nearest-neighbor Tm (SantaLucia 1998) at 50 mM Na+, 0.25 µM oligo, with a Wallace-rule cross-check.
+          </div>
+        </div>
+      )}
+
+      {tab === "primers" && (
+        <div className="space-y-2">
+          <button onClick={runPrimers} disabled={busy || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
+            {busy ? "Designing…" : "Design primers"}
+          </button>
+          {primers && primers.pairs.length === 0 && (
+            <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+              primer3 returned no acceptable pairs.
+              {primers.explain_pair ? <span className="block font-mono text-[10px] mt-1" style={{ color: "var(--text-faint)" }}>{primers.explain_pair}</span> : null}
+            </div>
+          )}
+          {primers && primers.pairs.length > 0 && (
+            <div className="text-[11px] space-y-2.5 max-h-72 overflow-auto" style={{ color: "var(--text-secondary)" }}>
+              {primers.pairs.map((p, i) => {
+                const hairpinTh = Math.max(p.left.hairpin_th, p.right.hairpin_th);
+                const dimerTh = Math.max(p.compl_any_th, p.compl_end_th);
+                const hairpinWarn = hairpinTh >= 45;
+                const dimerWarn = dimerTh >= 45;
+                return (
+                  <div key={i} className="rounded-xl p-2.5 space-y-1.5" style={{ border: "1px solid var(--ghost-border)", background: "color-mix(in oklch, var(--accent), transparent 96%)" }}>
+                    <div className="flex justify-between">
+                      <span style={{ color: "var(--accent)" }}>Pair {i + 1}</span>
+                      <span className="font-mono">product {p.product_size} bp</span>
+                    </div>
+                    {([["Forward", p.left], ["Reverse", p.right]] as const).map(([label, pr]) => (
+                      <div key={label} className="space-y-0.5">
+                        <div className="flex justify-between">
+                          <span style={{ color: "var(--text-muted)" }}>{label}</span>
+                          <span className="font-mono">{pr.tm_celsius.toFixed(1)} °C · {pr.gc_percent.toFixed(0)}% GC</span>
+                        </div>
+                        <div className="font-mono text-[10px] break-all" style={{ color: "var(--text-primary)" }}>{pr.sequence}</div>
+                      </div>
+                    ))}
+                    {(hairpinWarn || dimerWarn) && (
+                      <div className="text-[10px] leading-relaxed" style={{ color: "var(--base-t)" }}>
+                        {hairpinWarn ? `Hairpin structure (Tm ${hairpinTh.toFixed(0)} °C). ` : ""}
+                        {dimerWarn ? `Heterodimer (Tm ${dimerTh.toFixed(0)} °C).` : ""}
+                      </div>
+                    )}
+                    {!hairpinWarn && !dimerWarn && (
+                      <div className="text-[10px]" style={{ color: "var(--text-faint)" }}>No notable hairpin or dimer (both &lt; 45 °C).</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          <div className="text-[10px] leading-relaxed" style={{ color: "var(--text-faint)" }}>
+            primer3 designs PCR/sequencing primer pairs against the active sequence. Tm, GC%, and product size are primer3 metrics; hairpin/dimer values are primer3 thermodynamic-alignment melting temperatures.
+          </div>
+        </div>
+      )}
+
+      {tab === "structure" && (
+        <div className="space-y-2">
+          <button onClick={runStructure} disabled={busy || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
+            {busy ? "Folding…" : "Fold structure"}
+          </button>
+          {structure && (
+            <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
+              <div className="flex justify-between">
+                <span>MFE (min. free energy)</span>
+                <span className="font-mono" style={{ color: "var(--accent)" }}>{structure.mfe_kcal_mol.toFixed(1)} kcal/mol</span>
+              </div>
+              <div className="flex justify-between"><span>Length / paired</span><span className="font-mono">{structure.length} nt · {(structure.paired_fraction * 100).toFixed(0)}%</span></div>
+              <div className="flex justify-between"><span>Hairpins</span><span className="font-mono">{structure.hairpin_count}</span></div>
+              <div className="space-y-1 pt-1">
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>Dot-bracket structure</span>
+                <div className="rounded-xl p-2 overflow-x-auto" style={{ border: "1px solid var(--ghost-border)", background: "color-mix(in oklch, var(--accent), transparent 96%)" }}>
+                  <pre className="font-mono text-[10px] leading-tight m-0" style={{ color: "var(--text-primary)" }}>{structure.sequence}
+{structure.dot_bracket}</pre>
+                </div>
+                <span className="text-[10px] leading-relaxed block" style={{ color: "var(--text-faint)" }}>
+                  Dots are unpaired bases; matching parentheses are base pairs.
+                </span>
+              </div>
+              {structure.note && <div className="pt-1 leading-relaxed" style={{ color: "var(--text-faint)" }}>{structure.note}</div>}
+            </div>
+          )}
+          <div className="text-[10px] leading-relaxed" style={{ color: "var(--text-faint)" }}>
+            ViennaRNA MFE (RNA.fold) folds an RNA model{structure?.input_was_dna ? "; the DNA input was read as RNA (T treated as U)" : " (T treated as U)"}.
           </div>
         </div>
       )}
