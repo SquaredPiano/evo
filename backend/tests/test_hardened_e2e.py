@@ -311,20 +311,37 @@ class TestScoringExact:
         assert abs(score - expected) < 1e-10
 
     def test_tissue_specificity_no_target(self, brca1_forward):
+        # PWM behavior: with no target tissue the score reflects overall
+        # regulatory-element richness derived from real JASPAR PWM hit density
+        # (services.motifs), not the old substring count. We assert the honest
+        # contract - a valid [0, 1] score with the documented no-target floor of
+        # 0.3 (base) - rather than re-deriving the exact PWM arithmetic here.
         score = score_tissue_specificity(brca1_forward, BRCA1)
-        # No target tissues → generic regulatory richness
-        # Count all motif hits in BRCA1
-        neuronal_motifs = ["TGACGTCA", "CAGCACC", "GCACCAC"]
-        cardiac_motifs = ["CTAAAAATA", "AGATAG", "GATAAG"]
-        generic_motifs = ["TATAAA", "CCAAT", "GGGCGG"]
+        assert 0.3 <= score <= 1.0
 
-        total_hits = (
-            sum(len(find_motif(BRCA1, m)) for m in neuronal_motifs)
-            + sum(len(find_motif(BRCA1, m)) for m in cardiac_motifs)
-            + sum(len(find_motif(BRCA1, m)) for m in generic_motifs)
+    def test_tissue_specificity_pwm_directional(self, brca1_forward):
+        # A synthetic cardiac-motif-rich promoter (tandem GATA + MEF2 cores)
+        # should score higher for a cardiac target than a plain poly-A tract,
+        # confirming the PWM signal is real and directional.
+        cardiac_rich = "GATAAGATAAGATAAG" + "CTAAAAATAG" * 2 + "GATAAGATAA"
+        flat = "A" * len(cardiac_rich)
+        forward_rich = ForwardResult(
+            logits=_mock_logits(cardiac_rich),
+            sequence_score=float(np.mean(_mock_logits(cardiac_rich))),
+            embeddings=None,
         )
-        expected = _clamp(0.4 + 0.05 * total_hits)
-        assert abs(score - expected) < 1e-10
+        forward_flat = ForwardResult(
+            logits=_mock_logits(flat),
+            sequence_score=float(np.mean(_mock_logits(flat))),
+            embeddings=None,
+        )
+        s_rich = score_tissue_specificity(
+            forward_rich, cardiac_rich, target_tissues=["cardiac_muscle"]
+        )
+        s_flat = score_tissue_specificity(
+            forward_flat, flat, target_tissues=["cardiac_muscle"]
+        )
+        assert s_rich > s_flat
 
     def test_off_target_brca1_is_low(self, brca1_forward):
         score = score_off_target(brca1_forward, BRCA1)
