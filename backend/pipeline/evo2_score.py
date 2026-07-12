@@ -13,11 +13,13 @@ biology knowledge replaces the heuristic.
 
 from __future__ import annotations
 
+import asyncio
 import math
+from dataclasses import dataclass
 
 import numpy as np
 
-from models.domain import CandidateScores, ForwardResult, LikelihoodScore
+from models.domain import CandidateScores, ForwardResult, Impact, LikelihoodScore
 from services.evo2 import Evo2Service
 from services.translation import (
     find_motif,
@@ -228,6 +230,74 @@ async def score_candidate(
     return scores, per_position
 
 
+# Positions patched around a single-base edit. Wide enough to cover any local
+# heatmap the frontend renders around the cursor, small enough to keep the
+# payload tiny so the edit response stays well under the 2s budget.
+RESCORE_WINDOW = 64
+
+
+@dataclass(frozen=True)
+class MutationRescore:
+    """Rich result of a single-base rescore, consumed by the /edit/base fast path.
+
+    Bundles everything the edit endpoint needs so the caller never has to issue
+    a second forward pass (e.g. a duplicate ``score_mutation``) just to learn the
+    reference base or impact class.
+    """
+
+    scores: CandidateScores
+    delta_likelihood: float
+    reference_base: str
+    predicted_impact: Impact
+    mutated_sequence: str
+    # Per-position log-likelihoods for a WINDOW around the edit, so the frontend
+    # heatmap can update immediately without waiting on a full re-analysis.
+    per_position_patch: list[LikelihoodScore]
+
+
+async def rescore_mutation_detailed(
+    service: Evo2Service,
+    sequence: str,
+    position: int,
+    new_base: str,
+    target_tissues: list[str] | None = None,
+    window: int = RESCORE_WINDOW,
+) -> MutationRescore:
+    """Fast re-score after a single base edit, returning everything the edit
+    endpoint needs in one shot.
+
+    The mutation delta (ref vs alt) and the full candidate rescore are computed
+    concurrently. The per-position log-likelihoods are sliced to a window around
+    the edit so the response stays small and the frontend heatmap can patch in
+    place. This deliberately does NOT fold protein structure — that is a slow,
+    best-effort step the caller runs out of band.
+    """
+    mutated = sequence[:position] + new_base.upper() + sequence[position + 1 :]
+
+    # Delta (needs a ref + alt forward pass) and the full alt rescore are
+    # independent — run them together instead of serially.
+    mutation, (scores, per_position) = await asyncio.gather(
+        service.score_mutation(sequence, position, new_base),
+        score_candidate(
+            service, mutated, target_tissues=target_tissues, reference_sequence=sequence
+        ),
+    )
+
+    half = window // 2
+    start = max(0, position - half)
+    end = min(len(per_position), position + half + 1)
+    patch = per_position[start:end]
+
+    return MutationRescore(
+        scores=scores,
+        delta_likelihood=mutation.delta_likelihood,
+        reference_base=mutation.reference_base,
+        predicted_impact=mutation.predicted_impact,
+        mutated_sequence=mutated,
+        per_position_patch=patch,
+    )
+
+
 async def rescore_mutation(
     service: Evo2Service,
     sequence: str,
@@ -237,21 +307,15 @@ async def rescore_mutation(
 ) -> tuple[CandidateScores, float]:
     """Fast re-score after a single base edit. Used by Edit Path A.
 
+    Backwards-compatible thin wrapper over :func:`rescore_mutation_detailed`.
+
     Returns:
         (updated_scores, delta_likelihood)
     """
-    # Get mutation delta (the fast path)
-    mutation = await service.score_mutation(sequence, position, new_base)
-
-    # Build mutated sequence for full scoring
-    mutated = sequence[:position] + new_base.upper() + sequence[position + 1 :]
-
-    # Re-score the full candidate with the mutation applied
-    scores, _ = await score_candidate(
-        service, mutated, target_tissues=target_tissues, reference_sequence=sequence
+    result = await rescore_mutation_detailed(
+        service, sequence, position, new_base, target_tissues=target_tissues
     )
-
-    return scores, mutation.delta_likelihood
+    return result.scores, result.delta_likelihood
 
 
 # ---------------------------------------------------------------------------

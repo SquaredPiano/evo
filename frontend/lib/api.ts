@@ -207,13 +207,36 @@ export async function submitDesign(
   return { sessionId: data.session_id, wsUrl: data.ws_url };
 }
 
-/** POST /api/edit/base - Single base pair edit, re-score only. Must respond < 2s. */
+export interface BaseEditResult {
+  position: number;
+  reference_base: string;
+  new_base: string;
+  delta_likelihood: number;
+  predicted_impact: "benign" | "moderate" | "deleterious";
+  updated_scores: {
+    functional: number;
+    tissue_specificity: number;
+    off_target: number;
+    novelty: number;
+    combined?: number | null;
+  };
+  /** Full mutated sequence, so the client need not reconstruct it. */
+  sequence?: string | null;
+  /** Per-position log-likelihoods for a window around the edit (heatmap patch). */
+  per_position_scores?: { position: number; score: number }[] | null;
+  /** True only when the edit changes the translated coding region. */
+  refold_recommended?: boolean;
+}
+
+/** POST /api/edit/base - Single base pair edit, re-score only. Must respond < 2s.
+ *  Structure is NOT folded here — the caller refolds out of band when
+ *  `refold_recommended` is true. */
 export async function editBase(
   sessionId: string,
   candidateId: number,
   position: number,
   newBase: string
-) {
+): Promise<BaseEditResult> {
   const res = await fetch(`${API_BASE}/api/edit/base`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
