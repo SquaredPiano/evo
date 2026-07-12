@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useEvoStore } from "@/lib/store";
 import {
@@ -12,8 +12,11 @@ import {
   ArrowLeftRight,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { diffCandidates, type DiffHunk, type DiffPosition } from "@/lib/seqDiff";
+import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 import type { AnalysisResult } from "@/types";
 
 const ProteinViewer = dynamic(() => import("@/components/structure/ProteinViewer"), { ssr: false });
@@ -60,6 +63,8 @@ export default function CompareView() {
   const activePdb = useEvoStore((s) => s.activePdb);
   const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
   const theme = useEvoStore((s) => s.theme);
+  const setChatOpen = useEvoStore((s) => s.setChatOpen);
+  const setChatDraft = useEvoStore((s) => s.setChatDraft);
 
   const compareLeftId = useEvoStore((s) => s.compareLeftId);
   const compareRightId = useEvoStore((s) => s.compareRightId);
@@ -87,6 +92,7 @@ export default function CompareView() {
   }, [candA, candB]);
 
   const [hunkIndex, setHunkIndex] = useState(0);
+  const [showDiff, setShowDiff] = useState(false);
   const hunkRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const gotoHunk = (next: number) => {
@@ -141,16 +147,85 @@ export default function CompareView() {
   const nameA = `Candidate_${candA.id.toString().padStart(3, "0")}`;
   const nameB = `Candidate_${candB.id.toString().padStart(3, "0")}`;
 
+  // ── Plain-language "What changed" summary (derived from data already shown) ──
+  const changedBases = diff?.changes.length ?? 0;
+  const totalBases = diff ? Math.max(diff.lengthA, diff.lengthB) : candA.sequence.length;
+  const identityPct = diff ? diff.identity * 100 : 100;
+
+  // Which candidate is stronger on each metric, in plain-English terms.
+  const friendlyMetric: Record<string, string> = {
+    Functional: "function",
+    Tissue: "tissue fit",
+    "Off-target": "off-target safety",
+    Novelty: "novelty",
+  };
+  const aWins: string[] = [];
+  const bWins: string[] = [];
+  for (const r of metricRows) {
+    if (r.label === "Overall") continue;
+    const w = winnerOf(r);
+    if (w === "A") aWins.push(friendlyMetric[r.label] ?? r.label.toLowerCase());
+    else if (w === "B") bWins.push(friendlyMetric[r.label] ?? r.label.toLowerCase());
+  }
+  const overallRow = metricRows[metricRows.length - 1];
+  const overallWinner = winnerOf(overallRow);
+
+  const listAnd = (arr: string[]) =>
+    arr.length === 0
+      ? ""
+      : arr.length === 1
+        ? arr[0]
+        : arr.length === 2
+          ? `${arr[0]} and ${arr[1]}`
+          : `${arr.slice(0, -1).join(", ")}, and ${arr[arr.length - 1]}`;
+
+  const changeSentence = sameCandidate
+    ? "You picked the same candidate on both sides, so there is nothing to compare yet."
+    : changedBases === 0
+      ? `${nameA} and ${nameB} are identical over their shared length.`
+      : `${nameA} and ${nameB} differ at ${changedBases} of ${totalBases} bases (${identityPct.toFixed(1)}% similar).`;
+
+  const strengthParts: string[] = [];
+  if (aWins.length) strengthParts.push(`${nameA} scores higher on ${listAnd(aWins)}`);
+  if (bWins.length) strengthParts.push(`${nameB} scores higher on ${listAnd(bWins)}`);
+  const strengthSentence = sameCandidate
+    ? ""
+    : strengthParts.length
+      ? `${strengthParts.join("; ")}.`
+      : "The two score about the same across every metric.";
+
+  const overallLeaderLabel =
+    overallWinner === "tie" ? "Even overall" : `${overallWinner} leads overall`;
+
+  const explainInHelio = () => {
+    const aStrong = aWins.length ? `${nameA} scores higher on ${listAnd(aWins)}` : "";
+    const bStrong = bWins.length ? `${nameB} scores higher on ${listAnd(bWins)}` : "";
+    const strengths = [aStrong, bStrong].filter(Boolean).join("; ");
+    const prompt =
+      `Explain this candidate comparison in plain English for a non-biologist. ` +
+      `I'm comparing two DNA design variants: ${nameA} (rank #${rankOf(candA.id)}) and ${nameB} (rank #${rankOf(candB.id)}). ` +
+      (sameCandidate
+        ? `They are the same candidate. `
+        : `They differ at ${changedBases} of ${totalBases} bases (${identityPct.toFixed(1)}% similar). `) +
+      (strengths ? `${strengths}. ` : "They score about the same across every metric. ") +
+      `Off-target is a safety metric where lower is better. ${overallLeaderLabel}. ` +
+      `Explain what these differences mean and which candidate looks better and why. ` +
+      `These are demo heuristics, not clinical scores.`;
+    setChatOpen(true);
+    setChatDraft(prompt);
+  };
+
   return (
     <div className="flex-1 overflow-auto" style={{ background: "var(--surface-base)" }}>
       <div className="max-w-6xl mx-auto px-8 py-6">
         {/* Header */}
         <div className="flex items-start justify-between mb-5 gap-4">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight mb-1">Candidate Comparison</h2>
+            <h2 className="text-xl font-semibold tracking-tight mb-1">Candidate comparison</h2>
             <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-              A git-style diff between two design variants. Highlighted bases show where the
-              sequences diverge; the table below scores each metric head-to-head.
+              See how two design variants stack up. The summary below says what changed and
+              which one is stronger; the table scores each metric head-to-head, and you can open
+              the base-level view for exact positions.
             </p>
           </div>
           <button onClick={() => { setActiveCandidateId(candA.id); setViewMode("explorer"); }}
@@ -191,15 +266,75 @@ export default function CompareView() {
           </div>
         )}
 
-        {/* ── GIT-DIFF SEQUENCE VIEW ── */}
+        {/* ── PLAIN-LANGUAGE "WHAT CHANGED" SUMMARY (always visible, primary) ── */}
+        <div className="rounded-xl p-5 mb-6" style={{ background: cardBg }}>
+          <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+            What changed
+          </span>
+          <p className="text-[14px] leading-relaxed mb-1" style={{ color: "var(--text-primary)" }}>
+            {changeSentence}
+          </p>
+          {strengthSentence && (
+            <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+              {strengthSentence}
+            </p>
+          )}
+          {!sameCandidate && (
+            <div className="flex flex-wrap items-center gap-2 mt-4">
+              <SummaryChip tone="neutral">
+                <ScienceTooltip term="identity">{identityPct.toFixed(1)}% similar</ScienceTooltip>
+              </SummaryChip>
+              <SummaryChip tone="neutral">
+                {changedBases} changed base{changedBases !== 1 ? "s" : ""}
+              </SummaryChip>
+              {diff && diff.lengthA !== diff.lengthB && (
+                <SummaryChip tone="neutral">
+                  length {diff.lengthA} → {diff.lengthB}
+                </SummaryChip>
+              )}
+              <SummaryChip tone={overallWinner === "A" ? "a" : overallWinner === "B" ? "b" : "neutral"}>
+                {overallLeaderLabel}
+              </SummaryChip>
+            </div>
+          )}
+          <div className="mt-4">
+            <button
+              onClick={explainInHelio}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium transition-all hover:scale-[1.02]"
+              style={{ background: "var(--surface-base)", color: "var(--text-primary)", border: "1px solid var(--ghost-border)" }}>
+              <Sparkles size={14} style={{ color: "var(--accent)" }} />
+              Explain this comparison in plain English
+            </button>
+          </div>
+        </div>
+
+        {/* ── BASE-LEVEL DIFF (collapsed by default — simple first) ── */}
         {!sameCandidate && diff && (
           <div className="rounded-xl overflow-hidden mb-6" style={{ background: cardBg }}>
-            <div className="flex items-center gap-3 px-5 py-3 flex-wrap" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+            <button
+              onClick={() => setShowDiff((v) => !v)}
+              aria-expanded={showDiff}
+              className="w-full flex items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-black/[0.02]"
+              style={{ borderBottom: showDiff ? "1px solid var(--ghost-border)" : "none" }}>
+              {showDiff ? <ChevronDown size={15} style={{ color: "var(--text-muted)" }} /> : <ChevronRight size={15} style={{ color: "var(--text-muted)" }} />}
               <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                Sequence diff
+                Show base-level diff
               </span>
               <span className="text-[12px] font-mono" style={{ color: "var(--text-secondary)" }}>
-                {diff.changes.length} change{diff.changes.length !== 1 ? "s" : ""} · {(diff.identity * 100).toFixed(2)}% identity
+                {diff.hunks.length} changed region{diff.hunks.length !== 1 ? "s" : ""}
+              </span>
+              <span className="flex-1" />
+            </button>
+
+            {showDiff && (
+            <>
+            <div className="flex items-center gap-3 px-5 py-3 flex-wrap" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+              <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                Changed regions
+              </span>
+              <span className="text-[12px] font-mono" style={{ color: "var(--text-secondary)" }}>
+                {diff.changes.length} changed base{diff.changes.length !== 1 ? "s" : ""} ·{" "}
+                <ScienceTooltip term="identity">{(diff.identity * 100).toFixed(2)}% similar</ScienceTooltip>
               </span>
               {diff.lengthA !== diff.lengthB && (
                 <span className="text-[11px] font-mono" style={{ color: "var(--base-t)" }}>
@@ -210,16 +345,16 @@ export default function CompareView() {
               {diff.hunks.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-mono tabular-nums" style={{ color: "var(--text-muted)" }}>
-                    hunk {hunkIndex + 1}/{diff.hunks.length}
+                    region {hunkIndex + 1}/{diff.hunks.length}
                   </span>
                   <button onClick={() => gotoHunk(hunkIndex - 1)} disabled={hunkIndex === 0}
                     className="p-1 rounded transition-colors hover:bg-black/[0.05] disabled:opacity-30"
-                    style={{ border: "1px solid var(--ghost-border)" }} title="Previous hunk">
+                    style={{ border: "1px solid var(--ghost-border)" }} title="Previous region">
                     <ChevronUp size={13} />
                   </button>
                   <button onClick={() => gotoHunk(hunkIndex + 1)} disabled={hunkIndex === diff.hunks.length - 1}
                     className="p-1 rounded transition-colors hover:bg-black/[0.05] disabled:opacity-30"
-                    style={{ border: "1px solid var(--ghost-border)" }} title="Next hunk">
+                    style={{ border: "1px solid var(--ghost-border)" }} title="Next region">
                     <ChevronDown size={13} />
                   </button>
                 </div>
@@ -258,6 +393,8 @@ export default function CompareView() {
                   </div>
                 ))}
               </div>
+            )}
+            </>
             )}
           </div>
         )}
@@ -341,6 +478,25 @@ export default function CompareView() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Small pill used in the "What changed" summary
+// ---------------------------------------------------------------------------
+function SummaryChip({ children, tone }: { children: ReactNode; tone: "neutral" | "a" | "b" }) {
+  const accent = tone === "a" ? "var(--accent)" : tone === "b" ? "var(--base-c)" : null;
+  return (
+    <span
+      className="inline-flex items-center text-[11px] font-medium px-2.5 py-1 rounded-full"
+      style={
+        accent
+          ? { background: `color-mix(in oklch, ${accent}, transparent 88%)`, color: accent }
+          : { background: "var(--surface-base)", color: "var(--text-secondary)", border: "1px solid var(--ghost-border)" }
+      }
+    >
+      {children}
+    </span>
   );
 }
 
@@ -461,9 +617,9 @@ function HunkBlock({
 
   return (
     <div className="px-5 py-3">
-      {/* Hunk header */}
+      {/* Region header */}
       <div className="text-[11px] font-mono mb-2" style={{ color: "var(--text-faint)" }}>
-        @@ pos {hunk.start}–{hunk.end} · {hunk.changes.length} change{hunk.changes.length !== 1 ? "s" : ""} @@
+        Bases {hunk.start}–{hunk.end} · {hunk.changes.length} changed base{hunk.changes.length !== 1 ? "s" : ""}
       </div>
 
       {/* Sequence lines */}
@@ -500,7 +656,9 @@ function HunkBlock({
               {/* Only show a real per-position score delta — never a fake 0. */}
               {hasScoreDeltas && c.scoreDelta !== undefined && (
                 <span style={{ color: c.scoreDelta > 0 ? "var(--accent)" : c.scoreDelta < 0 ? "var(--base-t)" : "var(--text-muted)" }}>
-                  ΔLL {c.scoreDelta > 0 ? "+" : ""}{c.scoreDelta.toFixed(2)}
+                  <ScienceTooltip term="log-likelihood">
+                    confidence {c.scoreDelta > 0 ? "+" : ""}{c.scoreDelta.toFixed(2)}
+                  </ScienceTooltip>
                 </span>
               )}
             </div>
