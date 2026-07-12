@@ -44,7 +44,7 @@ from models.responses import (
     StructureResponse,
 )
 from config import SessionStoreMode, StructureMode, settings
-from pipeline.evo2_score import rescore_mutation, score_candidate
+from pipeline.evo2_score import rescore_mutation_detailed, score_candidate
 from pipeline.orchestrator import (
     DEFAULT_SEED,
     create_session_id,
@@ -61,7 +61,7 @@ from services.session_store import (
     SessionNotFoundError,
     create_session_store,
 )
-from services.structure import predict_structure
+from services.structure import coding_region_changed, predict_structure
 from services.translation import find_orfs
 from services.experiment_tracker import (
     ExperimentTracker,
@@ -209,14 +209,19 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
             if request.position < 0 or request.position >= len(sequence):
                 raise HTTPException(status_code=422, detail="position out of range")
 
-            updated_scores, delta = await rescore_mutation(
+            # Single rescore pass yields scores, delta, ref base, impact AND a
+            # per-position patch — no duplicate score_mutation call needed.
+            rescore = await rescore_mutation_detailed(
                 evo2_service,
                 sequence=sequence,
                 position=request.position,
                 new_base=request.new_base,
             )
-            mutation = await evo2_service.score_mutation(sequence, request.position, request.new_base)
-            mutated_sequence = sequence[: request.position] + request.new_base.upper() + sequence[request.position + 1 :]
+            updated_scores = rescore.scores
+            delta = rescore.delta_likelihood
+            mutated_sequence = rescore.mutated_sequence
+            # Only worth refolding if the edit actually changes the translated protein.
+            refold_recommended = coding_region_changed(sequence, mutated_sequence)
             await session_store.set_candidate_sequence(request.session_id, request.candidate_id, mutated_sequence)
 
     # Auto-record experiment version for base edits
@@ -235,7 +240,7 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
             operation="edit",
             operation_details={
                 "position": request.position,
-                "ref_base": mutation.reference_base,
+                "ref_base": rescore.reference_base,
                 "new_base": request.new_base,
                 "delta_likelihood": delta,
             },
@@ -245,10 +250,10 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
 
     return BaseEditResponse(
         position=request.position,
-        reference_base=mutation.reference_base,
+        reference_base=rescore.reference_base,
         new_base=request.new_base,
         delta_likelihood=delta,
-        predicted_impact=mutation.predicted_impact.value,
+        predicted_impact=rescore.predicted_impact.value,
         updated_scores=CandidateScoresResponse(
             functional=updated_scores.functional,
             tissue_specificity=updated_scores.tissue_specificity,
@@ -256,6 +261,12 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
             novelty=updated_scores.novelty,
             combined=updated_scores.combined,
         ),
+        sequence=mutated_sequence,
+        per_position_scores=[
+            {"position": p.position, "score": p.score}
+            for p in rescore.per_position_patch
+        ],
+        refold_recommended=refold_recommended,
     )
 
 

@@ -27,6 +27,13 @@ class BaseEditResponse(BaseModel):
     delta_likelihood: float
     predicted_impact: str  # "benign" | "moderate" | "deleterious"
     updated_scores: CandidateScoresResponse
+    # Fast-path additions: let the frontend update sequence + heatmap immediately
+    # without waiting on (or blocking) the slow structure refold.
+    sequence: str | None = None
+    per_position_scores: list[dict[str, float | int]] | None = None
+    # True only when the edit changes the translated coding region — i.e. when a
+    # protein refold would actually differ. Lets the client skip needless folds.
+    refold_recommended: bool = False
 
 
 class MutationResponse(BaseModel):

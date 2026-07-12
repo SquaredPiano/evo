@@ -75,6 +75,9 @@ interface EvoState {
 
   mutationEffect: MutationEffect | null;
   mutationLoading: boolean;
+  /** True while the protein structure refolds in the background after an edit.
+   *  Independent of mutationLoading (which only covers fast scoring). */
+  structureRefolding: boolean;
 
   editHistory: EditEntry[];
   chatMessages: ChatMessage[];
@@ -122,6 +125,7 @@ interface EvoState {
   setHighlightResidues: (residues: number[]) => void;
   setMutationEffect: (effect: MutationEffect | null) => void;
   setMutationLoading: (loading: boolean) => void;
+  setStructureRefolding: (refolding: boolean) => void;
   setPipelineStatus: (status: PipelineStatus) => void;
   setPipelineStage: (stage: string) => void;
   setError: (error: string | null) => void;
@@ -169,6 +173,7 @@ const initialState = {
   highlightResidues: [] as number[],
   mutationEffect: null as MutationEffect | null,
   mutationLoading: false,
+  structureRefolding: false,
   editHistory: [] as EditEntry[],
   chatMessages: [] as ChatMessage[],
   chatOpen: false,
@@ -293,6 +298,7 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   setHighlightResidues: (residues) => set({ highlightResidues: residues }),
   setMutationEffect: (effect) => set({ mutationEffect: effect }),
   setMutationLoading: (loading) => set({ mutationLoading: loading }),
+  setStructureRefolding: (refolding) => set({ structureRefolding: refolding }),
   setPipelineStatus: (status) => set({ pipelineStatus: status }),
   setPipelineStage: (stage) => set({ pipelineStage: stage }),
   setError: (error) => set({ error, pipelineStatus: "error" }),
