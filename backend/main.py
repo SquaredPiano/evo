@@ -264,6 +264,7 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
             on_pipeline_complete=lambda candidates, completed, failed: _persist_run_completion(
                 run_id, session_id, candidates, completed, failed
             ),
+            literature_index=literature_index,
         )
     )
     return DesignAcceptedResponse(

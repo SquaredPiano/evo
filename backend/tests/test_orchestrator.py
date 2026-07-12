@@ -3,9 +3,16 @@
 import pytest
 
 import pipeline.orchestrator as orchestrator
-from pipeline.orchestrator import run_followup_pipeline, run_generation_pipeline
+from pipeline.orchestrator import (
+    _filter_relevant_literature_hits,
+    run_followup_pipeline,
+    run_generation_pipeline,
+)
 from config import StructureMode
+from pipeline.retrieval import RetrievalResult
 from services.evo2 import Evo2MockService
+from services.literature_index import SearchResult
+from services.pubmed import PubMedArticle, PubMedResult
 from ws.manager import WebSocketManager
 
 
@@ -102,6 +109,194 @@ async def test_real_only_retrieval_reports_failure_when_sources_fail(
     retrieval_events = [event for event in ws.sent if event["event"] == "retrieval_progress"]
     assert len(retrieval_events) == 3
     assert all(event["data"]["status"] == "failed" for event in retrieval_events)
+
+
+class _FakeLiteratureIndex:
+    """Duck-types LiteratureIndex.search()/ensure_indexed() without touching
+    the real module (owned by a concurrently-modified teammate file)."""
+
+    def __init__(self, hits: list[dict[str, object]]) -> None:
+        self._hits = hits
+        self.calls: list[dict[str, object]] = []
+        self.ensure_indexed_calls: list[dict[str, object]] = []
+
+    async def ensure_indexed(
+        self, gene: str | None, therapeutic_context: str | None = None, design_type: str | None = None
+    ) -> None:
+        self.ensure_indexed_calls.append(
+            {"gene": gene, "therapeutic_context": therapeutic_context, "design_type": design_type}
+        )
+
+    async def search(self, query: str, *, k: int = 5, gene: str | None = None) -> SearchResult:
+        self.calls.append({"query": query, "k": k, "gene": gene})
+        return SearchResult(hits=self._hits, backend="memory")
+
+
+def _retrieval_with_pubmed(existing_articles: list[PubMedArticle]) -> RetrievalResult:
+    return RetrievalResult(
+        ncbi=None,
+        pubmed=PubMedResult(query="BRCA1", articles=list(existing_articles), total_count=len(existing_articles)),
+        clinvar=None,
+    )
+
+
+class TestFilterRelevantLiteratureHits:
+    """Pure unit tests for the relevance filter, using the real observed score
+    ranges from the local-hash embedder (see the constants' comments)."""
+
+    def test_empty_hits_returns_empty(self):
+        assert _filter_relevant_literature_hits([]) == []
+
+    def test_strong_top_hit_keeps_hits_within_relative_cutoff(self):
+        hits = [{"score": 0.669}, {"score": 0.624}, {"score": 0.583}, {"score": 0.20}]
+        kept = _filter_relevant_literature_hits(hits)
+        # top=0.669, cutoff=0.669*0.7=0.468 -> first three pass, last does not.
+        assert [h["score"] for h in kept] == [0.669, 0.624, 0.583]
+
+    def test_weak_top_hit_excludes_everything(self):
+        """Real observed case: an off-topic query, still gene-filtered, whose
+        best hit only reaches ~0.49 — below the absolute floor, so nothing
+        should be cited even though the relative gap between hits is small."""
+        hits = [{"score": 0.4923}, {"score": 0.4917}, {"score": 0.4751}]
+        assert _filter_relevant_literature_hits(hits) == []
+
+    def test_floor_boundary_is_inclusive_just_above_and_exclusive_just_below(self):
+        assert _filter_relevant_literature_hits([{"score": 0.55}]) == [{"score": 0.55}]
+        assert _filter_relevant_literature_hits([{"score": 0.549}]) == []
+
+
+@pytest.mark.asyncio
+async def test_retrieval_merges_relevant_literature_hits_into_pubmed_articles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-lit-merge")
+
+    async def _fake_retrieve_context(spec):
+        return _retrieval_with_pubmed([
+            PubMedArticle(pmid="1", title="Existing keyword hit", authors=[], abstract="a", year="2025", journal="J"),
+        ])
+
+    monkeypatch.setattr(orchestrator, "retrieve_context", _fake_retrieve_context)
+
+    fake_index = _FakeLiteratureIndex(hits=[
+        {"pmid": "1", "title": "Duplicate of the keyword hit", "abstract": "dup", "score": 0.66, "year": "2025", "journal": "J"},
+        {"pmid": "2", "title": "New vector hit", "abstract": "new", "score": 0.62, "year": "2025", "journal": "J"},
+    ])
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-lit-merge",
+        goal="Design a regulatory element for BRCA1",
+        n_tokens=2,
+        literature_index=fake_index,
+    )
+
+    assert fake_index.calls, "literature_index.search() was never called"
+    assert fake_index.ensure_indexed_calls[0]["gene"] == "BRCA1"
+    assert fake_index.calls[0]["gene"] == "BRCA1"
+    assert fake_index.calls[0]["k"] == 5
+    retrieval_events = [e for e in ws.sent if e["event"] == "retrieval_progress"]
+    pubmed_event = next(e for e in retrieval_events if e["data"]["source"] == "pubmed")
+    pmids = [a["pmid"] for a in pubmed_event["data"]["result"]["articles"]]
+    # pmid "1" appears once (deduped against the existing keyword hit); "2" is new.
+    assert pmids == ["1", "2"]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_merges_literature_when_keyword_pubmed_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The keyword PubMed sub-fetch can fail/timeout independently (result.pubmed
+    is None) while NCBI/ClinVar still succeed — literature hits must still
+    surface via a freshly-built PubMedResult, not silently disappear."""
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-lit-no-keyword-pubmed")
+
+    async def _fake_retrieve_context(spec):
+        return RetrievalResult(ncbi=None, pubmed=None, clinvar=None)
+
+    monkeypatch.setattr(orchestrator, "retrieve_context", _fake_retrieve_context)
+
+    fake_index = _FakeLiteratureIndex(hits=[
+        {"pmid": "3", "title": "Vector-only hit", "abstract": "v", "score": 0.66, "year": "2025", "journal": "J"},
+    ])
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-lit-no-keyword-pubmed",
+        goal="Design a regulatory element for BRCA1",
+        n_tokens=2,
+        literature_index=fake_index,
+    )
+
+    retrieval_events = [e for e in ws.sent if e["event"] == "retrieval_progress"]
+    pubmed_event = next(e for e in retrieval_events if e["data"]["source"] == "pubmed")
+    assert pubmed_event["data"]["status"] == "complete"
+    assert [a["pmid"] for a in pubmed_event["data"]["result"]["articles"]] == ["3"]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_excludes_weak_literature_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A query with no genuinely relevant literature must not cite the
+    closest-but-still-weak match — the whole point of the relevance filter."""
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-lit-weak")
+
+    async def _fake_retrieve_context(spec):
+        return _retrieval_with_pubmed([])
+
+    monkeypatch.setattr(orchestrator, "retrieve_context", _fake_retrieve_context)
+
+    fake_index = _FakeLiteratureIndex(hits=[
+        {"pmid": "9", "title": "Weak, off-topic match", "abstract": "x", "score": 0.49, "year": "2025", "journal": "J"},
+    ])
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-lit-weak",
+        goal="Design a regulatory element for BRCA1",
+        n_tokens=2,
+        literature_index=fake_index,
+    )
+
+    retrieval_events = [e for e in ws.sent if e["event"] == "retrieval_progress"]
+    pubmed_event = next(e for e in retrieval_events if e["data"]["source"] == "pubmed")
+    assert pubmed_event["data"]["result"]["articles"] == []
+
+
+@pytest.mark.asyncio
+async def test_retrieval_without_literature_index_is_unaffected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Backward compatibility: literature_index defaults to None, so existing
+    callers (e.g. run_followup_pipeline, which never passes it) see no change."""
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-lit-none")
+
+    async def _fake_retrieve_context(spec):
+        return _retrieval_with_pubmed([
+            PubMedArticle(pmid="1", title="Keyword hit only", authors=[], abstract="a", year="2025", journal="J"),
+        ])
+
+    monkeypatch.setattr(orchestrator, "retrieve_context", _fake_retrieve_context)
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-lit-none",
+        goal="Design a regulatory element for BRCA1",
+        n_tokens=2,
+    )
+
+    retrieval_events = [e for e in ws.sent if e["event"] == "retrieval_progress"]
+    pubmed_event = next(e for e in retrieval_events if e["data"]["source"] == "pubmed")
+    assert [a["pmid"] for a in pubmed_event["data"]["result"]["articles"]] == ["1"]
 
 
 @pytest.mark.asyncio
