@@ -1,62 +1,104 @@
-# Proteus - 2:00 Demo Script (v2)
+# Proteus - 2:00 Demo Script
 
-Exactly 120 seconds. Audio is the master clock; video is sped/trimmed to fit each beat (see the SPEED column). Product name is **Proteus** (not Helix). Everything claimed here is real and honest - do not overclaim.
-
----
-
-## The approach (read first)
-
-- **Audio is the master.** Record the voiceover to the cadence below (about 145 words per minute, calm and confident). It will land near 2:00. Lock it, then cut video under it.
-- **Video is elastic.** Real actions take variable time (generation streams for 15 to 40s, ESMFold folds for 10 to 90s). Record each action generously with Cursorful, then in iMovie SPEED UP or JUMP-CUT the slow parts to fit the narration window. The SPEED column tells you the factor per beat.
-- **One honey accent, dark-free UI.** The app is light mode; the 3D scene is dark (that is a scientific-viz convention, fine). Keep zooms smooth and slow.
-- **Burn in captions.** The old video had none; many judges watch muted. Add clean subtitles from this script.
-
-Music: warm minimal / cinematic-ambient electronic with a soft low pulse, roughly 90 to 100 BPM, that builds subtly and drops slightly at 1:52 for the close. Keep it low, about -18 LUFS under the voice. Add subtle UI click SFX on each action (type, generate, regenerate, select).
+**Product name: Proteus.** Everything below is real and honest - no overclaiming.
+The voiceover is the master clock (~293 words, calm ~150 wpm → lands at 2:00). Cut video under it.
+Emphasis words are **bold**. `( · )` marks a deliberate micro-pause. `[ ]` are timing windows, not spoken.
 
 ---
 
-## Beat sheet (Time | Voiceover | On-screen action (Cursorful) | Edit / SPEED | Proof on screen)
+## THE SCRIPT
 
-| Time | Voiceover (say this) | Cursorful action | Edit / SPEED | Proof beat |
-|---|---|---|---|---|
-| 0:00-0:10 | "Designing a gene the old way takes a wet lab weeks. Proteus drafts one in seconds. I just describe what I want, in plain English." | Land on the clean home page. Type a real goal, e.g. "Design a neuron-specific promoter for BDNF." Hit generate. | 1x. Slow zoom into the composer as you type. | Clean home UI; a concrete, real design goal. |
-| 0:10-0:30 | "Evo 2, a forty-billion-parameter DNA foundation model, running live on NVIDIA, writes the sequence base by base. This stripe is the model's own confidence for every base it generated, streamed in real time." | The pipeline streams: retrieval chips, then DNA generating base-by-base with the per-base confidence stripe filling in. | Real generation may take 20 to 40s. SPEED 2x to 3x so streaming visibly fills within the 20s window. Keep the last 3s at 1x. | The "Evo 2 - NIM live" engine pill. The confidence stripe = real sampled probabilities. |
-| 0:30-0:48 | "For the protein it encodes, ESMFold predicts the three-dimensional fold. Color is per-residue confidence: blue is sure, orange is uncertain. Ribbons, side chains, hydrogen bonds - the real structure, not a bead on a string." | Cut to the Structure view. Slow-orbit the folded protein. Hover a residue to show the side chain + label. | Folding can take 30 to 90s. JUMP-CUT: show the fold starting, hard cut to the finished 3D scene. Then 1x slow orbit. | Mol*-grade viewer: cartoon + pLDDT gradient + side chains + pLDDT legend. |
-| 0:48-1:10 | "Now the point. I select a region and ask Evo 2 to regenerate it. It rewrites just those bases, splices them back in, and refolds. The confidence here is genuine Evo 2 model confidence for the bases it just wrote." | In the Sequence view, select a region (click a region bar). In Helio, click "Regenerate selected region." Watch the diff + refold. | Regen + refold take time. SPEED 2x through the wait; land 1x on the result card + diff. | The regen result card: real per-base Evo 2 confidence strip (indigo, labeled "real"), engine = NIM. |
-| 1:10-1:33 | "Helio is an agent - it doesn't just answer, it acts. I ask it to explain this region. It reads the model's own signal, and pulls current research, retrieved and ranked live, so every claim is grounded in a real paper you can open." | Click "Explain this region." The RegionExplanationCard appears. Hover the region on the track: the evidence card shows real paper links. Click one - a real PubMed/paper page opens briefly. | 1x for the explanation card. Quick 1.5x on the hover-to-paper. The opened paper is your hard proof - hold it 1.5s. | Plain-English region card + clickable real research links (RAG). Opening a real paper = undeniable proof. |
-| 1:33-1:52 | "Underneath is real science: JASPAR motif models, ESMFold, published CRISPR off-target scoring, melting temperature, primer design, pairwise alignment. Every number is computed, honest, and labeled for what it is." | Fast, smooth montage across the Tools tabs: PWM/regulatory map, CRISPR (CFD score), Primers (Tm), Structure (RNA MFE). Then the Compare view side-by-side. | 1.5x montage, ~3s per tab, smooth zoom to each number. End on Compare at 1x. | Each tab shows a real computed number with an honest method label. Compare = two real ESMFold structures. |
-| 1:52-2:00 | "Proteus. An IDE for designing life's code. The design half of the lab - from weeks, to seconds." | Cut to the Proteus wordmark / a clean hero frame. Fade music tail. | 1x. Let it breathe. | The name. Calm confidence. |
+**[0:00-0:11] — Hook**
+A wet lab can take **weeks** to design a single gene.
+( · ) Watch this.
+I'm going to describe one in plain English - and Proteus is going to write it in **seconds**.
 
-Total narration is about 290 words over 120s (~145 wpm) - leaves room for the pauses marked by the beat breaks. Breathe at every row boundary.
+**[0:11-0:33] — Evo 2 generates, base by base**
+*"Design a neuron-specific promoter for BDNF."* That's the whole prompt.
+Now Evo 2 - a **forty-billion-parameter** DNA foundation model, trained on **nine-point-three trillion nucleotides** across all of life - starts writing. Base by base. **Live**, on NVIDIA.
+And this stripe? ( · ) That's the model's **own confidence** in every base it just wrote. Real probabilities, streamed in real time.
+
+**[0:33-0:49] — ESMFold structure**
+From that sequence, ESMFold predicts the protein it builds - in **three dimensions**.
+The color is confidence, residue by residue: blue, the model is sure; orange, less so.
+Ribbons. Side chains. Hydrogen bonds. ( · ) Not a cartoon - a **structure**.
+
+**[0:49-1:09] — The loop: regenerate a region, refold**
+Now the part I love.
+I select **one region** ( · ) and ask Evo 2 to regenerate just those bases.
+It rewrites them, splices them back in - and the whole protein **refolds**, live.
+And every new base carries its own confidence again. The model isn't guessing behind a spinner. It's **showing its work**.
+
+**[1:09-1:38] — Helio acts, and the real paper opens**
+Meet Helio - an agent that **acts**, not just chats.
+I ask it to explain this region. It reads the model's signal, then pulls current research - **real papers**, from this year, retrieved and ranked live.
+And here's the thing every demo is afraid to do. ( · ) I'm going to **click one**.
+That's a real study - opening right now, in a real browser. ( · ) Nothing here is a mockup. **This is running.**
+
+**[1:38-1:53] — The science underneath**
+And under all of it, real science: JASPAR motif models, published CRISPR off-target scoring, melting temperature, primer design, RNA structure.
+Every number **computed**. Every method **named**. ( · ) And two real folds, side by side, to compare.
+
+**[1:53-2:00] — Close**
+Proteus.
+An IDE for the **code of life**.
+The design half of the lab - ( · ) from weeks, to **seconds**.
+
+> Word count: **293** words. At ~150 wpm = ~1:57 of speech; the marked micro-pauses and beat breaks carry it to a clean **2:00**.
 
 ---
 
-## Cadence notes (delivery)
+## 3 ALTERNATE HOOKS (first ~10s — pick one)
 
-- Calm, clinical, confident. Not hype. Let the product do the wowing.
-- Emphasize these words: "seconds", "base by base", "real time", "regenerate", "acts", "real paper", "computed", "honest".
-- Micro-pause (0.4s) before "Now the point." (0:48) and before "Proteus." (1:52) - those are the two turns.
-- Do not rush the paper-opening beat (1:25ish). That single real link is what flips a skeptical judge.
+1. **The dare (default above).**
+   "A wet lab can take weeks to design a single gene. ( · ) Watch this. I'm going to describe one in plain English - and Proteus is going to write it in seconds."
 
-## What blows a judge's mind (make sure these land)
+2. **The reframe.**
+   "We learned to read DNA decades ago. ( · ) We're still terrible at writing it. Proteus is an IDE for writing the code of life - and it starts with a sentence."
 
-1. Real generation, base-by-base, from a 40B model - visible, not a spinner.
-2. Regenerate a *region* and it refolds - the closed loop.
-3. Real Evo 2 confidence on the bases it just wrote (labeled "real").
-4. An agent that *acts* + grounds its answer in a **real paper you can open**.
-5. The rigor montage: published methods (JASPAR, CFD, ESMFold), each labeled honestly.
+3. **The cold open (no setup - action first).**
+   "This is a working gene, being designed from scratch, in front of you, right now. One sentence of English in - and a real, folded protein out. Let me show you how."
 
-## Honesty guardrails (never say)
+## 2 ALTERNATE CLOSERS (last ~7s — pick one)
 
-- Do NOT say "Helio is powered by Gemini." Helio (the agent) = gpt-4o-mini via OpenRouter. Gemini powers the literature synthesis. If you name the stack: "Evo 2 via NVIDIA NIM for DNA, ESMFold for structure, Gemini for literature synthesis, an OpenRouter agent for Helio."
-- Do NOT call the 4D functional/tissue/off-target/novelty scores clinical or validated. They are composition and motif heuristics (tissue now uses real JASPAR PWMs). Say "signals", not "assays".
-- Do NOT say "9.3 trillion base pairs." Say "9.3 trillion nucleotides."
-- Do NOT imply the CRISPR off-target is genome-wide. It is CFD/MIT against the supplied reference.
-- The per-base confidence is genuinely real for GENERATED / regenerated bases (sampled probabilities). For pasted, un-regenerated sequence the per-position value is a composition signal - so demo the flow on GENERATED sequence, which is honest and strongest.
+1. **The tagline (default above).**
+   "Proteus. ( · ) An IDE for the code of life. The design half of the lab - from weeks, to seconds."
 
-## Recording workflow
+2. **The turn.**
+   "For a century, biology was something you ran. ( · ) Proteus makes it something you **write**. This is Proteus."
 
-1. Record the voiceover first, to the cadence above. Lock it as the master track.
-2. Screen-record each beat's action with Cursorful (generous length, smooth zooms). Do a clean run of: generate, fold, select region, regenerate, explain-region, hover-to-paper (open one), the tools montage, compare.
-3. In iMovie: lay the voiceover on top, drop each clip under its beat, apply the SPEED factor / jump cuts from the table so each action fills its window. Add the music bed low, UI click SFX on actions, and burnt-in captions from this script.
-4. Pre-warm the literature index for your demo gene beforehand (BRCA1 / TP53 / CFTR are pre-loaded; for any other gene run the ingest once) so the papers appear instantly on camera.
+---
+
+## DELIVERY + MUSIC
+
+- **Tone:** calm, clinical, quietly certain - a scientist who already knows it works. Never a pitch. Let the screen do the wowing; your job is to point.
+- **Pace:** ~150 wpm. Slow down and *lean in* on the bold words. The two turns - "Now the part I love" (0:49) and "I'm going to click one" (1:25) - get a real breath before them; don't rush the paper-opening beat, that single line is what flips a skeptic.
+- **Breathe:** at every blank line between beats. Full stop, quarter-second, next beat. The `( · )` marks are shorter catches inside a line.
+- **Music:** warm minimal cinematic-ambient, soft low pulse, ~90-100 BPM. Keep it under the voice (~-18 LUFS). Let it **build** quietly through the regenerate loop (0:49), hold tension under "this is running" (1:33), then **drop** slightly at 1:52 so "Proteus" lands in near-silence. Subtle UI click SFX on each action (type, generate, regenerate, select, click-paper). No swells that fight the narration.
+
+---
+
+## SYNC / RECORDING APPENDIX (lean)
+
+**Rule:** audio is the fixed 2:00 master. Video is elastic - record each action generously with Cursorful, then speed-up or jump-cut it in iMovie to fill its window. Burn in captions (many judges watch muted). One smooth honey-accent zoom per beat; keep zooms slow.
+
+| Beat | Window | On-screen | Fit the video to the audio |
+|---|---|---|---|
+| Hook | 0:00-0:11 | Clean home; type the BDNF prompt; hit generate | 1x. Slow zoom into the composer as you type. |
+| Generate | 0:11-0:33 | DNA streams base-by-base; confidence stripe fills | Real stream is 20-40s → **speed 2-3x** so it visibly fills the window; drop back to 1x for the last ~3s. |
+| Fold | 0:33-0:49 | ESMFold 3D scene; slow orbit; hover a residue | Fold can take 30-90s → **jump-cut**: show it start, hard cut to the finished fold, then 1x orbit. |
+| Regenerate | 0:49-1:09 | Select region → regenerate → diff → refold | **Speed 2x** through the wait; land at 1x on the result card + real per-base confidence strip (labeled "real"). |
+| Helio + paper | 1:09-1:38 | "Explain this region" card → hover → **open a real paper** | 1x on the card; 1.5x on the hover; the opened paper is the proof - **hold it ~1.5s at 1x.** |
+| Science | 1:38-1:53 | Montage: JASPAR / CRISPR CFD / Tm / RNA → Compare | **1.5x**, ~3s per tab, smooth zoom to each computed number; end on Compare at 1x. |
+| Close | 1:53-2:00 | Proteus wordmark / clean hero frame | 1x. Let it breathe; fade music tail. |
+
+**Two must-do prep steps:**
+1. **Pre-warm the literature gene** so papers appear instantly on camera (BRCA1 / TP53 / CFTR are pre-loaded; for any other gene run the ingest once beforehand). The paper must open with zero lag - that beat is the whole demo.
+2. **Demo the confidence on GENERATED / regenerated sequence** - that's where the per-base probabilities are genuinely real. Don't show it on pasted, un-regenerated sequence.
+
+**Honesty guardrails (never say):**
+- Not "Helix" (old name) - it's **Proteus**.
+- Not "Helio is powered by Gemini." Helio (the agent) = gpt-4o-mini via OpenRouter. Gemini (2.5-flash) powers the literature **synthesis**.
+- Not "9.3 trillion base pairs" → "**nucleotides**."
+- CRISPR off-target is CFD (Doench 2016) + MIT (Hsu 2013) **against a supplied reference** - not genome-wide.
+- The 4D functional/tissue/novelty numbers are **signals**, not assays - never "clinical" or "validated."
