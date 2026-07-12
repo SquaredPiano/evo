@@ -1,0 +1,41 @@
+# Production override for a single DigitalOcean Droplet.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# It changes three things vs. the local base file:
+#   1. Frontend is built against the PUBLIC backend URL (not localhost) — this is
+#      baked into the Next.js bundle at build time, so a rebuild is required
+#      whenever NEXT_PUBLIC_API_URL changes.
+#   2. FRONTEND_URL points at the public frontend (kept consistent even though
+#      the backend already allows all CORS origins).
+#   3. Everything restarts on reboot / crash, and Redis persists to a volume.
+#
+# All engine keys/modes (OPENROUTER_API_KEY, NVIDIA_API_KEY, EVO2_MODE,
+# STRUCTURE_MODE, MONGODB_URI, ...) are already read from the root .env by the
+# base compose file — see deploy/env.production.example.
+
+services:
+  redis:
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+  backend:
+    restart: unless-stopped
+    environment:
+      # Public origin of the frontend (used for CORS/link building).
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+
+  frontend:
+    restart: unless-stopped
+    build:
+      context: ./frontend
+      args:
+        # MUST be the public URL the *browser* uses to reach the backend, e.g.
+        #   http://<DROPLET_IP>:8000         (IP-only, no TLS)
+        #   https://api.your-domain.com      (behind Caddy — see docker-compose.caddy.yml)
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+
+volumes:
+  redis-data:

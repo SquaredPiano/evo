@@ -1,0 +1,36 @@
+# Domain + automatic HTTPS add-on. Layer this ON TOP of the prod override once
+# you have a domain pointed at the droplet:
+#
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.prod.yml \
+#                  -f docker-compose.caddy.yml up -d --build
+#
+# Requires in .env:
+#   DOMAIN=evo.example.com
+#   NEXT_PUBLIC_API_URL=https://evo.example.com   (rebuild frontend to bake it in)
+#   FRONTEND_URL=https://evo.example.com
+#
+# Note: the base file still publishes :3000 and :8000 on the host. Once Caddy is
+# in front, close them off with the firewall so traffic only enters via 80/443:
+#   ufw allow 80,443/tcp && ufw deny 8000,3000/tcp
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  caddy-data:
+  caddy-config:
