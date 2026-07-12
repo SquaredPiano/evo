@@ -784,11 +784,11 @@ class TestEdgeCases:
         assert r2.status_code == 422
 
     def test_structure_too_short_region_fails_closed(self, client):
-        """FAIL-LOUD: the BRCA1 fragment is only 16 residues (< ESMFold's 40-residue
-        floor). With mock structure removed, this fails closed with 503 and never
-        returns a fabricated fold."""
+        """FAIL-LOUD: a 30 bp region translates to ~10 residues, below ESMFold's
+        16-residue floor. With mock structure removed, this fails closed with 503
+        and never returns a fabricated fold."""
         res = client.post("/api/structure", json={
-            "sequence": BRCA1, "region_start": 0, "region_end": len(BRCA1),
+            "sequence": BRCA1, "region_start": 0, "region_end": 30,
         })
         assert res.status_code == 503
         assert "mock" not in res.json()["detail"].lower() or "No mock" in res.json()["detail"]
