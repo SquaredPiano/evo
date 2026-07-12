@@ -16,7 +16,7 @@ export const SCIENCE_TERMS: Record<
   plddt: {
     title: "pLDDT Score",
     explanation:
-      "A confidence score from 0\u2013100 that tells you how sure the AI is about each part of a protein\u2019s predicted 3D shape. Above 90 is very reliable, below 50 means the prediction is uncertain.",
+      "ESMFold\u2019s confidence in the predicted 3D shape, per amino acid (0\u2013100). Above 90 is very confident, below 50 is uncertain. It is confidence in the SHAPE \u2014 not proof the protein works.",
   },
   "functional-plausibility": {
     title: "Functional Plausibility (heuristic)",
@@ -31,7 +31,7 @@ export const SCIENCE_TERMS: Record<
   "off-target-risk": {
     title: "Panel Off-Target Overlap (heuristic)",
     explanation:
-      "Similarity to a tiny built-in panel of repeats/oncogene snippets (k-mer overlap). Lower is better. Not genome-wide BLAST and not clinical off-target risk.",
+      "Overlap with a small built-in panel of bad sequences (repeats/oncogene snippets, k-mer match). Lower is better. This is NOT a genome-wide scan or clinical off-target risk.",
   },
   novelty: {
     title: "Novelty Score (heuristic)",
@@ -39,9 +39,14 @@ export const SCIENCE_TERMS: Record<
       "How different this string looks from simple composition baselines. Higher means more unusual DNA — not validated inventiveness.",
   },
   "log-likelihood": {
+    title: "Log-likelihood — “model surprise”",
+    explanation:
+      "Evo 2 is autocomplete for DNA. Log-likelihood scores how EXPECTED each base was: high = looks like real gene DNA, low = unusual. It is NOT a prediction that a therapy works. Honesty: under the default NIM engine, generation is real but these per-base scores are calibrated (labeled) heuristics, not a true forward pass — a real forward pass needs local Evo 2.",
+  },
+  "per-position-score": {
     title: "Per-position Score",
     explanation:
-      "Real Evo2 log-likelihoods only when a local forward pass is available. Under NIM generate-only mode these are calibrated heuristics of the same length — check the scoring note.",
+      "One number per base along the sequence. Real Evo 2 log-likelihoods only when a local forward pass runs; under the default NIM engine these are calibrated (labeled) heuristics of the same length — check the scoring note.",
   },
   "gc-content": {
     title: "GC Content",
@@ -95,7 +100,7 @@ export const SCIENCE_TERMS: Record<
   orf: {
     title: "Open Reading Frame (ORF)",
     explanation:
-      "A stretch of DNA that could potentially code for a protein \u2014 it has a start signal and stop signal. Finding ORFs helps identify where genes might be.",
+      "A start\u2192stop stretch of DNA that could code for a protein. It is a hint about where a gene might be \u2014 not a validated gene.",
   },
   prophage: {
     title: "Prophage",
@@ -134,12 +139,12 @@ export const SCIENCE_TERMS: Record<
   evo2: {
     title: "Evo 2",
     explanation:
-      "A large DNA language model. This app may use it to generate bases (NIM) and/or score sequences (local forward). Generation and scoring are separate — always check which engine produced your numbers.",
+      "Arc Institute’s genomic foundation model — “autocomplete for DNA.” Evo writes the candidate bases (generation) and, with a local forward pass, can score them. Generation and scoring are separate — always check which engine produced your numbers.",
   },
   esmfold: {
     title: "ESMFold",
     explanation:
-      "An AI model from Meta that predicts protein 3D structure directly from amino acid sequence. Similar to AlphaFold but faster. The pLDDT scores come from this model.",
+      "Meta’s model (Lin et al., Science 2023) that predicts a protein’s 3D structure from its amino-acid sequence. Faster than AlphaFold. The pLDDT confidence numbers come from ESMFold — confidence of shape, not proof of function.",
   },
   alphafold: {
     title: "AlphaFold",
