@@ -57,9 +57,13 @@ class Settings(BaseSettings):
     llm_model: str = "openai/gpt-4o-mini"
     llm_fast_model: str = "openai/gpt-4o-mini"
 
-    # Legacy provider keys are still read (so existing .env files keep working)
-    # but are no longer used for live calls — OpenRouter supersedes them.
+    # Legacy provider keys are still read (so existing .env files keep working).
+    # anthropic_api_key / openai_api_key are no longer used for live calls —
+    # OpenRouter supersedes them for chat/reasoning. gemini_api_key IS used,
+    # but for a narrower job: services/evidence_synthesis.py's literature
+    # detail summaries (not chat/reasoning, so it doesn't go through llm.py).
     gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
@@ -82,6 +86,22 @@ class Settings(BaseSettings):
     mongodb_db_name: str = "evo"
     # Fail-fast connection budget so a bad/blocked URI never hangs startup.
     mongodb_connect_timeout_ms: int = 5000
+
+    # --- Semantic vector search (research literature) ---
+    # Powers /api/literature/search. HYBRID embeddings: when an embedding API
+    # key is set, real embeddings are used; otherwise a deterministic local
+    # feature-hashing embedder keeps search working offline (lower quality).
+    # Both backends emit vectors of EMBEDDING_DIM so ONE Atlas vector index
+    # fits either — but don't mix backends in one populated index (re-index if
+    # you switch). embedding_api_key falls back to the legacy openai_api_key.
+    embedding_api_key: str = ""
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dim: int = 256
+    # Name of the MongoDB Atlas Vector Search index over the `literature`
+    # collection. Provision it on the cluster to enable $vectorSearch; without
+    # it, search transparently falls back to in-memory cosine similarity.
+    vector_index_name: str = "literature_vector_index"
 
     # Hugging Face
     hugging_face_token: str = ""

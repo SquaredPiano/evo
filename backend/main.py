@@ -24,6 +24,8 @@ from models.requests import (
     ExperimentRecordRequest,
     ExperimentRevertRequest,
     FollowupEditRequest,
+    LiteratureIndexRequest,
+    LiteratureSearchRequest,
     MutationRequest,
     OffTargetRequest,
     RegionEvidenceRequest,
@@ -41,12 +43,14 @@ from models.responses import (
     DesignAcceptedResponse,
     FollowupAcceptedResponse,
     HealthResponse,
+    LiteratureIndexResponse,
+    LiteratureSearchResponse,
+    LiteratureHit,
     MutationResponse,
     StructureResponse,
 )
+from models.sessions import SessionSnapshot
 from config import SessionStoreMode, StructureMode, settings
-from models.sessions import SessionSnapshot, SessionSummary
-from services.mongo_store import get_snapshot_store
 from pipeline.evo2_score import rescore_mutation_detailed, score_candidate
 from pipeline.orchestrator import (
     DEFAULT_SEED,
@@ -70,6 +74,9 @@ from services.experiment_tracker import (
     ExperimentTracker,
     ExperimentVersionNotFoundError,
 )
+from services.mongo_store import create_mongo_store
+from services.embeddings import create_embedder
+from services.literature_index import LiteratureIndex, LiteratureRagProvider
 from ws.manager import WebSocketManager
 from ws.events import (
     CandidateStatusData,
@@ -104,10 +111,13 @@ async def _lifespan(app: FastAPI) -> _AsyncIterator[None]:
         redis_ok = await session_store.ping()
         if not redis_ok:
             raise RuntimeError("Redis session store is enabled but unreachable.")
+    # Durable persistence is optional — a failure here is logged and the app
+    # continues Redis-only (see MongoStore.connect). Never fatal.
+    await mongo_store.connect()
     yield
     # Shutdown
     await session_store.close()
-    await snapshot_store.close()
+    await mongo_store.close()
 
 app = FastAPI(title="Evo Backend", version="1.0.0", lifespan=_lifespan)
 app.add_middleware(
@@ -122,8 +132,19 @@ ws_manager = WebSocketManager()
 evo2_service = create_evo2_service()
 session_store = create_session_store(settings, DEFAULT_SEED)
 copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
-experiment_tracker = ExperimentTracker(session_store)
-snapshot_store = get_snapshot_store()
+# Durable store (MongoDB Atlas). Optional: stays disabled until connect() succeeds
+# in the lifespan handler, so importing/instantiating here is always safe.
+mongo_store = create_mongo_store(settings)
+experiment_tracker = ExperimentTracker(session_store, mongo_store=mongo_store)
+# Semantic vector search over research literature. The embedder is chosen by the
+# hybrid policy (real API when a key is set, deterministic local otherwise); the
+# index uses Atlas $vectorSearch when available and falls back to in-memory.
+embedder = create_embedder(settings)
+literature_index = LiteratureIndex(embedder=embedder, mongo_store=mongo_store)
+# Adapts literature_index to the region_evidence RAG seam (RegionRagProvider) —
+# feeds semantically-retrieved papers into /api/region-evidence alongside
+# ClinVar + regulatory evidence.
+literature_rag_provider = LiteratureRagProvider(literature_index)
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 MAX_SESSION_CONTEXT_ENTRIES = 512
 
@@ -171,7 +192,7 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
-    run_id = create_session_id()
+    run_id = uuid.uuid4().hex
     num_candidates = request.num_candidates
     # Agent memory should only live within the active chat lifecycle for this run.
     await copilot.clear_session_memory(session_id=session_id)
@@ -184,6 +205,22 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
             "design_type": "regulatory_element",
         },
     )
+
+    # Durable record of the prompt + config at submit time. Best-effort: when
+    # persistence is disabled this is a fast no-op and the run still proceeds.
+    await mongo_store.save_design_run(
+        run_id=run_id,
+        session_id=session_id,
+        goal=request.goal,
+        user_id=request.user_id,
+        parent_run_id=request.parent_run_id,
+        run_profile=request.run_profile,
+        truth_mode=request.truth_mode,
+        num_candidates=num_candidates,
+        target_length=request.target_length,
+        seed_sequence=request.seed_sequence or DEFAULT_SEED,
+    )
+
     asyncio.create_task(
         run_generation_pipeline(
             manager=ws_manager,
@@ -199,19 +236,10 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
                 session_id, candidate_id, sequence
             ),
             on_spec_ready=lambda spec: _set_session_design_type(session_id, spec.design_type),
+            on_pipeline_complete=lambda candidates, completed, failed: _persist_run_completion(
+                run_id, session_id, candidates, completed, failed
+            ),
         )
-    )
-    # Best-effort durable log of this design run (no-op when Mongo is disabled).
-    await snapshot_store.record_run(
-        session_id,
-        kind="design",
-        summary=request.goal,
-        payload={
-            "run_id": run_id,
-            "num_candidates": num_candidates,
-            "run_profile": request.run_profile,
-            "truth_mode": request.truth_mode,
-        },
     )
     return DesignAcceptedResponse(
         session_id=session_id,
@@ -687,25 +715,51 @@ async def variant_annotation(request: VariantAnnotationRequest) -> dict[str, obj
 async def region_evidence(request: RegionEvidenceRequest) -> dict[str, object]:
     """Assemble coordinate-bound evidence for a sequence region.
 
-    Binds coordinates → research/evidence using the sources that exist today:
-    ClinVar variants (known variants for the GENE overlapping these coordinates —
-    context, not a per-base pathogenicity claim) + regulatory motifs. A future
-    RAG (per-region papers) drops in via services.region_evidence.attach_literature_evidence.
+    Binds coordinates → research/evidence from three sources: ClinVar variants
+    (known variants for the GENE overlapping these coordinates — context, not a
+    per-base pathogenicity claim), regulatory motifs, and semantically-retrieved
+    literature (post-2025 PubMed papers, vector-searched via literature_index —
+    see services.region_evidence.attach_literature_evidence).
     """
-    from services.region_evidence import assemble_region_evidence
+    from services.region_evidence import RegionQuery, assemble_region_evidence, attach_literature_evidence
 
-    items = await assemble_region_evidence(
+    region_end = request.region_end if request.region_end is not None else len(request.sequence)
+
+    # Clamp to the sequence bounds — mirrors assemble_region_evidence's own
+    # clamping (region_evidence.py) so an out-of-range region_start/region_end
+    # can't hand the literature provider an inverted or overflowing span.
+    literature_start = max(0, min(request.region_start, len(request.sequence)))
+    literature_end = max(0, min(region_end, len(request.sequence)))
+
+    assemble_task = assemble_region_evidence(
         sequence=request.sequence,
         gene=request.gene,
         region_start=request.region_start,
-        region_end=request.region_end,
+        region_end=region_end,
         max_variants=request.max_variants,
         include_clinvar=request.include_clinvar,
     )
+
+    if request.include_literature and literature_start < literature_end:
+        query = RegionQuery(
+            start=literature_start,
+            end=literature_end,
+            sequence=request.sequence,
+            gene=request.gene,
+        )
+        # Independent I/O (ClinVar/regulatory vs. the literature RAG lookup) —
+        # run concurrently rather than paying the sum of both latencies.
+        items, literature_items = await asyncio.gather(
+            assemble_task, attach_literature_evidence([query], literature_rag_provider)
+        )
+        items = sorted(items + literature_items, key=lambda e: (e.start, e.source))
+    else:
+        items = await assemble_task
+
     return {
         "gene": request.gene,
         "region_start": request.region_start,
-        "region_end": request.region_end if request.region_end is not None else len(request.sequence),
+        "region_end": region_end,
         "items": [e.to_dict() for e in items],
         "count": len(items),
     }
@@ -825,53 +879,133 @@ async def experiment_lineage(session_id: str, version_id: str) -> dict[str, obje
 
 @app.get("/api/users/{user_id}/sessions")
 async def list_user_session_ids(user_id: str) -> dict[str, object]:
-    """List all Redis hot-store session ids owned by a user.
+    """Session IDs owned by a user, from the Redis hot store.
 
-    (Moved from ``GET /api/sessions/{user_id}`` so ``/api/sessions/{session_id}``
-    can serve durable snapshots without a route collision.)
+    Relocated from GET /api/sessions/{user_id} so the session-snapshot API can
+    own the /api/sessions/{session_id} route (see docs/session_persistence_interface.md).
     """
     session_ids = await session_store.list_user_sessions(user_id)
     return {"user_id": user_id, "sessions": session_ids, "count": len(session_ids)}
 
 
-# --- Durable session snapshots (MongoDB; degrades to no-op when disabled) ---
-
-
+# ── Resumable session snapshots (durable, MongoDB) ───────────────────────────
+# Contract from docs/session_persistence_interface.md: store/restore full store
+# state so a session is resumable, not just re-runnable. All four degrade to
+# safe no-ops (empty list / 404 / persisted:false) when Mongo is unavailable.
 @app.get("/api/sessions")
 async def list_session_snapshots(user_id: str | None = None) -> dict[str, object]:
-    """List durable session summaries for the home/resume screen."""
-    summaries = await snapshot_store.list_summaries(user_id)
-    return {"sessions": [s.model_dump() for s in summaries]}
+    """Session summaries for the home/resume list, newest first."""
+    summaries = await mongo_store.list_session_summaries(user_id)
+    return {
+        "persistence_enabled": mongo_store.ready,
+        "sessions": summaries,
+        "count": len(summaries),
+    }
 
 
-@app.get("/api/sessions/{session_id}", response_model=SessionSnapshot)
-async def get_session_snapshot(session_id: str) -> SessionSnapshot:
-    """Return the full resumable snapshot for a session (404 if absent)."""
-    snapshot = await snapshot_store.get(session_id)
+@app.get("/api/sessions/{session_id}")
+async def get_session_snapshot(session_id: str) -> dict[str, object]:
+    """Full resumable snapshot for a session (404 if none / persistence off)."""
+    snapshot = await mongo_store.get_session_snapshot(session_id)
     if snapshot is None:
-        raise HTTPException(status_code=404, detail="Session snapshot not found")
+        raise HTTPException(status_code=404, detail="session snapshot not found")
     return snapshot
 
 
-@app.put("/api/sessions/{session_id}", response_model=SessionSummary)
-async def put_session_snapshot(session_id: str, snapshot: SessionSnapshot) -> SessionSummary:
-    """Upsert (autosave) a session snapshot. Returns the lightweight summary."""
-    snapshot.sessionId = session_id
-    return await snapshot_store.put(snapshot)
+@app.put("/api/sessions/{session_id}")
+async def put_session_snapshot(session_id: str, snapshot: SessionSnapshot) -> dict[str, object]:
+    """Upsert a session snapshot (debounced autosave from the client)."""
+    payload = snapshot.model_dump(exclude_none=True)
+    payload["sessionId"] = session_id  # path id is authoritative
+    persisted = await mongo_store.put_session_snapshot(payload)
+    return {"session_id": session_id, "persisted": persisted}
 
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session_snapshot(session_id: str) -> dict[str, object]:
-    """Delete a durable session snapshot."""
-    await snapshot_store.delete(session_id)
-    return {"sessionId": session_id, "deleted": True}
+    """Delete a stored session snapshot."""
+    deleted = await mongo_store.delete_session_snapshot(session_id)
+    return {"session_id": session_id, "deleted": deleted}
 
 
 @app.get("/api/history/{session_id}")
-async def get_session_history(session_id: str) -> dict[str, object]:
-    """Design-run history for a session (additive; empty when disabled)."""
-    runs = await snapshot_store.get_history(session_id)
-    return {"sessionId": session_id, "runs": runs, "count": len(runs)}
+async def session_history(session_id: str) -> dict[str, object]:
+    """Prompt/run history for a session, oldest first — powers the reprompt thread.
+
+    Returns an empty list (not an error) when durable persistence is disabled or
+    the session predates it, so the client can treat it as 'no history yet'.
+    """
+    runs = await mongo_store.get_session_runs(session_id)
+    return {
+        "session_id": session_id,
+        "persistence_enabled": mongo_store.ready,
+        "runs": runs,
+        "count": len(runs),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Semantic literature search (vector search)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/literature/index", response_model=LiteratureIndexResponse)
+async def literature_index_endpoint(request: LiteratureIndexRequest) -> LiteratureIndexResponse:
+    """Embed and index research literature for semantic search.
+
+    Provide ``gene`` to fetch + index PubMed articles, and/or ``articles`` to
+    index supplied records directly. At least one is required.
+    """
+    if not request.gene and not request.articles:
+        raise HTTPException(status_code=422, detail="provide 'gene' and/or 'articles' to index")
+
+    query: str | None = None
+    total_available = 0
+
+    if request.articles:
+        result = await literature_index.index_articles(
+            [a.model_dump() for a in request.articles], gene=request.gene
+        )
+        total_available = len(request.articles)
+
+    if request.gene:
+        pubmed_result, query, total_available = await literature_index.index_from_pubmed(
+            gene=request.gene,
+            therapeutic_context=request.therapeutic_context,
+            design_type=request.design_type,
+            max_results=request.max_results,
+        )
+        # When both sources were given, report the combined indexed count.
+        indexed = (result.indexed if request.articles else 0) + pubmed_result.indexed
+        persisted = pubmed_result.persisted or (request.articles and result.persisted)
+        return LiteratureIndexResponse(
+            indexed=indexed,
+            persisted=bool(persisted),
+            embedding_backend=literature_index.embedder_name,
+            query=query,
+            total_available=total_available,
+        )
+
+    return LiteratureIndexResponse(
+        indexed=result.indexed,
+        persisted=result.persisted,
+        embedding_backend=literature_index.embedder_name,
+        query=query,
+        total_available=total_available,
+    )
+
+
+@app.post("/api/literature/search", response_model=LiteratureSearchResponse)
+async def literature_search_endpoint(request: LiteratureSearchRequest) -> LiteratureSearchResponse:
+    """Semantic search over indexed literature. Empty index → empty hit list."""
+    result = await literature_index.search(request.query, k=request.k, gene=request.gene)
+    return LiteratureSearchResponse(
+        query=request.query,
+        backend=result.backend,
+        embedding_backend=literature_index.embedder_name,
+        count=len(result.hits),
+        hits=[LiteratureHit(**hit) for hit in result.hits],
+    )
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -896,6 +1030,10 @@ async def health_detail() -> dict[str, object]:
         "structure_mode": settings.structure_mode.value,
         "llm_available": llm_service.llm_available(),
         "evo2_mode": settings.evo2_mode.value,
+        "embedding_backend": embedder.name,
+        "embedding_dim": settings.embedding_dim,
+        "vector_index": settings.vector_index_name,
+        "durable_persistence": mongo_store.ready,
     }
 
 
@@ -949,3 +1087,36 @@ def _build_ws_url(http_request: Request, session_id: str) -> str:
 async def _persist_candidate_sequence(session_id: str, candidate_id: int, sequence: str) -> None:
     async with session_store.candidate_guard(session_id, candidate_id):
         await session_store.set_candidate_sequence(session_id, candidate_id, sequence)
+
+
+async def _persist_run_completion(
+    run_id: str,
+    session_id: str,
+    candidates: list[dict[str, Any]],
+    completed: int,
+    failed: int,
+) -> None:
+    """Snapshot a finished run into durable storage (best-effort).
+
+    Trims heavy fields (pdb_data / regulatory_map): the history thread only needs
+    sequence + scores + confidence, and PDB strings would bloat the document.
+    """
+    slim = [
+        {
+            "id": c.get("id"),
+            "status": c.get("status"),
+            "sequence": c.get("sequence"),
+            "scores": c.get("scores"),
+            "confidence": c.get("confidence"),
+            "error": c.get("error"),
+        }
+        for c in candidates
+    ]
+    design_type = SESSION_CONTEXT.get(session_id, {}).get("design_type")
+    await mongo_store.complete_design_run(
+        run_id,
+        candidates=slim,
+        completed_candidates=completed,
+        failed_candidates=failed,
+        design_type=design_type,
+    )

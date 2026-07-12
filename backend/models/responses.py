@@ -103,3 +103,32 @@ class AnalysisResponse(BaseModel):
     sequence: str
     scores: list[dict[str, float | int]]
     proteins: list[dict[str, object]]
+
+
+class LiteratureHit(BaseModel):
+    doc_id: str
+    title: str
+    abstract: str
+    score: float
+    pmid: str | None = None
+    gene: str | None = None
+    year: str = ""
+    journal: str = ""
+    url: str | None = None
+    source: str = "pubmed"
+
+
+class LiteratureSearchResponse(BaseModel):
+    query: str
+    backend: str            # index backend that answered: "atlas" | "memory"
+    embedding_backend: str  # "api" | "local-hash"
+    count: int
+    hits: list[LiteratureHit]
+
+
+class LiteratureIndexResponse(BaseModel):
+    indexed: int
+    persisted: bool         # True only when durably stored in MongoDB
+    embedding_backend: str
+    query: str | None = None
+    total_available: int = 0

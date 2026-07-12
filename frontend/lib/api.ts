@@ -481,8 +481,9 @@ export async function annotateVariants(payload: {
 import type { RegionEvidence } from "@/types";
 
 /** POST /api/region-evidence - Assemble coordinate-bound evidence for a sequence.
- *  Binds coordinates → ClinVar variants (gene context) + regulatory motifs.
- *  A future RAG populates source="literature" items server-side; the UI is unchanged. */
+ *  Binds coordinates → ClinVar variants (gene context), regulatory motifs, and
+ *  semantically-retrieved literature (source="literature", on by default server-side
+ *  via include_literature) — no UI change needed, the backend just returns more items. */
 export async function fetchRegionEvidence(payload: {
   sequence: string;
   gene?: string;

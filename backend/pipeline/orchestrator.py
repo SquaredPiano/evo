@@ -65,6 +65,9 @@ logger = logging.getLogger("evo")
 DEFAULT_SEED = "ATGGCTGCAGAAGCTAAAGCTGCTGGTAAAGCTGCTGCTAAAGCTGCTTAATAA"
 CandidateUpdateCallback = Callable[[int, str], Awaitable[None] | None]
 SpecUpdateCallback = Callable[[DesignSpec], Awaitable[None] | None]
+# Fired once when a generation run finishes, with the final ordered candidate
+# payloads + completion counts, so callers can persist the whole run durably.
+PipelineCompleteCallback = Callable[[list[dict[str, object]], int, int], Awaitable[None] | None]
 STAGE_ORDER = ["intent", "retrieval", "generation", "scoring", "structure", "explanation", "complete"]
 STAGE_RANK = {"pending": 0, "active": 1, "done": 2, "failed": 2}
 
@@ -399,6 +402,7 @@ async def run_generation_pipeline(
     target_length: int | None = None,
     on_candidate_ready: CandidateUpdateCallback | None = None,
     on_spec_ready: SpecUpdateCallback | None = None,
+    on_pipeline_complete: PipelineCompleteCallback | None = None,
 ) -> None:
     candidate_count = max(1, min(int(n_candidates), 10))
     profile = _profile(run_profile, truth_mode, target_length=target_length)
@@ -773,6 +777,10 @@ async def run_generation_pipeline(
             )
         ).to_json(),
     )
+    if on_pipeline_complete is not None:
+        callback_result = on_pipeline_complete(ordered_payload, completed, failed)
+        if inspect.isawaitable(callback_result):
+            await callback_result
 
 
 # ---------------------------------------------------------------------------

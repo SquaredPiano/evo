@@ -6,6 +6,7 @@ import asyncio
 import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from datetime import date
 
 from services.eutils import (
     EUTILS_BASE,
@@ -33,6 +34,21 @@ class PubMedResult:
     query: str
     articles: list[PubMedArticle] = field(default_factory=list)
     total_count: int = 0
+
+
+def _date_filter_params(mindate: str | None, maxdate: str | None) -> dict[str, str]:
+    """Build esearch's datetype/mindate/maxdate params, or {} to disable filtering.
+
+    NCBI requires mindate and maxdate together once either is used, so an
+    unset maxdate defaults to today rather than being omitted.
+    """
+    if not mindate:
+        return {}
+    return {
+        "datetype": "pdat",
+        "mindate": mindate,
+        "maxdate": maxdate or date.today().strftime("%Y/%m/%d"),
+    }
 
 
 def _build_query(
@@ -115,8 +131,16 @@ async def search_literature(
     therapeutic_context: str | None = None,
     design_type: str | None = None,
     max_results: int = 5,
+    mindate: str | None = "2025/01/01",
+    maxdate: str | None = None,
 ) -> PubMedResult:
-    """Search PubMed for relevant literature based on DesignSpec fields."""
+    """Search PubMed for relevant literature based on DesignSpec fields.
+
+    Defaults to post-2025 literature only (``mindate="2025/01/01"``, filtered
+    by publication date via NCBI's ``datetype=pdat``). Pass ``mindate=None`` to
+    search the full archive. ``maxdate`` defaults to today when ``mindate`` is
+    set and ``maxdate`` is left unset.
+    """
     if not gene:
         return PubMedResult(query="")
 
@@ -133,6 +157,7 @@ async def search_literature(
                     "retmax": max_results,
                     "sort": "relevance",
                     "retmode": "json",
+                    **_date_filter_params(mindate, maxdate),
                 }),
             )
             search_data = safe_json_response(search_resp)

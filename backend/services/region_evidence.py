@@ -9,7 +9,7 @@ comes from ClinVar, the local regulatory-motif scanner, or a future RAG index
 of research papers, is normalised into a single :class:`RegionEvidence` record
 carrying its own 0-based, half-open coordinates in the candidate's frame.
 
-Sources wired in TODAY (both already exist in the codebase):
+Sources wired in TODAY (all three already exist in the codebase):
 
 * **ClinVar** — via :mod:`services.variant_annotation`. Known variants for the
   *gene* are parsed from HGVS titles into positions and overlaid on these
@@ -19,11 +19,20 @@ Sources wired in TODAY (both already exist in the codebase):
 * **Regulatory** — via :func:`services.regulatory_viz.build_regulatory_map`.
   Each detected motif becomes a ``source="regulatory"`` record. These are
   motif-derived (pattern matches), not literature-linked, so ``url`` is None.
+* **Literature** — via :class:`services.literature_index.LiteratureRagProvider`,
+  a concrete :class:`RegionRagProvider` (see below) that vector-searches
+  post-2025 PubMed papers indexed in :class:`services.literature_index.LiteratureIndex`
+  and Gemini-condenses each hit's abstract into an honest ``detail`` (see
+  :func:`services.evidence_synthesis.synthesize_detail`). Wired into
+  ``POST /api/region-evidence`` in ``backend/main.py`` via
+  :func:`attach_literature_evidence`. Populate the index for a gene with
+  ``python -m scripts.ingest_literature <GENE>`` (run from ``backend/``).
 
-Source left as a documented seam for a teammate's RAG (per-region research
-papers): **literature**. See :func:`attach_literature_evidence` and
-:class:`RegionRagProvider` below — implement that Protocol and the records drop
-straight into the same list with ``source="literature"``. No UI change needed.
+:func:`attach_literature_evidence` and :class:`RegionRagProvider` below remain
+a generic seam — any other ``RegionRagProvider`` implementation (a different
+index, a different retrieval strategy) drops in the same way, with no UI
+change, since every source normalises into the same :class:`RegionEvidence`
+record with ``source="literature"``.
 """
 
 from __future__ import annotations
@@ -271,11 +280,14 @@ async def assemble_region_evidence(
 
 
 # ---------------------------------------------------------------------------
-# LITERATURE / RAG EXTENSION SEAM  (documented; NOT implemented here)
+# LITERATURE / RAG EXTENSION SEAM
 # ---------------------------------------------------------------------------
 #
-# A teammate's RAG (retrieval over post-2025 research papers, indexed per
-# region) plugs in HERE without touching the UI or the assembly above.
+# A RAG over post-2025 research papers, indexed per region, plugs in HERE
+# without touching the UI or the assembly above. Implemented today by
+# :class:`services.literature_index.LiteratureRagProvider` (wired into
+# ``POST /api/region-evidence`` in ``backend/main.py``) — this stays a generic
+# Protocol so a different index/strategy can be swapped in the same way.
 #
 # Contract for the provider:
 #   - Input : the candidate sequence + gene context + a coordinate span.
@@ -302,7 +314,9 @@ class RegionQuery:
 class RegionRagProvider(Protocol):
     """Implement this to feed per-region research papers into the same list.
 
-    Example (teammate's code, elsewhere):
+    Concrete implementation: :class:`services.literature_index.LiteratureRagProvider`.
+
+    Example (a from-scratch implementation, for reference):
 
         class MyRag:
             def fetch(self, query: RegionQuery) -> list[RegionEvidence]:
@@ -330,10 +344,11 @@ async def attach_literature_evidence(
 ) -> list[RegionEvidence]:
     """Seam: collect literature RegionEvidence for each region via a RAG provider.
 
-    This is the ONLY function Hayden needs to satisfy to wire post-2025 papers
-    in. It normalises provider output, forces source/kind so the UI badges it
-    as a paper, and tolerates sync or async providers. It does NOT itself query
-    any index — pass a concrete :class:`RegionRagProvider`.
+    Normalises provider output, forces source/kind so the UI badges it as a
+    paper, and tolerates sync or async providers. It does NOT itself query any
+    index — pass a concrete :class:`RegionRagProvider`, e.g.
+    ``LiteratureRagProvider(literature_index)`` from
+    :mod:`services.literature_index` (see ``backend/main.py``).
 
     Returns a flat, coordinate-bound list ready to be merged with the output of
     :func:`assemble_region_evidence`.

@@ -1,9 +1,9 @@
 # Region → Evidence interface
 
 This document is the contract between the **coordinate → evidence binding**
-(built now, using ClinVar + regulatory motifs) and the **RAG provider** (Hayden's
-per-region research-paper retrieval, wired later). The UI does not change when the
-RAG is added — it renders whatever `RegionEvidence[]` the backend returns.
+(ClinVar + regulatory motifs) and the **RAG provider** (per-region research-paper
+retrieval — implemented, see §5). The UI did not change when the RAG was added —
+it renders whatever `RegionEvidence[]` the backend returns.
 
 Hover a DNA region in the UI → the evidence overlapping that region is shown,
 grouped by source (ClinVar / Regulatory / Paper).
@@ -106,11 +106,32 @@ store action `loadRegionEvidence(sequence, gene?)` in `frontend/lib/store.ts`
 
 ---
 
-## 5. RAG provider — EXACTLY what to return (for Hayden)
+## 5. RAG provider — IMPLEMENTED
 
-Wire post-2025 research papers in **without touching the UI**. Implement the
-`RegionRagProvider` Protocol and hand it to `attach_literature_evidence(...)`
-(both in `backend/services/region_evidence.py`).
+Post-2025 research papers are wired in, without any UI changes. The concrete
+provider is `LiteratureRagProvider` in `backend/services/literature_index.py`,
+which implements the `RegionRagProvider` Protocol below and is handed to
+`attach_literature_evidence(...)` (both defined in
+`backend/services/region_evidence.py`) from the `POST /api/region-evidence`
+endpoint in `backend/main.py`.
+
+Pipeline: `services/pubmed.py::search_literature` fetches post-2025 PubMed
+articles for a gene → `services/embeddings.py` embeds them (hybrid: a real API
+embedder when `EMBEDDING_API_KEY` is set, else a deterministic local
+feature-hashing embedder) → `services/literature_index.py::LiteratureIndex`
+stores them (MongoDB Atlas `$vectorSearch` when reachable, in-memory cosine
+fallback otherwise) → `LiteratureRagProvider.fetch()` queries the index per
+region and condenses each hit's abstract via
+`services/evidence_synthesis.py::synthesize_detail` (Gemini, with a
+truncated-abstract fallback) into the `detail` field.
+
+To populate the index for a gene, run from `backend/`:
+```bash
+python -m scripts.ingest_literature BRCA1
+```
+
+The Protocol below remains a generic seam — a different index or retrieval
+strategy can implement it the same way and merge in without any UI change.
 
 ### Protocol
 
@@ -154,13 +175,15 @@ returns an awaitable, isolates per-region failures, and forces
 4. **Merge**: append your list to the output of `assemble_region_evidence(...)`.
    Same schema, same endpoint/WS event, no UI change.
 
-### Where to call it
+### Where it's called
 
-Two options, both non-invasive:
+Wired into the HTTP endpoint only: `region_evidence()` in `backend/main.py`
+builds a `RegionQuery` from the request span after `assemble_region_evidence(...)`
+and merges in `await attach_literature_evidence([query], literature_rag_provider)`.
+Gated by `RegionEvidenceRequest.include_literature` (default `True`).
 
-- Enrich the endpoint: in `region_evidence` (main.py), after
-  `assemble_region_evidence(...)`, build `RegionQuery` objects from the analyzed
-  regions and `evidence += await attach_literature_evidence(regions, provider)`.
-- Or enrich the WS emission in `orchestrator._emit_structure` the same way.
-
-No frontend edits are required for either.
+Deliberately **not** added to the WS emission (`orchestrator._emit_structure`,
+which emits `region_evidence_ready`) — that path stays regulatory-only by
+design (local, no network, keeps the pipeline hot path fast; see §3 above).
+Literature stays on-demand via the HTTP endpoint. No frontend edits were
+required.
