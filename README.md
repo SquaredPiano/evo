@@ -72,14 +72,25 @@ The single LLM gateway lives in `backend/services/llm.py`; all reasoning routes
 through OpenRouter's OpenAI-compatible API, so swapping models is a one-line
 config change (`LLM_MODEL`).
 
+**Durable persistence (optional).** Redis stays the hot store for a live run
+(streaming, TTL'd). Set `MONGODB_URI` and each design run is *also* recorded in
+MongoDB — the English **goal**, the run config, and the resulting candidates,
+plus a session index and a durable mirror of experiment versions. This is what
+survives a restart or TTL expiry (the prompt history a session builds on). Leave
+`MONGODB_URI` blank and the app behaves exactly as before, Redis-only: every
+persistence call becomes a logged no-op, never a request error. Implementation:
+`backend/services/mongo_store.py`. Atlas note: the connecting host's IP must be
+on the cluster's Network Access allowlist or the store stays disabled.
+
 ---
 
 ## Stack
 
 - **Frontend:** Next.js 16, React 19, TypeScript, Zustand, Framer Motion,
   Three.js / React Three Fiber (3D protein viewer).
-- **Backend:** FastAPI, Redis (queue + cache + pub/sub), Pydantic, LangGraph
-  for the agent state machine.
+- **Backend:** FastAPI, Redis (queue + cache + pub/sub), MongoDB (optional
+  durable store for design-run history), Pydantic, LangGraph for the agent
+  state machine.
 - **Engines:** Evo2 (mock / NVIDIA NIM 40B / local), ESMFold, OpenRouter.
 
 ---
@@ -91,6 +102,7 @@ config change (`LLM_MODEL`).
 ```bash
 cp .env.example .env            # repo root, or backend/.env
 # fill in OPENROUTER_API_KEY, NVIDIA_API_KEY, NCBI_API_KEY as available
+# optional: set MONGODB_URI (+ MONGODB_DB_NAME) to persist design-run history
 ```
 
 ### 2. Backend

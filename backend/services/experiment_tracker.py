@@ -108,10 +108,16 @@ class ExperimentVersionNotFoundError(KeyError):
 
 
 class ExperimentTracker:
-    """Version-control layer for genomic design iterations."""
+    """Version-control layer for genomic design iterations.
 
-    def __init__(self, store: SessionStore) -> None:
+    Redis is the primary store (fast, TTL'd). An optional ``mongo_store`` mirrors
+    each recorded version durably so the timeline survives TTL expiry / restarts.
+    The mirror is best-effort and never affects the Redis write path.
+    """
+
+    def __init__(self, store: SessionStore, mongo_store: Any | None = None) -> None:
         self._store = store
+        self._mongo_store = mongo_store
 
     # -- Write operations ---------------------------------------------------
 
@@ -160,6 +166,10 @@ class ExperimentTracker:
         # Update latest pointer
         latest_key = _LATEST_KEY.format(session_id=session_id, candidate_id=candidate_id)
         await self._store.set_raw(latest_key, version_id)
+
+        # Durable mirror (best-effort; no-op when Mongo is unconfigured/unreachable)
+        if self._mongo_store is not None:
+            await self._mongo_store.save_experiment_version(version.to_dict())
 
         logger.info(
             "Recorded version %s for session=%s candidate=%d op=%s",
