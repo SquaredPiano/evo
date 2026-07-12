@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useMemo } from "react";
 import type { LikelihoodScore } from "@/types";
+import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
 interface LikelihoodGraphProps {
   scores: LikelihoodScore[];
@@ -104,7 +105,7 @@ export default function LikelihoodGraph({
           className="select-none uppercase tracking-wider"
           style={{ fontSize: "10px", color: "var(--text-faint)", fontWeight: 600, letterSpacing: "0.05em" }}
         >
-          Log-likelihood
+          <ScienceTooltip term="log-likelihood">Log-likelihood</ScienceTooltip>
         </span>
         <span style={{ fontSize: "11px", color: "var(--text-faint)", fontFamily: "var(--font-mono, monospace)" }}>
           {scores.length} pos

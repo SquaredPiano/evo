@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { MutationEffect, Nucleotide } from "@/types";
 import { useEvoStore } from "@/lib/store";
 import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
+import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
 interface MutationPanelProps {
   sequence: string;
@@ -81,7 +82,7 @@ export default function MutationPanel({
         </span>
         {currentBase && (
           <span className="text-[11px] font-mono text-[var(--text-faint)]">
-            Wildtype:{" "}
+            <ScienceTooltip term="wildtype">Wildtype</ScienceTooltip>:{" "}
             <span style={{ color: BASE_COLORS[currentBase] }}>
               {currentBase}
             </span>
@@ -223,7 +224,7 @@ export default function MutationPanel({
                 {mutationEffect.deltaLikelihood.toFixed(2)}
               </span>
               <span className="text-[11px] font-mono text-[var(--text-faint)]">
-                delta log-likelihood
+                <ScienceTooltip term="delta-likelihood">delta log-likelihood</ScienceTooltip>
               </span>
             </div>
 
