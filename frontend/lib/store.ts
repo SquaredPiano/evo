@@ -471,10 +471,20 @@ export const useProteusStore = create<ProteusState>((set, get) => ({
       set({ regionEvidence: [], regionEvidenceKey: null });
       return;
     }
-    // Session id enables edit-history-gated literature (papers on the regions
-    // Evo2 made novel), so it is part of the dedup key.
+    // Session id + active candidate enable edit-history-gated literature
+    // (papers on the regions Evo2 made novel for THIS candidate), so both are
+    // part of the dedup key - switching candidates can change which regions
+    // are novel just as much as switching sessions does.
+    //
+    // The key includes the FULL sequence, not a length+prefix shortcut: a
+    // single-base edit deep in the sequence (e.g. position 400 of an 821bp
+    // candidate) changes neither the length nor the first N characters, so a
+    // truncated key would treat it as a cache hit and silently keep showing
+    // evidence from before the edit - exactly the case edit-history-gated
+    // literature needs to react to.
     const sessionId = get().sessionId;
-    const key = `${cleaned.length}:${gene ?? ""}:${sessionId ?? ""}:${cleaned.slice(0, 32)}`;
+    const candidateId = get().activeCandidateId ?? 0;
+    const key = `${gene ?? ""}:${sessionId ?? ""}:${candidateId}:${cleaned}`;
     if (get().regionEvidenceKey === key) return; // already loaded / in flight
     set({ regionEvidenceKey: key });
     try {
@@ -484,6 +494,7 @@ export const useProteusStore = create<ProteusState>((set, get) => ({
         includeClinvar: Boolean(gene),
         includeLiterature: true,
         sessionId,
+        candidateId,
       });
       // Guard against races: only apply if this is still the latest request.
       if (get().regionEvidenceKey === key) {
@@ -552,8 +563,15 @@ export const useProteusStore = create<ProteusState>((set, get) => ({
       scores,
       bases,
       candidates: (Array.isArray(snap.candidates) ? snap.candidates : []) as Candidate[],
+      // Fall back to the first candidate's id (matches the pattern used
+      // elsewhere, e.g. setEditedSequence) rather than null on a missing/
+      // stale field - null here would coerce to candidate 0 in
+      // loadRegionEvidence's dedup key, misattributing edit-history-gated
+      // literature to candidate 0 even when a different candidate is active.
       activeCandidateId:
-        typeof snap.activeCandidateId === "number" ? snap.activeCandidateId : null,
+        typeof snap.activeCandidateId === "number"
+          ? snap.activeCandidateId
+          : ((Array.isArray(snap.candidates) ? snap.candidates : [])[0] as Candidate | undefined)?.id ?? null,
       analysisResult: (snap.analysisResult ?? null) as AnalysisResult | null,
       activePdb: typeof snap.activePdb === "string" ? snap.activePdb : null,
       originalPdb: typeof snap.activePdb === "string" ? snap.activePdb : null,

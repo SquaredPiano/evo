@@ -181,14 +181,25 @@ fallback to generic gene-wide papers.
 This requires knowing *which* session/candidate to read edit history from:
 `RegionEvidenceRequest` gained `session_id` (optional) and `candidate_id`
 (default `0`). **Without `session_id`, there is no known novel region, so
-literature comes back empty** - today, `frontend/lib/store.ts`'s
-`loadRegionEvidence(sequence, gene)` does not pass `session_id`/
-`activeCandidateId` (both already exist in the store) through to
-`fetchRegionEvidence`. Wiring that one call site is a small, separate frontend
-change, deliberately left undone here - everything on the backend is
-implemented and tested (`backend/tests/test_region_evidence.py`'s
-`TestPerRegionLiteratureGating`) by calling the endpoint directly with
-`session_id` set, exactly as a frontend that passes it through would.
+literature comes back empty.** `frontend/lib/store.ts`'s
+`loadRegionEvidence` now reads `sessionId` and `activeCandidateId` from the
+store itself and threads both through `fetchRegionEvidence` - live in the
+running app, not just backend-tested. Verified end to end: designed a
+BRCA1-mentioning candidate, edited one base via the UI, and confirmed
+`POST /api/region-evidence` returns real PubMed literature bound to the
+exact edited position, with none for untouched regions.
+
+Two bugs surfaced by that verification, both fixed:
+- The dedup key in `loadRegionEvidence` used to truncate to
+  `sequence.slice(0, 32)` - an edit past position 32 (common on any
+  non-trivial candidate) changed neither the length nor that prefix, so the
+  cache silently kept serving pre-edit evidence. The key now uses the full
+  sequence.
+- On session resume, a snapshot missing `activeCandidateId` fell back to
+  `null`, which `loadRegionEvidence` then coerced to candidate `0` - wrongly
+  attributing candidate 0's edit history if a *different* candidate was
+  actually active. `hydrateFromSnapshot` now falls back to the first
+  candidate's id instead, matching the pattern used elsewhere in the store.
 
 ### Protocol
 

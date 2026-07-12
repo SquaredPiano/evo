@@ -496,6 +496,10 @@ export async function fetchRegionEvidence(payload: {
   // regions Evo2 actually made novel (edited/regenerated spans). Without it the
   // backend returns no literature by design.
   sessionId?: string | null;
+  // Which candidate's edit history to gate on - the backend's candidate_id is
+  // a plain (non-nullable) int defaulting to 0, so this must be a real number,
+  // never null/undefined in the request body.
+  candidateId?: number | null;
 }): Promise<{
   gene: string | null;
   region_start: number;
@@ -515,6 +519,7 @@ export async function fetchRegionEvidence(payload: {
       include_clinvar: payload.includeClinvar ?? true,
       include_literature: payload.includeLiterature ?? true,
       session_id: payload.sessionId ?? null,
+      candidate_id: payload.candidateId ?? 0,
     }),
   });
   if (!res.ok) throw new Error(`Region evidence failed: ${res.status}`);
