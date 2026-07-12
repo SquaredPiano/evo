@@ -98,7 +98,7 @@ export default function Home() {
         <ProteusLogo size="md" />
         <div className="flex items-center gap-2">
           <a
-            href="https://github.com/evo-genomics/evo"
+            href="https://github.com/SquaredPiano/evo"
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-full hidden sm:inline-flex items-center gap-2 px-4 py-2 text-[13px] font-semibold transition-smooth"
