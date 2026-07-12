@@ -330,9 +330,11 @@ export async function importSequenceFile(
   return res.json();
 }
 
-/** POST /api/export/fasta - Export sequences as FASTA text. */
+/** POST /api/export/fasta - Export sequences as FASTA text.
+ * Backend keys the header off `id` (+ optional `description`); sending `header`
+ * silently produces ">sequence". Keep this field name in sync with the backend. */
 export async function exportFasta(
-  sequences: Array<{ header: string; sequence: string }>
+  sequences: Array<{ id: string; sequence: string; description?: string }>
 ): Promise<string> {
   const res = await fetch(`${API_BASE}/api/export/fasta`, {
     method: "POST",

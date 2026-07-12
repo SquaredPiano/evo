@@ -681,7 +681,26 @@ function AnalyzePageInner() {
                     structureModel={structureModel}
                   />
 
-                  {/* pLDDT legend — top-left so it never collides with view-mode buttons */}
+                  {/* An uploaded PDB is not model-predicted: show an honest badge
+                      instead of a pLDDT legend, since its B-factors are not pLDDT. */}
+                  {structureModel === "user_pdb" ? (
+                    <motion.div
+                      className="absolute top-14 left-4 flex items-center gap-2 px-3 py-2 rounded-2xl pointer-events-none max-w-[min(100%,360px)] z-10"
+                      style={{
+                        background: "rgba(255,255,255,0.86)",
+                        backdropFilter: "blur(12px)",
+                        border: "1px solid var(--ghost-border)",
+                        boxShadow: "var(--shadow-soft)",
+                      }}
+                      initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3, ...springTransition }}
+                    >
+                      <span className="text-[10px] leading-snug" style={{ color: "#B45309" }}>
+                        Uploaded structure — not model-predicted; not linked to a DNA sequence. Colors are not pLDDT.
+                      </span>
+                    </motion.div>
+                  ) : (
+                  /* pLDDT legend — top-left so it never collides with view-mode buttons */
                   <motion.div
                     className="absolute top-14 left-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 rounded-2xl pointer-events-none max-w-[min(100%,340px)] z-10"
                     style={{
@@ -708,6 +727,7 @@ function AnalyzePageInner() {
                       </div>
                     ))}
                   </motion.div>
+                  )}
                 </motion.div>
               </div>
 
@@ -807,7 +827,13 @@ function AnalyzePageInner() {
                       About this view
                     </span>
                     <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                      {structureModel === "esmfold" || (!structureModel && activePdb) ? (
+                      {structureModel === "user_pdb" ? (
+                        <>
+                          This is a structure file you uploaded, rendered exactly as provided.
+                          It is <strong>not model-predicted</strong> and <strong>not linked</strong> to a DNA sequence,
+                          so residue colors are not <ScienceTooltip term="plddt">pLDDT</ScienceTooltip> and codon linking is disabled.
+                        </>
+                      ) : structureModel === "esmfold" || (!structureModel && activePdb) ? (
                         <>
                           This fold is from live <ScienceTooltip term="esmfold">ESMFold</ScienceTooltip> (Meta ESM Atlas) of a coding ORF translated from your DNA.
                           Colors are per-residue <ScienceTooltip term="plddt">pLDDT</ScienceTooltip>.

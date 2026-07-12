@@ -53,6 +53,15 @@ interface RetrievalStatus {
   result?: Record<string, unknown> | null;
 }
 
+/** Provenance for a sequence imported from a FASTA/GenBank file. */
+interface ImportSource {
+  format: "fasta" | "genbank";
+  id: string;
+  organism?: string;
+  definition?: string;
+  featureCount?: number;
+}
+
 interface EvoState {
   viewMode: ViewMode;
   pipelineStatus: PipelineStatus;
@@ -69,7 +78,8 @@ interface EvoState {
   selectedRegionIndex: number | null;
   activePdb: string | null;
   originalPdb: string | null;
-  /** Provenance: esmfold | mock | unavailable | null */
+  /** Provenance: esmfold | mock | unavailable | user_pdb | null.
+   * "user_pdb" = a structure file the user uploaded — NOT a model prediction. */
   structureModel: string | null;
   highlightResidues: number[];
 
@@ -82,6 +92,8 @@ interface EvoState {
   chatDraft: string | null;
   /** Prefill the home composer when restoring a recent session. */
   composerPrefill: { mode: "design" | "paste"; value: string } | null;
+  /** Metadata for a sequence brought in via FASTA/GenBank import (if any). */
+  importSource: ImportSource | null;
   candidates: Candidate[];
   activeCandidateId: number | null;
 
@@ -131,6 +143,7 @@ interface EvoState {
   setChatOpen: (open: boolean) => void;
   setChatDraft: (draft: string | null) => void;
   setComposerPrefill: (prefill: { mode: "design" | "paste"; value: string } | null) => void;
+  setImportSource: (source: ImportSource | null) => void;
   setCandidates: (candidates: Candidate[]) => void;
   setActiveCandidateId: (id: number | null) => void;
   setSessionId: (id: string | null) => void;
@@ -174,6 +187,7 @@ const initialState = {
   chatOpen: false,
   chatDraft: null as string | null,
   composerPrefill: null as { mode: "design" | "paste"; value: string } | null,
+  importSource: null as ImportSource | null,
   candidates: [] as Candidate[],
   activeCandidateId: null as number | null,
   sessionId: null as string | null,
@@ -302,6 +316,7 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   setChatOpen: (open) => set({ chatOpen: open }),
   setChatDraft: (draft) => set({ chatDraft: draft }),
   setComposerPrefill: (prefill) => set({ composerPrefill: prefill }),
+  setImportSource: (source) => set({ importSource: source }),
   setCandidates: (candidates) => set({ candidates }),
   setActiveCandidateId: (id) => {
     const state = get();
