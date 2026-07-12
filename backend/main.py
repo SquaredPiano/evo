@@ -171,6 +171,7 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
+    run_id = create_session_id()
     num_candidates = request.num_candidates
     # Agent memory should only live within the active chat lifecycle for this run.
     await copilot.clear_session_memory(session_id=session_id)
@@ -200,8 +201,21 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
             on_spec_ready=lambda spec: _set_session_design_type(session_id, spec.design_type),
         )
     )
+    # Best-effort durable log of this design run (no-op when Mongo is disabled).
+    await snapshot_store.record_run(
+        session_id,
+        kind="design",
+        summary=request.goal,
+        payload={
+            "run_id": run_id,
+            "num_candidates": num_candidates,
+            "run_profile": request.run_profile,
+            "truth_mode": request.truth_mode,
+        },
+    )
     return DesignAcceptedResponse(
         session_id=session_id,
+        run_id=run_id,
         ws_url=_build_ws_url(http_request, session_id),
     )
 
