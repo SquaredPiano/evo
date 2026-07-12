@@ -208,6 +208,43 @@ class SecondaryStructureResponse(BaseModel):
     note: str
 
 
+class MismatchModel(BaseModel):
+    """A single guide/target mismatch along the protospacer (20 = PAM-proximal)."""
+    position: int
+    guide_base: str
+    target_base: str
+
+
+class OffTargetSiteModel(BaseModel):
+    """A candidate CRISPR off-target site found in the supplied reference."""
+    position: int                      # 0-based start of protospacer on the forward strand
+    strand: str                        # "+" | "-"
+    protospacer: str                   # matched 20 nt protospacer (5'->3' on strand)
+    pam: str                           # matched PAM (5'->3' on strand)
+    mismatch_count: int
+    mismatches: list[MismatchModel]
+    cfd_score: float                   # 0..1 (Doench 2016)
+    mit_score: float                   # 0..100 single-guide hit score (Hsu 2013)
+
+
+class CrisprOffTargetResponse(BaseModel):
+    """CRISPR off-target scoring result against the SUPPLIED reference only.
+
+    CFD (Doench 2016) + MIT (Hsu 2013). Not a genome-wide scan.
+    """
+    guide: str
+    pam_pattern: str
+    reference_length: int
+    max_mismatches: int
+    strands_searched: str              # "both"
+    total_sites: int                   # candidate sites incl. perfect on-target matches
+    off_target_count: int              # candidate sites with >= 1 mismatch
+    specificity_score: float           # MIT-style aggregate, 0..100 (100 = most specific)
+    sites: list[OffTargetSiteModel]
+    method: str
+    note: str
+
+
 class ProteinParamsResponse(BaseModel):
     """Protein physicochemical descriptors (ProtParam-style, deterministic)."""
     sequence: str

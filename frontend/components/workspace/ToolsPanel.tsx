@@ -22,6 +22,8 @@ import {
   exportFasta,
   exportGenbank,
   downloadText,
+  analyzeCrisprOffTargets,
+  type CrisprOffTargetResult,
   type OffTargetHit,
   type CodonOptimizationResult,
   type VariantAnnotation,
@@ -39,7 +41,7 @@ import {
 } from "@/lib/evidence";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
-type Tab = "tm" | "primers" | "structure" | "offtarget" | "codon" | "protein" | "variants" | "validate" | "export";
+type Tab = "tm" | "primers" | "structure" | "offtarget" | "crispr" | "codon" | "protein" | "variants" | "validate" | "export";
 
 // Standard genetic code (frame-0) for a convenience translation of the current
 // DNA into the protein whose parameters we report. Pure, deterministic.
@@ -104,6 +106,10 @@ export default function ToolsPanel() {
   const [protein, setProtein] = useState<ProteinParamsResult | null>(null);
 
   const [offtarget, setOfftarget] = useState<{ repeat_fraction: number; gc_balance_risk: string; hits: OffTargetHit[] } | null>(null);
+  const [guide, setGuide] = useState("");
+  const [pam, setPam] = useState("NGG");
+  const [crisprRef, setCrisprRef] = useState("");
+  const [crispr, setCrispr] = useState<CrisprOffTargetResult | null>(null);
   const [organism, setOrganism] = useState("homo_sapiens");
   const [codon, setCodon] = useState<CodonOptimizationResult | null>(null);
   const [gene, setGene] = useState("BRCA1");
@@ -148,6 +154,14 @@ export default function ToolsPanel() {
     setOfftarget({ repeat_fraction: res.repeat_fraction, gc_balance_risk: res.gc_balance_risk, hits: res.hits });
   });
 
+  const runCrispr = () => run(async () => {
+    const g = guide.toUpperCase().replace(/\s+/g, "");
+    if (g.length !== 20) throw new Error(`Guide must be exactly 20 nt (got ${g.length}).`);
+    const reference = (crisprRef.trim() || rawSequence).toUpperCase().replace(/\s+/g, "");
+    if (!reference) throw new Error("No reference sequence (paste one or load a candidate).");
+    setCrispr(await analyzeCrisprOffTargets(g, reference, { pam: pam.trim() || "NGG" }));
+  });
+
   const runCodon = () => run(async () => {
     setCodon(await optimizeCodons(rawSequence, organism));
   });
@@ -188,6 +202,7 @@ export default function ToolsPanel() {
     { id: "primers", label: "Primers" },
     { id: "structure", label: "Structure (RNA)" },
     { id: "offtarget", label: "Off-target" },
+    { id: "crispr", label: "CRISPR" },
     { id: "codon", label: "Codon opt" },
     { id: "protein", label: "Protein" },
     { id: "variants", label: "Variants" },
@@ -389,6 +404,94 @@ export default function ToolsPanel() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {tab === "crispr" && (
+        <div className="space-y-2">
+          <div>
+            <Label>Guide (20 nt protospacer)</Label>
+            <input
+              value={guide}
+              onChange={(e) => setGuide(e.target.value)}
+              placeholder="20 nt spacer, e.g. GTCACCTCCAATGACTAGGG"
+              className="w-full text-[11px] px-3 py-2 rounded-full bg-transparent font-mono"
+              style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
+            />
+            <div className="text-[10px] mt-1 font-mono" style={{ color: guide.replace(/\s+/g, "").length === 20 ? "var(--accent)" : "var(--text-faint)" }}>
+              {guide.replace(/\s+/g, "").length}/20 nt
+            </div>
+          </div>
+          <div className="flex gap-2 items-center">
+            <div className="w-24">
+              <Label>PAM</Label>
+              <input
+                value={pam}
+                onChange={(e) => setPam(e.target.value)}
+                placeholder="NGG"
+                className="w-full text-[11px] px-3 py-2 rounded-full bg-transparent font-mono uppercase"
+                style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
+              />
+            </div>
+            <div className="flex-1 pt-5">
+              <button onClick={runCrispr} disabled={busy} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
+                {busy ? "Scoring…" : "Score off-targets"}
+              </button>
+            </div>
+          </div>
+          <textarea
+            value={crisprRef}
+            onChange={(e) => setCrisprRef(e.target.value)}
+            placeholder="Reference to search (leave blank to use the current sequence)."
+            rows={2}
+            className="w-full text-[11px] px-3 py-2 rounded-xl bg-transparent font-mono resize-none"
+            style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
+          />
+          {crispr && (
+            <div className="text-[11px] space-y-2" style={{ color: "var(--text-secondary)" }}>
+              <div className="rounded-xl p-2.5 space-y-1.5" style={{ border: "1px solid var(--ghost-border)", background: "color-mix(in oklch, var(--accent), transparent 96%)" }}>
+                <div className="flex justify-between">
+                  <span>Aggregate specificity (MIT-style)</span>
+                  <span className="font-mono text-[13px]" style={{ color: crispr.specificity_score >= 80 ? "var(--accent)" : crispr.specificity_score >= 50 ? "var(--annotation-rrna)" : "var(--base-t)" }}>
+                    {crispr.specificity_score.toFixed(1)}
+                  </span>
+                </div>
+                <div className="flex justify-between"><span>Sites / off-targets</span><span className="font-mono">{crispr.total_sites} / {crispr.off_target_count}</span></div>
+                <div className="flex justify-between"><span>Reference / strands</span><span className="font-mono">{crispr.reference_length} nt · both</span></div>
+              </div>
+              <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
+                Ranked sites (by CFD)
+              </div>
+              <div className="space-y-1.5 max-h-72 overflow-auto">
+                {crispr.sites.length === 0 && <div style={{ color: "var(--text-muted)" }}>No matching sites in the supplied reference.</div>}
+                {crispr.sites.slice(0, 25).map((s, i) => (
+                  <div key={i} className="rounded-lg p-2 space-y-1" style={{ border: "1px solid var(--ghost-border)" }}>
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="font-mono text-[10px]">
+                        {s.strand}{s.position} · {s.mismatch_count === 0 ? "perfect" : `${s.mismatch_count} mm`}
+                      </span>
+                      <span className="font-mono text-[10px]">
+                        CFD <span style={{ color: s.cfd_score >= 0.5 ? "var(--base-t)" : s.cfd_score >= 0.1 ? "var(--annotation-rrna)" : "var(--accent)" }}>{s.cfd_score.toFixed(3)}</span>
+                        {"  "}MIT <span style={{ color: "var(--text-muted)" }}>{s.mit_score.toFixed(1)}</span>
+                      </span>
+                    </div>
+                    <div className="font-mono text-[10px] break-all" style={{ color: "var(--text-primary)" }}>
+                      {s.protospacer}<span style={{ color: "var(--accent)" }}>{s.pam}</span>
+                    </div>
+                    {s.mismatches.length > 0 && (
+                      <div className="font-mono text-[9px]" style={{ color: "var(--text-faint)" }}>
+                        {s.mismatches.map((m) => `${m.guide_base}${m.position}${m.target_base}`).join(" ")}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="text-[10px] leading-relaxed" style={{ color: "var(--text-faint)" }}>{crispr.note}</div>
+            </div>
+          )}
+          <div className="text-[10px] leading-relaxed" style={{ color: "var(--text-faint)" }}>
+            CFD (Doench 2016) + MIT (Hsu 2013) off-target scoring against the supplied reference, not a genome-wide scan. Both strands are searched for guide+PAM within the mismatch tolerance; specificity is the MIT-style 100 / (100 + sum of off-target scores).
+          </div>
         </div>
       )}
 

@@ -1,0 +1,32 @@
+CFD (Cutting Frequency Determination) scoring tables
+=====================================================
+
+Source
+------
+Doench, J.G., Fusi, N., Sullender, M. et al.
+"Optimized sgRNA design to maximize activity and minimize off-target
+effects of CRISPR-Cas9." Nature Biotechnology 34, 184-191 (2016).
+https://doi.org/10.1038/nbt.3437
+
+The two tables below are the mismatch and PAM weight lookups distributed
+with the Doench 2016 CFD calculator (Supplementary Table 19), redistributed
+here in JSON form (unpickled from the reference `mismatch_score.pkl` and
+`pam_scores.pkl`).
+
+cfd_mismatch_scores.json
+------------------------
+240 entries. Key format: "r<GUIDE_RNA_BASE>:d<TARGET_DNA_BASE>,<POSITION>".
+The RNA base is the guide (spacer) base; the DNA base is the base on the
+target (protospacer-complementary) strand. POSITION is 1..20 with 20 being
+the PAM-proximal end. The value is the retained cutting fraction (0..1) for
+that single rNA:dDNA mismatch at that position. Watson-Crick matches are not
+stored (they contribute a factor of 1.0).
+
+cfd_pam_scores.json
+-------------------
+16 entries keyed by the 2 nt immediately 3' of the protospacer (positions 2-3
+of an NGG PAM). Value is the retained cutting fraction for that PAM. "GG" = 1.0.
+
+MIT (Hsu 2013) weights are defined inline in services/crispr_offtarget.py:
+Hsu, P.D., Scott, D.A., Weinstein, J.A. et al. "DNA targeting specificity of
+RNA-guided Cas9 nucleases." Nature Biotechnology 31, 827-832 (2013).
