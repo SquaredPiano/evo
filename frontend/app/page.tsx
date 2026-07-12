@@ -5,8 +5,9 @@ import Link from "next/link";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
-import { ArrowRight, Dna, Gauge, Boxes, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import ProteusLogo from "@/components/brand/ProteusLogo";
+import StepArt from "@/components/brand/StepArt";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -21,25 +22,25 @@ const HERO_STRIP = "ATGGCTAGCTAGGCATTACGGCATGCATTAGCGGCTATTACGCATGGCTAAGCTTGCAT"
 
 const STEPS = [
   {
-    icon: <Dna size={22} strokeWidth={2.5} />,
+    variant: "generate" as const,
     kicker: "01 / Generate",
     title: "Design in plain English",
     body: "Describe the element you want. Evo 2 streams candidate sequences base-by-base over a live socket - no spinners, no black box.",
   },
   {
-    icon: <Gauge size={22} strokeWidth={2.5} />,
+    variant: "score" as const,
     kicker: "02 / Score",
     title: "Four composition and motif signals",
     body: "Composition and motif scores for function, tissue motifs, panel off-target overlap, and novelty, clearly marked as ranking heuristics, not clinical predictions.",
   },
   {
-    icon: <Boxes size={22} strokeWidth={2.5} />,
+    variant: "fold" as const,
     kicker: "03 / Fold",
     title: "Sequence to structure",
     body: "Top candidates fold through live ESMFold into 3D protein structures, coloured by per-residue confidence, rendered right in the browser.",
   },
   {
-    icon: <Sparkles size={22} strokeWidth={2.5} />,
+    variant: "edit" as const,
     kicker: "04 / Edit",
     title: "Click a base, feel the delta",
     body: "Type directly into the sequence. Single-base edits re-score in under two seconds; natural-language follow-ups rerun only the stages that changed.",
@@ -182,12 +183,7 @@ export default function Home() {
                 className="step-row grid grid-cols-1 md:grid-cols-[auto_1fr] gap-5 md:gap-8 items-start p-7 md:p-9 hover-lift"
                 style={{ background: "var(--surface-base)", border: "1px solid var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}
               >
-                <div
-                  className="inline-flex items-center justify-center w-14 h-14 shrink-0"
-                  style={{ background: "var(--ink)", color: "var(--honey-400)", border: "1px solid var(--ghost-border)" }}
-                >
-                  {s.icon}
-                </div>
+                <StepArt variant={s.variant} />
                 <div>
                   <p className="label-caps mb-2" style={{ color: "var(--accent-bright)" }}>{s.kicker}</p>
                   <h3 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">{s.title}</h3>
