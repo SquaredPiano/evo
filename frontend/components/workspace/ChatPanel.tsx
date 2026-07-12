@@ -2,9 +2,15 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useEvoStore } from "@/lib/store";
-import { X, Send, Sparkles, Check, Loader2, AlertCircle } from "lucide-react";
+import { X, Send, Sparkles, Check, Loader2, AlertCircle, RefreshCw, PenLine } from "lucide-react";
 import { buildEvidenceLinks } from "@/lib/evidence";
 import { getCandidateDisplay } from "@/lib/candidateDisplay";
+import { useDesignPipeline } from "@/hooks/useDesignPipeline";
+import { isRegenerationMutation } from "@/lib/regen";
+import RegenResultCard, { type RegenResult } from "./RegenResultCard";
+
+/** Window (bp) regenerated around a single selected base when no range exists. */
+const REGEN_WINDOW = 30;
 
 const SCREEN_PROMPTS: Record<string, string[]> = {
   analyze: [
@@ -41,6 +47,22 @@ const SCREEN_PROMPTS: Record<string, string[]> = {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:8000";
 
+/**
+ * Detect a request for a FULL redesign (new candidate set), as opposed to a
+ * single-region regeneration. Kept conservative so region-level prompts
+ * ("regenerate positions 40-80", "raise GC here") still route to the agent's
+ * regenerate_region tool. A redesign needs an explicit "new/fresh candidates"
+ * or "redesign"/"start over" intent.
+ */
+function isRedesignRequest(lc: string): boolean {
+  if (/\b(redesign|re-design|start over|start from scratch)\b/.test(lc)) return true;
+  // "new/fresh/more/different candidates", "candidates that are shorter", etc.
+  if (/\b(new|fresh|more|another|different|shorter|longer)\s+(set of\s+)?candidates?\b/.test(lc)) return true;
+  if (/\bcandidates?\s+that\s+are\b/.test(lc)) return true;
+  if (/\bgenerate\s+(new|fresh|more|another)\b/.test(lc)) return true;
+  return false;
+}
+
 interface ToolCallEntry {
   tool: string;
   status: string;
@@ -56,7 +78,10 @@ interface GuidedPrompt {
 export default function ChatPanel() {
   const chatMessages = useEvoStore((s) => s.chatMessages);
   const addChatMessage = useEvoStore((s) => s.addChatMessage);
+  const clearChat = useEvoStore((s) => s.clearChat);
   const toggleChat = useEvoStore((s) => s.toggleChat);
+  const rawSequence = useEvoStore((s) => s.rawSequence);
+  const { startDesign } = useDesignPipeline();
   const viewMode = useEvoStore((s) => s.viewMode);
   const candidates = useEvoStore((s) => s.candidates);
   const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
@@ -73,6 +98,7 @@ export default function ChatPanel() {
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallEntry[]>([]);
   const [reasoningSteps, setReasoningSteps] = useState<string[]>([]);
   const [comparison, setComparison] = useState<Record<string, any>[]>([]);
+  const [regenResults, setRegenResults] = useState<RegenResult[]>([]);
   const [iterations, setIterations] = useState(0);
   const [streamingText, setStreamingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -168,6 +194,56 @@ export default function ChatPanel() {
     return deduped;
   }, [activeCandidateId, candidates, editHistoryLength, selectedPosition, viewMode]);
 
+  // Guided reprompt / regenerate affordances. These compose the right natural-
+  // language message (using the current selection where relevant) and send it;
+  // the backend regenerate_region tool / design pipeline does the real work.
+  const repromptActions = useMemo(() => {
+    const seqLen = rawSequence.length;
+    if (seqLen === 0) return [] as Array<{ label: string; hint: string; prompt: string; disabled?: boolean }>;
+
+    const hasSel = selectedPosition !== null;
+    const pos = selectedPosition ?? 0;
+    const winStart = hasSel ? Math.max(0, pos - REGEN_WINDOW) : 0;
+    const winEnd = hasSel ? Math.min(seqLen, pos + REGEN_WINDOW) : seqLen;
+    const regionPhrase = `positions ${winStart}-${winEnd}`;
+    const windowNote = hasSel ? ` (a ±${REGEN_WINDOW} bp window around base ${pos})` : "";
+
+    return [
+      {
+        label: "Regenerate selected region",
+        hint: hasSel
+          ? `Resample ${regionPhrase}${windowNote}`
+          : "Select a base first to target a region",
+        prompt: `Regenerate ${regionPhrase}${windowNote}.`,
+        disabled: !hasSel,
+      },
+      {
+        label: "Raise GC here",
+        hint: hasSel ? `Increase GC in ${regionPhrase}` : "Increase GC across the sequence",
+        prompt: hasSel
+          ? `Raise the GC content in ${regionPhrase}${windowNote}.`
+          : "Raise the GC content of this sequence.",
+      },
+      {
+        label: "Avoid a restriction site (EcoRI)",
+        hint: hasSel ? `Remove GAATTC from ${regionPhrase}` : "Remove EcoRI (GAATTC) sites",
+        prompt: hasSel
+          ? `Avoid the EcoRI restriction site (GAATTC) in ${regionPhrase}${windowNote}.`
+          : "Avoid the EcoRI restriction site (GAATTC) in this sequence.",
+      },
+      {
+        label: "Regenerate the whole sequence",
+        hint: `Resample all ${seqLen} bp`,
+        prompt: `Regenerate positions 0-${seqLen} (the whole sequence).`,
+      },
+      {
+        label: "Give me shorter candidates",
+        hint: "Fresh design run — shorter variants",
+        prompt: "Give me new candidates that are shorter than the current design.",
+      },
+    ];
+  }, [rawSequence, selectedPosition]);
+
   const streamAssistantText = async (text: string) => {
     setStreamingText("");
     const clean = (text || "").trim();
@@ -183,6 +259,15 @@ export default function ChatPanel() {
   const applyAgentUpdate = async (update: Record<string, any>) => {
     const s = useEvoStore.getState();
     const candidateId = update.candidate_id ?? s.activeCandidateId ?? 0;
+
+    // TRUE REGENERATION: capture the region diff BEFORE the sequence is replaced.
+    // `s.rawSequence` here is still the pre-regeneration sequence.
+    if (isRegenerationMutation(update.mutation)) {
+      const m = update.mutation;
+      const oldRegion = (s.rawSequence || "").slice(m.start, m.end);
+      setRegenResults((prev) => [...prev, { oldRegion, mutation: m }]);
+    }
+
     if (update.sequence && typeof update.sequence === "string") {
       s.setSequence(update.sequence);
       try {
@@ -252,6 +337,18 @@ export default function ChatPanel() {
         delta: mut.delta_likelihood ?? 0,
       });
     }
+  };
+
+  // Intentionally start a fresh Helio conversation. The design workspace
+  // (sequence, candidates, structure) stays — only the chat thread + its
+  // ephemeral regen/comparison cards are cleared.
+  const handleNewChat = () => {
+    clearChat();
+    setRegenResults([]);
+    setComparison([]);
+    setReasoningSteps([]);
+    setActiveToolCalls([]);
+    setInput("");
   };
 
   const handleSend = async (text?: string) => {
@@ -355,6 +452,22 @@ export default function ChatPanel() {
       }
       setIsTyping(false);
       setAgentPhase("idle");
+      return;
+    }
+
+    // FULL REDESIGN from chat: a request for NEW candidates (optionally
+    // constrained — shorter / higher GC / avoid motif) runs the design
+    // pipeline. startDesign() resets the workspace but PRESERVES this
+    // conversation (see store.reset), so the scientist never loses context.
+    if (isRedesignRequest(lc)) {
+      addChatMessage({
+        role: "assistant",
+        content:
+          "Launching a fresh design run with your constraints. New candidates will stream into the workspace — I'm keeping this conversation intact.",
+      });
+      setIsTyping(false);
+      setAgentPhase("idle");
+      startDesign(msg);
       return;
     }
 
@@ -515,9 +628,21 @@ export default function ChatPanel() {
             </span>
           )}
         </div>
-        <button onClick={toggleChat} className="p-1.5 rounded-full transition-colors" style={{ color: "var(--text-muted)" }} aria-label="Close chat panel">
-          <X size={16} aria-hidden="true" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleNewChat}
+            disabled={isTyping || (chatMessages.length === 0 && regenResults.length === 0)}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium transition-colors hover:bg-white/[0.04] disabled:opacity-40"
+            style={{ color: "var(--text-muted)", border: "1px solid var(--ghost-border)" }}
+            title="Start a fresh Helio conversation (keeps your design in the workspace)"
+            aria-label="Start a new chat"
+          >
+            <PenLine size={11} aria-hidden="true" /> New Chat
+          </button>
+          <button onClick={toggleChat} className="p-1.5 rounded-full transition-colors" style={{ color: "var(--text-muted)" }} aria-label="Close chat panel">
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -557,6 +682,28 @@ export default function ChatPanel() {
             ))}
           </div>
         )}
+        {repromptActions.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] font-medium uppercase tracking-wider flex items-center gap-1.5" style={{ color: "var(--text-faint)" }}>
+              <RefreshCw size={10} /> Reprompt &amp; Regenerate
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {repromptActions.map((item) => (
+                <button
+                  key={item.label}
+                  onClick={() => handleSend(item.prompt)}
+                  disabled={isTyping || item.disabled}
+                  title={item.hint}
+                  className="text-left px-2.5 py-2 rounded-xl transition-colors hover:bg-white/[0.04] disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: "var(--surface-base)", border: "1px solid var(--ghost-border)" }}
+                >
+                  <div className="text-[11px] font-medium leading-tight" style={{ color: "var(--text-primary)" }}>{item.label}</div>
+                  <div className="text-[9px] mt-0.5 leading-tight" style={{ color: "var(--text-muted)" }}>{item.hint}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {chatMessages.map((msg, i) => (
           <div key={i} className={msg.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}>
             <div className="label-caps mb-1" style={{ fontSize: "9px", color: msg.role === "user" ? "var(--text-faint)" : "var(--accent-bright)" }}>
@@ -572,6 +719,16 @@ export default function ChatPanel() {
             </div>
           </div>
         ))}
+
+        {/* Regeneration result cards (region regenerated via regenerate_region) */}
+        {regenResults.length > 0 && (
+          <div className="space-y-2">
+            <div className="label-caps" style={{ fontSize: "9px" }}>Regeneration Results</div>
+            {regenResults.slice(-4).map((r, i) => (
+              <RegenResultCard key={`regen-${i}-${r.mutation.start}-${r.mutation.end}`} result={r} />
+            ))}
+          </div>
+        )}
 
         {/* Comparison table */}
         {comparison.length > 0 && (

@@ -4,6 +4,7 @@ import { useEvoStore } from "@/lib/store";
 import { ChevronRight, ArrowRight, GitCompare } from "lucide-react";
 import { motion } from "framer-motion";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
+import ProvenanceBadge from "@/components/workspace/ProvenanceBadge";
 
 function strengthLabel(value: number): "Strong" | "Promising" | "Weak" {
   if (value >= 0.75) return "Strong";
@@ -146,6 +147,16 @@ export default function CandidateLeaderboard() {
                   </span>
                 )}
                 <span className="text-[11px] font-mono ml-2" style={{ color: "var(--text-faint)" }}>{c.sequence.length} bp</span>
+                {c.provenance?.engine && (
+                  <span className="ml-2 align-middle inline-flex">
+                    <ProvenanceBadge
+                      engine={c.provenance.engine}
+                      method={c.provenance.method}
+                      prefixOnlyConditioning={c.provenance.prefix_only_conditioning}
+                      compact
+                    />
+                  </span>
+                )}
                 {c.status !== "scored" && (
                   <span className="text-[10px] font-mono ml-2" style={{ color: c.status === "failed" ? "var(--base-t)" : "var(--text-faint)" }}>
                     {c.status}

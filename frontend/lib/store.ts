@@ -7,6 +7,7 @@ import type {
   Base,
 } from "@/types";
 import { parseSequence } from "@/lib/sequenceUtils";
+import type { CandidateProvenance } from "@/lib/regen";
 
 type PipelineStatus = "idle" | "input" | "analyzing" | "complete" | "error";
 
@@ -45,6 +46,8 @@ interface Candidate {
   status: string;
   perPositionScores?: LikelihoodScore[];
   error?: string | null;
+  /** Provenance for a constrained full redesign (engine, method, real-confidence flag). */
+  provenance?: CandidateProvenance | null;
 }
 
 interface RetrievalStatus {
@@ -151,6 +154,9 @@ interface EvoState {
   setError: (error: string | null) => void;
   addEditEntry: (entry: Omit<EditEntry, "timestamp">) => void;
   addChatMessage: (msg: Omit<ChatMessage, "timestamp">) => void;
+  /** Intentionally start a fresh Helio conversation (in-memory only).
+   *  Distinct from reset()/startDesign, which now PRESERVE the conversation. */
+  clearChat: () => void;
   toggleChat: () => void;
   setChatOpen: (open: boolean) => void;
   setChatDraft: (draft: string | null) => void;
@@ -334,6 +340,12 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   setError: (error) => set({ error, pipelineStatus: "error" }),
   addEditEntry: (entry) => set({ editHistory: [...get().editHistory, { ...entry, timestamp: Date.now() }] }),
   addChatMessage: (msg) => set({ chatMessages: [...get().chatMessages, { ...msg, timestamp: Date.now() }] }),
+  clearChat: () => {
+    // TODO(persist): session store — before wiping the in-memory thread, snapshot
+    // the outgoing conversation to the MongoDB session store (teammate's work) so a
+    // scientist can reopen past Helio threads. For now this is intentionally in-memory.
+    set({ chatMessages: [], chatDraft: null });
+  },
   toggleChat: () => set({ chatOpen: !get().chatOpen }),
   setChatOpen: (open) => set({ chatOpen: open }),
   setChatDraft: (draft) => set({ chatDraft: draft }),
@@ -409,5 +421,14 @@ export const useEvoStore = create<EvoState>((set, get) => ({
       });
     }
   },
-  reset: () => set(initialState),
+  // reset() clears the design workspace but INTENTIONALLY preserves the Helio
+  // conversation (chatMessages/chatOpen). Regenerating or launching a fresh
+  // design must not destroy the scientist's chat history. Use clearChat() to
+  // explicitly start a new conversation ("New Chat").
+  reset: () =>
+    set((s) => ({
+      ...initialState,
+      chatMessages: s.chatMessages,
+      chatOpen: s.chatOpen,
+    })),
 }));

@@ -450,6 +450,7 @@ export function useDesignPipeline() {
             combined?: number;
           };
           pdb_data?: string;
+          provenance?: import("@/lib/regen").CandidateProvenance | null;
         }>;
 
         if (candidates && candidates.length > 0) {
@@ -491,6 +492,7 @@ export function useDesignPipeline() {
             status: c.status ?? "scored",
             perPositionScores: candidateScoresRef.current[c.id] ?? [],
             error: c.error ?? null,
+            provenance: c.provenance ?? null,
           }));
           mappedCandidates.sort((a, b) => b.overall - a.overall);
 
