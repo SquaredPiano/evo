@@ -173,35 +173,37 @@ def score_novelty(
 ) -> float:
     """Novelty: how unusual is this sequence's composition?
 
-    Composition divergence from typical human genomic averages, plus optional
-    edit distance from a supplied reference. There is no known-sequence database
-    behind this - it is a composition heuristic, not a similarity search against
-    real genomes.
+    Composition atypicality relative to typical human genomic averages, plus
+    optional edit distance from a supplied reference. There is no known-sequence
+    database behind this - it is a composition heuristic, not a similarity search
+    against real genomes.
+
+    Deliberately NOT used any more:
+      - No floor on the edit component: an identical or near-identical sequence
+        should read as low-novelty, not be pinned to a fabricated 0.12+.
+      - No base-composition entropy term: real genomic DNA already sits near the
+        2-bit maximum entropy, so "high entropy = novel" rewarded ordinary DNA
+        for looking ordinary. It carried no novelty signal and is dropped.
     """
-    # Human genome: ~41% GC content
-    gc = gc_content(sequence)
-    gc_divergence = abs(gc - 0.41)
-
-    # Base composition entropy
-    counts = {b: 0 for b in "ATCG"}
-    for b in sequence.upper():
-        if b in counts:
-            counts[b] += 1
-    total = sum(counts.values())
-    if total == 0:
+    if not sequence:
         return 0.5
-    probs = [c / total for c in counts.values() if c > 0]
-    entropy = -sum(p * math.log2(p) for p in probs)
-    max_entropy = 2.0  # log2(4) for uniform distribution
-    entropy_ratio = entropy / max_entropy
 
-    # Edit distance from reference (if provided)
-    edit_component = 0.0
+    # Composition atypicality: distance of GC content from the ~41% human
+    # genomic average, normalised so a strongly skewed composition approaches 1.
+    gc = gc_content(sequence)
+    gc_component = _clamp(abs(gc - 0.41) / 0.41)
+
+    # Edit distance from a supplied reference of equal length (0 when absent or
+    # length-mismatched, and exactly 0 for an identical sequence - no floor).
     if reference and len(reference) == len(sequence):
-        mismatches = sum(1 for a, b in zip(sequence.upper(), reference.upper()) if a != b)
+        mismatches = sum(
+            1 for a, b in zip(sequence.upper(), reference.upper()) if a != b
+        )
         edit_component = mismatches / len(sequence)
+        novelty = 0.5 * gc_component + 0.5 * edit_component
+    else:
+        novelty = gc_component
 
-    novelty = 0.3 * gc_divergence + 0.3 * entropy_ratio + 0.4 * max(edit_component, 0.3)
     return _clamp(novelty)
 
 

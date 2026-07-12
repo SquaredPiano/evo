@@ -251,6 +251,36 @@ def _composition_logits(sequence: str) -> list[float]:
     return logits
 
 
+# Local window (bp) on EACH side of an edited position over which we sum
+# per-position log-likelihood differences for single-base impact scoring.
+_MUTATION_WINDOW_BP = 10
+
+
+def _windowed_mutation_delta(
+    ref_logits: list[float],
+    alt_logits: list[float],
+    position: int,
+    window: int = _MUTATION_WINDOW_BP,
+) -> float:
+    """Sum per-position log-likelihood differences in a window around an edit.
+
+    delta = sum_i [ LL_alt(i) - LL_ref(i) ] for i in [position-window, position+window].
+
+    A single-base substitution perturbs its own position plus a few neighbouring
+    dinucleotide transitions. The old mean-based delta divided that local change
+    by the whole sequence length N, so a real edit washed out to numerical noise
+    on a long sequence. Summing per-position differences over a +/-window bp
+    neighbourhood keeps the signal local and meaningful whether the logits come
+    from the composition heuristic or a true per-position forward pass.
+    """
+    n = min(len(ref_logits), len(alt_logits))
+    if n == 0:
+        return 0.0
+    lo = max(0, position - window)
+    hi = min(n, position + window + 1)
+    return float(sum(alt_logits[i] - ref_logits[i] for i in range(lo, hi)))
+
+
 class Evo2MockService(Evo2Service):
     """Mock backend for development and testing.
 
@@ -282,15 +312,13 @@ class Evo2MockService(Evo2Service):
 
         ref_base = seq[position]
         alt_base = alt_base.upper()
-
-        # Score original
-        ref_score = await self.score(seq)
-
-        # Score mutated
         mutated = seq[:position] + alt_base + seq[position + 1 :]
-        alt_score = await self.score(mutated)
 
-        delta = alt_score - ref_score
+        ref_forward = await self.forward(seq)
+        alt_forward = await self.forward(mutated)
+        delta = _windowed_mutation_delta(
+            ref_forward.logits, alt_forward.logits, position
+        )
         return MutationScore(
             position=position,
             reference_base=ref_base,
@@ -398,10 +426,12 @@ class Evo2LocalService(Evo2Service):
         ref_base = seq[position]
         mutated = seq[:position] + alt_base.upper() + seq[position + 1 :]
 
-        ref_score, alt_score = await asyncio.gather(
-            self.score(seq), self.score(mutated)
+        ref_forward, alt_forward = await asyncio.gather(
+            self.forward(seq), self.forward(mutated)
         )
-        delta = alt_score - ref_score
+        delta = _windowed_mutation_delta(
+            ref_forward.logits, alt_forward.logits, position
+        )
         return MutationScore(
             position=position,
             reference_base=ref_base,
@@ -520,10 +550,12 @@ class Evo2NIMService(Evo2Service):
         ref_base = seq[position]
         mutated = seq[:position] + alt_base.upper() + seq[position + 1 :]
 
-        ref_score, alt_score = await asyncio.gather(
-            self.score(seq), self.score(mutated)
+        ref_forward, alt_forward = await asyncio.gather(
+            self.forward(seq), self.forward(mutated)
         )
-        delta = alt_score - ref_score
+        delta = _windowed_mutation_delta(
+            ref_forward.logits, alt_forward.logits, position
+        )
         return MutationScore(
             position=position,
             reference_base=ref_base,

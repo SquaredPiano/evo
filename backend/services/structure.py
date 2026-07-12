@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from services.translation import find_orfs, translate
+from services.translation import find_orfs
 
 logger = logging.getLogger(__name__)
 
@@ -43,20 +43,29 @@ class StructurePrediction:
 def _extract_mean_plddt(pdb_text: str) -> float:
     """Extract mean pLDDT from PDB B-factor column (cols 61-66).
 
-    ESMFold stores pLDDT (0-100) in the B-factor field of ATOM records.
+    pLDDT is a PER-RESIDUE confidence that ESMFold duplicates onto the B-factor
+    of every atom in the residue. Averaging over all ATOM records therefore
+    weights each residue by its atom count and biases the mean toward larger
+    residues (Trp/Arg vs Gly). We take ONE value per residue from its CA atom,
+    keyed by (chain, residue sequence number), so every residue counts once.
     Returns 0-1 scale.
     """
-    b_factors = []
+    per_residue: dict[tuple[str, str], float] = {}
     for line in pdb_text.splitlines():
-        if line.startswith("ATOM"):
-            try:
-                b_factor = float(line[60:66].strip())
-                b_factors.append(b_factor)
-            except (ValueError, IndexError):
-                continue
-    if not b_factors:
+        if not line.startswith("ATOM"):
+            continue
+        if line[12:16].strip() != "CA":
+            continue
+        try:
+            b_factor = float(line[60:66].strip())
+        except (ValueError, IndexError):
+            continue
+        chain = line[21:22]
+        res_seq = line[22:26].strip()
+        per_residue[(chain, res_seq)] = b_factor
+    if not per_residue:
         return 0.0
-    mean_b = sum(b_factors) / len(b_factors)
+    mean_b = sum(per_residue.values()) / len(per_residue)
     # Some providers return pLDDT in [0,100], others normalize to [0,1].
     return mean_b if mean_b <= 1.5 else (mean_b / 100.0)
 
@@ -105,30 +114,28 @@ def _has_backbone_atoms(pdb_text: str) -> bool:
 
 
 def _select_protein_for_folding(dna_sequence: str) -> str:
-    """Extract the most foldable protein-like segment from DNA.
+    """Return the protein of the longest REAL ORF, or "" if the design is non-coding.
 
-    Priority:
-    1) Longest ORF protein.
-    2) Longest stop-free frame segment.
+    Folds ONLY a genuine open reading frame (ATG ... in-frame stop) discovered by
+    a six-frame ORF search (3 forward + 3 reverse via ``find_orfs``). A
+    regulatory / non-coding design contains no such ORF, so we return "" and the
+    caller reports "no protein product" instead of folding a translational
+    artifact from an arbitrary reading frame.
+
+    N (unknown) bases are left untouched: the previous ``N``->``A`` substitution
+    could fabricate spurious ATG start or stop codons out of unknown sequence.
+    ``find_orfs`` never matches ATG / stop against a codon containing N, and any
+    N codon inside a real ORF translates to 'X' - so we never invent codons.
     """
-    cleaned_dna = dna_sequence.upper().replace("N", "A")
-    if len(cleaned_dna) < 9:
+    seq = dna_sequence.upper()
+    if len(seq) < 9:
         return ""
 
-    orfs = find_orfs(cleaned_dna, min_length=24)
-    if orfs:
-        best_orf = max(orfs, key=lambda o: len(o.protein))
-        if best_orf.protein:
-            return best_orf.protein
-
-    best = ""
-    for frame in range(3):
-        translated = translate(cleaned_dna[frame:], to_stop=False)
-        for segment in translated.split("*"):
-            candidate = "".join(aa for aa in segment if aa.isalpha() and aa != "X")
-            if len(candidate) > len(best):
-                best = candidate
-    return best
+    orfs = find_orfs(seq, min_length=24)
+    if not orfs:
+        return ""
+    best_orf = max(orfs, key=lambda o: len(o.protein))
+    return best_orf.protein
 
 
 def coding_region_changed(ref_dna: str, alt_dna: str) -> bool:

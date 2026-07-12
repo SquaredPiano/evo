@@ -19,6 +19,7 @@ from services.evo2 import (
     Evo2MockService,
     _mock_logits,
     _composition_logits,
+    _windowed_mutation_delta,
     _deterministic_seed,
     _TRANSITION,
     _MOTIFS,
@@ -346,15 +347,13 @@ class TestScoringExact:
         logits = _mock_logits(ALL_T)
         forward = ForwardResult(logits=logits, sequence_score=float(np.mean(logits)), embeddings=None)
         score = score_novelty(forward, ALL_T)
-        # All T's have GC=0, huge divergence from human 0.41
-        # Also entropy is 0 (only one base)
+        # All T's have GC=0, maximal divergence from the human ~0.41 average.
+        # Novelty is now composition atypicality (no entropy term, no edit floor):
+        # with no reference, novelty = clamp(|gc - 0.41| / 0.41) = clamp(1.0) = 1.0.
         gc = gc_content(ALL_T)
         assert gc == 0.0
-        gc_divergence = abs(gc - 0.41)  # = 0.41
-        # Entropy: only T → entropy = 0, entropy_ratio = 0
-        # No reference, so edit_component uses max(0, 0.3) = 0.3
-        expected = 0.3 * gc_divergence + 0.3 * 0.0 + 0.4 * 0.3
-        expected = _clamp(expected)
+        expected = _clamp(abs(gc - 0.41) / 0.41)
+        assert expected == 1.0
         assert abs(score - expected) < 1e-10
 
     @pytest.mark.asyncio
@@ -546,14 +545,16 @@ class TestAPIContracts:
         assert body["position"] == 0
         assert body["reference_base"] == "A"
         assert body["alternate_base"] == "G"
-        # Delta = score(mutated) - score(original), computed from the same
-        # deterministic composition signal the nim_api engine uses.
-        ref_logits = _composition_logits(BRCA1)
-        ref_score = float(np.mean(ref_logits))
+        # Delta is now the SUM of per-position log-likelihood differences over the
+        # +/-10 bp window around the edit (not the old sequence-wide mean), which
+        # keeps a single-base edit from being diluted by 1/N over a long sequence.
+        # The test app runs the mock engine, so the endpoint's per-position array
+        # is _mock_logits (the previous assertion compared against the nim-only
+        # _composition_logits and never matched the mock-backed endpoint).
+        ref_logits = _mock_logits(BRCA1)
         mutated = "G" + BRCA1[1:]
-        alt_logits = _composition_logits(mutated)
-        alt_score = float(np.mean(alt_logits))
-        expected_delta = round(alt_score - ref_score, 6)
+        alt_logits = _mock_logits(mutated)
+        expected_delta = round(_windowed_mutation_delta(ref_logits, alt_logits, 0), 6)
         assert body["delta_likelihood"] == expected_delta
 
     def test_mutations_same_base_zero_delta(self, client):

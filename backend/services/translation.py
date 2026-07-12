@@ -31,7 +31,21 @@ CODON_TABLE: dict[str, str] = {
 STOP_CODONS = frozenset(("TAA", "TAG", "TGA"))
 START_CODON = "ATG"
 
-COMPLEMENT: dict[str, str] = {"A": "T", "T": "A", "C": "G", "G": "C", "N": "N"}
+# Full IUPAC nucleotide complement map. Ambiguity codes must complement to their
+# proper partners - not collapse to N - or reverse_complement silently corrupts
+# every degenerate base. R<->Y, K<->M, B<->V, D<->H are Watson-Crick reflections;
+# S, W, N are self-complementary.
+COMPLEMENT: dict[str, str] = {
+    "A": "T", "T": "A", "C": "G", "G": "C", "N": "N",
+    "R": "Y", "Y": "R", "S": "S", "W": "W",
+    "K": "M", "M": "K", "B": "V", "V": "B",
+    "D": "H", "H": "D",
+}
+
+# Accepted alphabet: the four bases, N, and the IUPAC ambiguity codes. Kept in
+# sync with services.sequence_formats.VALID_BASES so validation and formatting
+# agree on what a legal sequence is.
+VALID_BASES: frozenset[str] = frozenset("ATCGNRYSWKMBDHV")
 
 
 @dataclass(frozen=True)
@@ -48,8 +62,7 @@ class ORF:
 def validate_sequence(seq: str) -> str:
     """Uppercase, strip whitespace, validate characters."""
     cleaned = seq.upper().replace(" ", "").replace("\n", "").replace("\r", "")
-    valid = set("ATCGN")
-    bad = set(cleaned) - valid
+    bad = set(cleaned) - VALID_BASES
     if bad:
         raise ValueError(f"Invalid nucleotides: {bad}")
     return cleaned

@@ -46,6 +46,31 @@ class TestReverseComplement:
     def test_empty(self) -> None:
         assert reverse_complement("") == ""
 
+    def test_iupac_ambiguity_codes_preserved(self) -> None:
+        # Full IUPAC complement: ambiguity codes must map to their proper
+        # partners, not collapse to N. R<->Y, K<->M, B<->V, D<->H; S, W, N self.
+        assert reverse_complement("RYSWKMBDHVN") == "NBDHVKMWSRY"
+        # Spot-check individual reflections.
+        assert reverse_complement("R") == "Y"
+        assert reverse_complement("K") == "M"
+        assert reverse_complement("B") == "V"
+        assert reverse_complement("D") == "H"
+        assert reverse_complement("S") == "S"
+        assert reverse_complement("W") == "W"
+
+
+class TestIupacValidation:
+    def test_accepts_iupac_ambiguity_codes(self) -> None:
+        # validate_sequence must agree with sequence_formats.VALID_BASES and
+        # accept IUPAC codes instead of silently corrupting or rejecting them.
+        assert validate_sequence("ATCGNRYSWKMBDHV") == "ATCGNRYSWKMBDHV"
+
+    def test_still_rejects_non_iupac(self) -> None:
+        import pytest
+
+        with pytest.raises(ValueError, match="Invalid nucleotides"):
+            validate_sequence("ATCGZ")
+
 
 class TestTranslate:
     def test_start_codon(self) -> None:
