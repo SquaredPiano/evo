@@ -675,7 +675,7 @@ class TestAPIContracts:
         """Create sessions with user_id, verify listing, verify isolation."""
         uid = "hardened-user"
         # No sessions yet
-        r0 = client.get(f"/api/sessions/{uid}")
+        r0 = client.get(f"/api/users/{uid}/sessions")
         assert r0.json()["count"] == 0
 
         # Create two sessions
@@ -686,14 +686,14 @@ class TestAPIContracts:
             "goal": "Design B", "session_id": "hu-s2", "user_id": uid,
         })
 
-        r1 = client.get(f"/api/sessions/{uid}")
+        r1 = client.get(f"/api/users/{uid}/sessions")
         data = r1.json()
         assert data["user_id"] == uid
         assert data["count"] == 2
         assert sorted(data["sessions"]) == ["hu-s1", "hu-s2"]
 
         # Different user sees nothing
-        r2 = client.get("/api/sessions/other-user")
+        r2 = client.get("/api/users/other-user/sessions")
         assert r2.json()["count"] == 0
 
 

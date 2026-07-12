@@ -9,7 +9,7 @@ import type {
 } from "@/types";
 import { parseSequence } from "@/lib/sequenceUtils";
 import type { CandidateProvenance } from "@/lib/regen";
-import { fetchRegionEvidence } from "@/lib/api";
+import { fetchRegionEvidence, putSession, type SessionSnapshot } from "@/lib/api";
 
 type PipelineStatus = "idle" | "input" | "analyzing" | "complete" | "error";
 
@@ -193,6 +193,12 @@ interface EvoState {
   setRegionEvidence: (items: RegionEvidence[], key?: string | null) => void;
   loadRegionEvidence: (sequence: string, gene?: string | null) => Promise<void>;
 
+  // --- Durable session persistence (MongoDB via /api/sessions) ---
+  /** Serialize the documented resumable fields into a SessionSnapshot. */
+  snapshotFromStore: () => SessionSnapshot;
+  /** Restore full workspace state from a snapshot (RESUME, not re-run). */
+  hydrateFromSnapshot: (snap: SessionSnapshot) => void;
+
   reset: () => void;
 }
 
@@ -355,9 +361,18 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   addEditEntry: (entry) => set({ editHistory: [...get().editHistory, { ...entry, timestamp: Date.now() }] }),
   addChatMessage: (msg) => set({ chatMessages: [...get().chatMessages, { ...msg, timestamp: Date.now() }] }),
   clearChat: () => {
-    // TODO(persist): session store — before wiping the in-memory thread, snapshot
-    // the outgoing conversation to the MongoDB session store (teammate's work) so a
-    // scientist can reopen past Helio threads. For now this is intentionally in-memory.
+    // New Chat: archive the outgoing session to the durable store BEFORE wiping
+    // the in-memory thread, so it appears in the sidebar and can be resumed.
+    // Best-effort + silent: never block or error the UI when Mongo is off.
+    const s = get();
+    const hasContent = Boolean(s.sessionId) && (s.rawSequence.length > 0 || s.candidates.length > 0);
+    if (hasContent) {
+      try {
+        void putSession(s.snapshotFromStore()).catch(() => {});
+      } catch {
+        // ignore — persistence is additive
+      }
+    }
     set({ chatMessages: [], chatDraft: null });
   },
   toggleChat: () => set({ chatOpen: !get().chatOpen }),
@@ -464,6 +479,88 @@ export const useEvoStore = create<EvoState>((set, get) => ({
     } catch {
       if (get().regionEvidenceKey === key) set({ regionEvidence: [] });
     }
+  },
+
+  // --- Durable session persistence (additive; safe no-ops when Mongo is off) ---
+  snapshotFromStore: () => {
+    const s = get();
+    // Derive a human title: design goal from first user chat, else a seq label.
+    const firstUser = s.chatMessages.find((m) => m.role === "user");
+    const title =
+      (firstUser?.content ?? "").trim().slice(0, 80) ||
+      (s.rawSequence ? `Sequence (${s.rawSequence.length} bp)` : "Untitled session");
+    const kind: string = s.importSource
+      ? "paste"
+      : s.structureModel === "user_pdb"
+        ? "pdb"
+        : "design";
+    return {
+      sessionId: s.sessionId,
+      title,
+      kind,
+      rawSequence: s.rawSequence,
+      candidates: s.candidates,
+      activeCandidateId: s.activeCandidateId,
+      analysisResult: s.analysisResult,
+      scores: s.scores,
+      regions: s.regions,
+      activePdb: s.activePdb,
+      structureModel: s.structureModel,
+      chatMessages: s.chatMessages,
+      editHistory: s.editHistory,
+      retrievalStatuses: s.retrievalStatuses,
+      seedSource: s.seedSource,
+      scoringNote: s.scoringNote,
+      compareLeftId: s.compareLeftId,
+      compareRightId: s.compareRightId,
+      regionEvidence: s.regionEvidence,
+    } as SessionSnapshot;
+  },
+
+  hydrateFromSnapshot: (snap) => {
+    // Restore stored fields; recompute derived `bases` from the sequence so the
+    // viewer renders without re-running the pipeline. Everything is defensive:
+    // missing/renamed fields fall back to sensible empties.
+    const rawSequence = typeof snap.rawSequence === "string" ? snap.rawSequence : "";
+    const regions = (Array.isArray(snap.regions) ? snap.regions : []) as SequenceRegion[];
+    const scores = (Array.isArray(snap.scores) ? snap.scores : []) as LikelihoodScore[];
+    const bases = parseSequence(rawSequence, regions).map((base, i) => ({
+      ...base,
+      likelihoodScore: scores[i]?.score,
+    }));
+    set({
+      ...initialState,
+      // Preserve theme/user across a resume.
+      theme: get().theme,
+      user: get().user,
+      sessionId: typeof snap.sessionId === "string" ? snap.sessionId : get().sessionId,
+      rawSequence,
+      regions,
+      scores,
+      bases,
+      candidates: (Array.isArray(snap.candidates) ? snap.candidates : []) as Candidate[],
+      activeCandidateId:
+        typeof snap.activeCandidateId === "number" ? snap.activeCandidateId : null,
+      analysisResult: (snap.analysisResult ?? null) as AnalysisResult | null,
+      activePdb: typeof snap.activePdb === "string" ? snap.activePdb : null,
+      originalPdb: typeof snap.activePdb === "string" ? snap.activePdb : null,
+      structureModel: typeof snap.structureModel === "string" ? snap.structureModel : null,
+      chatMessages: (Array.isArray(snap.chatMessages) ? snap.chatMessages : []) as ChatMessage[],
+      editHistory: (Array.isArray(snap.editHistory) ? snap.editHistory : []) as EditEntry[],
+      retrievalStatuses: (Array.isArray(snap.retrievalStatuses)
+        ? snap.retrievalStatuses
+        : []) as RetrievalStatus[],
+      seedSource: typeof snap.seedSource === "string" ? snap.seedSource : null,
+      scoringNote: typeof snap.scoringNote === "string" ? snap.scoringNote : null,
+      compareLeftId: typeof snap.compareLeftId === "number" ? snap.compareLeftId : null,
+      compareRightId: typeof snap.compareRightId === "number" ? snap.compareRightId : null,
+      regionEvidence: (Array.isArray(snap.regionEvidence)
+        ? snap.regionEvidence
+        : []) as RegionEvidence[],
+      // A resumed session lands on the candidate overview, fully restored.
+      viewMode: "analyze",
+      pipelineStatus: "complete",
+    });
   },
 
   // reset() clears the design workspace but INTENTIONALLY preserves the Helio

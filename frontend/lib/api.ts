@@ -595,6 +595,94 @@ export async function revertExperiment(
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Durable session snapshots (MongoDB-backed; safe no-ops when disabled)
+// ---------------------------------------------------------------------------
+//
+// Matches docs/session_persistence_interface.md + backend/models/sessions.py.
+// A snapshot is the serialized useEvoStore state per session id, so a session
+// can be *resumed* (state restored) rather than re-run. Everything degrades:
+// when the backend has no Mongo URI, list -> [], get -> 404, put/delete succeed
+// as no-ops. Callers treat network errors as "persistence unavailable".
+
+/** Lightweight row for the resume list (no heavy payload). */
+export interface SessionSummary {
+  sessionId: string;
+  title?: string | null;
+  kind?: string | null;
+  updatedAt?: string | null;
+  candidateCount: number;
+  length: number;
+  userId?: string | null;
+}
+
+/** Full resumable snapshot. Permissive by design: the backend stores unknown
+ *  fields verbatim so the store shape can evolve without a backend change. */
+export interface SessionSnapshot {
+  sessionId?: string | null;
+  title?: string | null;
+  kind?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  userId?: string | null;
+  rawSequence?: string | null;
+  candidates?: unknown[] | null;
+  activeCandidateId?: number | null;
+  analysisResult?: unknown;
+  scores?: unknown[] | null;
+  regions?: unknown[] | null;
+  activePdb?: string | null;
+  structureModel?: string | null;
+  chatMessages?: unknown[] | null;
+  editHistory?: unknown[] | null;
+  retrievalStatuses?: unknown[] | null;
+  seedSource?: string | null;
+  scoringNote?: string | null;
+  compareLeftId?: number | null;
+  compareRightId?: number | null;
+  regionEvidence?: unknown[] | null;
+  [key: string]: unknown;
+}
+
+/** GET /api/sessions - Durable session summaries for the resume list. */
+export async function listSessions(userId?: string): Promise<SessionSummary[]> {
+  const url = new URL(`${API_BASE}/api/sessions`);
+  if (userId) url.searchParams.set("user_id", userId);
+  const res = await fetch(url.toString());
+  if (!res.ok) throw new Error(`List sessions failed: ${res.status}`);
+  const data = await res.json();
+  return (data.sessions ?? []) as SessionSummary[];
+}
+
+/** GET /api/sessions/{id} - Full snapshot for resume, or null when absent. */
+export async function getSession(sessionId: string): Promise<SessionSnapshot | null> {
+  const res = await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Get session failed: ${res.status}`);
+  return (await res.json()) as SessionSnapshot;
+}
+
+/** PUT /api/sessions/{id} - Upsert (autosave) a snapshot. Returns the summary. */
+export async function putSession(snapshot: SessionSnapshot): Promise<SessionSummary> {
+  const sessionId = snapshot.sessionId;
+  if (!sessionId) throw new Error("putSession requires snapshot.sessionId");
+  const res = await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(snapshot),
+  });
+  if (!res.ok) throw new Error(`Put session failed: ${res.status}`);
+  return (await res.json()) as SessionSummary;
+}
+
+/** DELETE /api/sessions/{id} - Remove a durable snapshot. */
+export async function deleteSession(sessionId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(`Delete session failed: ${res.status}`);
+}
+
 /** Trigger a browser download of text content. */
 export function downloadText(filename: string, content: string, mime = "text/plain") {
   if (typeof document === "undefined") return;

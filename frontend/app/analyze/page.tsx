@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { useEvoStore } from "@/lib/store";
+import { getSession } from "@/lib/api";
+import { useSessionAutosave } from "@/hooks/useSessionAutosave";
 import { useSequenceAnalysis } from "@/hooks/useSequenceAnalysis";
 import { useDesignPipeline } from "@/hooks/useDesignPipeline";
 import { useMutationSim } from "@/hooks/useMutationSim";
@@ -158,7 +160,11 @@ function AnalyzePageInner() {
   const setChatOpen = useEvoStore((s) => s.setChatOpen);
   const setChatDraft = useEvoStore((s) => s.setChatDraft);
   const setComposerPrefill = useEvoStore((s) => s.setComposerPrefill);
+  const hydrateFromSnapshot = useEvoStore((s) => s.hydrateFromSnapshot);
   const theme = "light" as const;
+
+  // Debounced, best-effort autosave of the current session to the durable store.
+  useSessionAutosave();
   const wsStatus = useEvoStore((s) => s.wsStatus);
   const seedSource = useEvoStore((s) => s.seedSource);
   const scoringNote = useEvoStore((s) => s.scoringNote);
@@ -349,6 +355,19 @@ function AnalyzePageInner() {
             value: session.payload,
           });
           setViewMode("input");
+        }}
+        onResumeSession={(sessionId) => {
+          // RESUME a durable session: restore full state, don't re-run.
+          getSession(sessionId)
+            .then((snap) => {
+              if (snap) {
+                hydrateFromSnapshot(snap);
+                setViewMode("analyze");
+              }
+            })
+            .catch(() => {
+              // Persistence unavailable — leave the workspace untouched.
+            });
         }}
         wsStatus={wsStatus}
         navItems={SIDEBAR_ITEMS}

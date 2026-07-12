@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Dna, Home, HelpCircle, Plus, CircleDashed } from "lucide-react";
+import { Dna, Home, HelpCircle, Plus, CircleDashed, Trash2 } from "lucide-react";
 import EngineStatus from "@/components/ui/EngineStatus";
 import {
   clearSessionHistory,
@@ -10,6 +10,17 @@ import {
   loadSessionHistory,
   type SessionEntry,
 } from "@/lib/sessionHistory";
+import { listSessions, deleteSession, type SessionSummary } from "@/lib/api";
+
+/** Dispatch to ask the sidebar to refresh its durable session list. */
+export const SESSIONS_CHANGED = "evo:sessions-changed";
+
+function formatWhen(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 export interface SidebarNavItem {
   icon: LucideIcon;
@@ -25,6 +36,8 @@ interface WorkspaceSidebarProps {
   onCloseMobile: () => void;
   onShowTutorial: () => void;
   onSelectSession: (session: SessionEntry) => void;
+  /** Resume a durable saved session (full state restore, not re-run). */
+  onResumeSession?: (sessionId: string) => void;
   onNewDesign: () => void;
   wsStatus: string;
   navItems: SidebarNavItem[];
@@ -38,27 +51,56 @@ function WorkspaceSidebar({
   onCloseMobile,
   onShowTutorial,
   onSelectSession,
+  onResumeSession,
   onNewDesign,
   wsStatus,
   navItems,
 }: WorkspaceSidebarProps) {
   const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [durable, setDurable] = useState<SessionSummary[]>([]);
   const [showAllSessions, setShowAllSessions] = useState(false);
 
   const refreshSessions = useCallback(() => {
     setSessions(loadSessionHistory());
   }, []);
 
+  // Durable saved sessions from Mongo. On any failure (persistence disabled /
+  // backend down) we simply keep an empty list and fall back to localStorage.
+  const refreshDurable = useCallback(() => {
+    listSessions()
+      .then((rows) => setDurable(rows))
+      .catch(() => setDurable([]));
+  }, []);
+
   useEffect(() => {
     refreshSessions();
+    refreshDurable();
     const onChange = () => refreshSessions();
+    const onDurableChange = () => refreshDurable();
     window.addEventListener(HISTORY_CHANGED, onChange);
     window.addEventListener("storage", onChange);
+    window.addEventListener(SESSIONS_CHANGED, onDurableChange);
+    window.addEventListener("focus", onDurableChange);
     return () => {
       window.removeEventListener(HISTORY_CHANGED, onChange);
       window.removeEventListener("storage", onChange);
+      window.removeEventListener(SESSIONS_CHANGED, onDurableChange);
+      window.removeEventListener("focus", onDurableChange);
     };
-  }, [refreshSessions]);
+  }, [refreshSessions, refreshDurable]);
+
+  const handleDeleteDurable = useCallback(
+    (sessionId: string) => {
+      // Optimistic removal; best-effort delete.
+      setDurable((rows) => rows.filter((r) => r.sessionId !== sessionId));
+      deleteSession(sessionId).catch(() => {});
+    },
+    [],
+  );
+
+  // Prefer durable saved sessions; fall back to localStorage recents so nothing
+  // regresses when Mongo is off or the list is empty.
+  const useDurable = durable.length > 0;
 
   const hasWorkspace = Boolean(analysisResult);
   const isHome = viewMode === "input" || viewMode === "pipeline";
@@ -175,12 +217,12 @@ function WorkspaceSidebar({
           })}
         </div>
 
-        {/* Recent sessions — v0-inspired, not a copy */}
+        {/* Recent sessions — durable (Mongo) when available, else localStorage. */}
         <div className="px-2 mb-2 flex items-center justify-between">
           <p className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
-            Recent
+            {useDurable ? "Saved" : "Recent"}
           </p>
-          {sessions.length > 0 && (
+          {!useDurable && sessions.length > 0 && (
             <button
               type="button"
               onClick={() => {
@@ -196,7 +238,45 @@ function WorkspaceSidebar({
         </div>
 
         <div className="space-y-0.5">
-          {sessions.length === 0 ? (
+          {useDurable ? (
+            (showAllSessions ? durable : durable.slice(0, 8)).map((s) => (
+              <div
+                key={s.sessionId}
+                className="group flex items-start gap-2.5 w-full px-3 py-2 rounded-xl text-left transition-colors hover:bg-black/[0.04]"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    onResumeSession?.(s.sessionId);
+                    onCloseMobile();
+                  }}
+                  className="flex items-start gap-2.5 min-w-0 flex-1 text-left"
+                >
+                  <CircleDashed size={14} className="mt-0.5 shrink-0" style={{ color: "var(--text-faint)" }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12.5px] font-medium truncate leading-snug" style={{ color: "var(--ink)" }}>
+                      {s.title || "Untitled session"}
+                    </span>
+                    <span className="block text-[10px] mt-0.5 truncate" style={{ color: "var(--text-faint)" }}>
+                      {(s.kind ? s.kind[0].toUpperCase() + s.kind.slice(1) : "Session")}
+                      {formatWhen(s.updatedAt) ? ` · ${formatWhen(s.updatedAt)}` : ""}
+                      {` · ${s.candidateCount} cand`}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Delete session"
+                  title="Delete session"
+                  onClick={() => handleDeleteDurable(s.sessionId)}
+                  className="shrink-0 mt-0.5 p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-black/[0.06] transition-opacity"
+                  style={{ color: "var(--text-faint)" }}
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            ))
+          ) : sessions.length === 0 ? (
             <p className="px-3 py-2 text-[12px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
               Designs you run will show up here.
             </p>
@@ -228,14 +308,16 @@ function WorkspaceSidebar({
             ))
           )}
 
-          {sessions.length > 8 && (
+          {((useDurable && durable.length > 8) || (!useDurable && sessions.length > 8)) && (
             <button
               type="button"
               onClick={() => setShowAllSessions((v) => !v)}
               className="w-full text-left px-3 py-2 text-[12px] font-medium rounded-xl hover:bg-black/[0.04]"
               style={{ color: "var(--text-muted)" }}
             >
-              {showAllSessions ? "Show less" : `More (${sessions.length - 8})`}
+              {showAllSessions
+                ? "Show less"
+                : `More (${(useDurable ? durable.length : sessions.length) - 8})`}
             </button>
           )}
         </div>

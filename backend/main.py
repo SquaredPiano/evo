@@ -45,6 +45,8 @@ from models.responses import (
     StructureResponse,
 )
 from config import SessionStoreMode, StructureMode, settings
+from models.sessions import SessionSnapshot, SessionSummary
+from services.mongo_store import get_snapshot_store
 from pipeline.evo2_score import rescore_mutation_detailed, score_candidate
 from pipeline.orchestrator import (
     DEFAULT_SEED,
@@ -105,6 +107,7 @@ async def _lifespan(app: FastAPI) -> _AsyncIterator[None]:
     yield
     # Shutdown
     await session_store.close()
+    await snapshot_store.close()
 
 app = FastAPI(title="Evo Backend", version="1.0.0", lifespan=_lifespan)
 app.add_middleware(
@@ -120,6 +123,7 @@ evo2_service = create_evo2_service()
 session_store = create_session_store(settings, DEFAULT_SEED)
 copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
 experiment_tracker = ExperimentTracker(session_store)
+snapshot_store = get_snapshot_store()
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 MAX_SESSION_CONTEXT_ENTRIES = 512
 
@@ -802,11 +806,55 @@ async def experiment_lineage(session_id: str, version_id: str) -> dict[str, obje
     }
 
 
-@app.get("/api/sessions/{user_id}")
-async def list_sessions(user_id: str) -> dict[str, object]:
-    """List all sessions owned by a user."""
+@app.get("/api/users/{user_id}/sessions")
+async def list_user_session_ids(user_id: str) -> dict[str, object]:
+    """List all Redis hot-store session ids owned by a user.
+
+    (Moved from ``GET /api/sessions/{user_id}`` so ``/api/sessions/{session_id}``
+    can serve durable snapshots without a route collision.)
+    """
     session_ids = await session_store.list_user_sessions(user_id)
     return {"user_id": user_id, "sessions": session_ids, "count": len(session_ids)}
+
+
+# --- Durable session snapshots (MongoDB; degrades to no-op when disabled) ---
+
+
+@app.get("/api/sessions")
+async def list_session_snapshots(user_id: str | None = None) -> dict[str, object]:
+    """List durable session summaries for the home/resume screen."""
+    summaries = await snapshot_store.list_summaries(user_id)
+    return {"sessions": [s.model_dump() for s in summaries]}
+
+
+@app.get("/api/sessions/{session_id}", response_model=SessionSnapshot)
+async def get_session_snapshot(session_id: str) -> SessionSnapshot:
+    """Return the full resumable snapshot for a session (404 if absent)."""
+    snapshot = await snapshot_store.get(session_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Session snapshot not found")
+    return snapshot
+
+
+@app.put("/api/sessions/{session_id}", response_model=SessionSummary)
+async def put_session_snapshot(session_id: str, snapshot: SessionSnapshot) -> SessionSummary:
+    """Upsert (autosave) a session snapshot. Returns the lightweight summary."""
+    snapshot.sessionId = session_id
+    return await snapshot_store.put(snapshot)
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session_snapshot(session_id: str) -> dict[str, object]:
+    """Delete a durable session snapshot."""
+    await snapshot_store.delete(session_id)
+    return {"sessionId": session_id, "deleted": True}
+
+
+@app.get("/api/history/{session_id}")
+async def get_session_history(session_id: str) -> dict[str, object]:
+    """Design-run history for a session (additive; empty when disabled)."""
+    runs = await snapshot_store.get_history(session_id)
+    return {"sessionId": session_id, "runs": runs, "count": len(runs)}
 
 
 @app.get("/api/health", response_model=HealthResponse)
