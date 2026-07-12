@@ -26,6 +26,7 @@ from models.requests import (
     FollowupEditRequest,
     MutationRequest,
     OffTargetRequest,
+    RegionEvidenceRequest,
     SessionBootstrapRequest,
     StructureRequest,
     VariantAnnotationRequest,
@@ -658,6 +659,34 @@ async def variant_annotation(request: VariantAnnotationRequest) -> dict[str, obj
         ],
         "unmapped_variants": result.unmapped_variants,
         "count": len(result.annotations),
+    }
+
+
+@app.post("/api/region-evidence")
+async def region_evidence(request: RegionEvidenceRequest) -> dict[str, object]:
+    """Assemble coordinate-bound evidence for a sequence region.
+
+    Binds coordinates → research/evidence using the sources that exist today:
+    ClinVar variants (known variants for the GENE overlapping these coordinates —
+    context, not a per-base pathogenicity claim) + regulatory motifs. A future
+    RAG (per-region papers) drops in via services.region_evidence.attach_literature_evidence.
+    """
+    from services.region_evidence import assemble_region_evidence
+
+    items = await assemble_region_evidence(
+        sequence=request.sequence,
+        gene=request.gene,
+        region_start=request.region_start,
+        region_end=request.region_end,
+        max_variants=request.max_variants,
+        include_clinvar=request.include_clinvar,
+    )
+    return {
+        "gene": request.gene,
+        "region_start": request.region_start,
+        "region_end": request.region_end if request.region_end is not None else len(request.sequence),
+        "items": [e.to_dict() for e in items],
+        "count": len(items),
     }
 
 
