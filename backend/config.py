@@ -57,9 +57,13 @@ class Settings(BaseSettings):
     llm_model: str = "openai/gpt-4o-mini"
     llm_fast_model: str = "openai/gpt-4o-mini"
 
-    # Legacy provider keys are still read (so existing .env files keep working)
-    # but are no longer used for live calls — OpenRouter supersedes them.
+    # Legacy provider keys are still read (so existing .env files keep working).
+    # anthropic_api_key / openai_api_key are no longer used for live calls —
+    # OpenRouter supersedes them for chat/reasoning. gemini_api_key IS used,
+    # but for a narrower job: services/evidence_synthesis.py's literature
+    # detail summaries (not chat/reasoning, so it doesn't go through llm.py).
     gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
