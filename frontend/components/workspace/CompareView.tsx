@@ -153,7 +153,7 @@ export default function CompareView() {
               sequences diverge; the table below scores each metric head-to-head.
             </p>
           </div>
-          <button onClick={() => { setActiveCandidateId(candA.id); setViewMode("ide"); }}
+          <button onClick={() => { setActiveCandidateId(candA.id); setViewMode("explorer"); }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02] shrink-0"
             style={{ background: "var(--accent)", color: "var(--ink)" }}>
             Edit in Studio <ArrowRight size={14} />

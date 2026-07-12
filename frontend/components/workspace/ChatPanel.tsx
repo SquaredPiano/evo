@@ -560,7 +560,7 @@ export default function ChatPanel() {
         {chatMessages.map((msg, i) => (
           <div key={i} className={msg.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}>
             <div className="label-caps mb-1" style={{ fontSize: "9px", color: msg.role === "user" ? "var(--text-faint)" : "var(--accent-bright)" }}>
-              {msg.role === "user" ? "You" : "Evo"}
+              {msg.role === "user" ? "You" : "Helio"}
             </div>
             <div className="text-[13px] leading-relaxed px-3.5 py-2.5 max-w-[92%]"
               style={
@@ -600,7 +600,7 @@ export default function ChatPanel() {
         {/* Agent thinking/executing indicator */}
         {isTyping && (
           <div>
-            <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: "var(--accent)" }}>Evo</div>
+            <div className="text-[10px] font-medium uppercase tracking-wider mb-1" style={{ color: "var(--accent)" }}>Helio</div>
             {agentPhase === "thinking" && (
               <div className="flex items-center gap-2 py-1.5 px-3 rounded-full text-[12px]"
                 style={{ background: "rgba(var(--accent-rgb, 9,212,156), 0.08)", border: "1px solid rgba(var(--accent-rgb, 9,212,156), 0.2)", color: "var(--accent)" }}>

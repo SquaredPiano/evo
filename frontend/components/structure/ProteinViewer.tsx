@@ -90,21 +90,27 @@ function confidenceColor(atomOrScore?: any): string {
   return "#d47a7a";
 }
 
-function applyViewerStyle(viewer: any, mode: RenderMode) {
+// Flat, honest color for structures whose B-factors are NOT pLDDT confidence
+// (e.g. a user-uploaded PDB). Never render these through the pLDDT gradient —
+// that would imply model confidence the file does not carry.
+const NEUTRAL_COLOR = "#8a94a6";
+
+function applyViewerStyle(viewer: any, mode: RenderMode, neutral = false) {
   if (!viewer) return;
+  const colorfunc = neutral ? () => NEUTRAL_COLOR : (atom: any) => confidenceColor(atom);
   if (mode === "sticks") {
-    viewer.setStyle({}, { stick: { radius: 0.2, colorfunc: (atom: any) => confidenceColor(atom) } });
+    viewer.setStyle({}, { stick: { radius: 0.2, colorfunc } });
     return;
   }
   if (mode === "cartoon") {
-    viewer.setStyle({}, { cartoon: { colorfunc: (atom: any) => confidenceColor(atom), opacity: 1.0 } });
+    viewer.setStyle({}, { cartoon: { colorfunc, opacity: 1.0 } });
     return;
   }
   viewer.setStyle(
     {},
     {
-      cartoon: { colorfunc: (atom: any) => confidenceColor(atom), opacity: 1.0 },
-      stick: { radius: 0.1, opacity: 0.35, colorfunc: (atom: any) => confidenceColor(atom) },
+      cartoon: { colorfunc, opacity: 1.0 },
+      stick: { radius: 0.1, opacity: 0.35, colorfunc },
     }
   );
 }
@@ -147,14 +153,17 @@ export default function ProteinViewer({
 
   const pdb = pdbData?.trim() ? pdbData : "";
   const stats = useMemo(() => pdbStats(pdb), [pdb]);
+  const isUserPdb = structureModel === "user_pdb";
   const modelLabel =
     structureModel === "esmfold"
       ? "ESMFold"
       : structureModel === "mock"
         ? "Mock fold"
-        : structureModel
-          ? structureModel
-          : "Structure";
+        : isUserPdb
+          ? "Uploaded"
+          : structureModel
+            ? structureModel
+            : "Structure";
 
   useEffect(() => {
     clickHandlerRef.current = onResidueClick;
@@ -251,7 +260,7 @@ export default function ProteinViewer({
 
         viewer.addModel(pdb, "pdb");
         const effectiveMode: RenderMode = compatibilityMode ? "cartoon" : renderMode;
-        applyViewerStyle(viewer, effectiveMode);
+        applyViewerStyle(viewer, effectiveMode, isUserPdb);
 
         viewer.setClickable({}, true, (atom: any) => {
           if (draggedRef.current) return;
@@ -302,14 +311,14 @@ export default function ProteinViewer({
       }
       viewerRef.current = null;
     };
-  }, [compatibilityMode, pdb, renderMode, theme]);
+  }, [compatibilityMode, pdb, renderMode, theme, isUserPdb]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer) return;
 
     const effectiveMode: RenderMode = compatibilityMode ? "cartoon" : renderMode;
-    applyViewerStyle(viewer, effectiveMode);
+    applyViewerStyle(viewer, effectiveMode, isUserPdb);
 
     if (highlightResidues.length > 0) {
       viewer.setStyle(
@@ -323,7 +332,7 @@ export default function ProteinViewer({
     }
 
     viewer.render();
-  }, [compatibilityMode, highlightResidues, renderMode, theme]);
+  }, [compatibilityMode, highlightResidues, renderMode, theme, isUserPdb]);
 
   useEffect(() => {
     const onResize = () => {
