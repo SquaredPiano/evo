@@ -1,19 +1,23 @@
 "use client";
 
-import { Crosshair, Scissors, ShieldAlert } from "lucide-react";
+import { BarChart3, Crosshair, Scissors, ShieldAlert } from "lucide-react";
 import {
   isOffTargetScan,
   isRestrictionSites,
+  isScorecard,
   type ToolResult,
   type OffTargetScanResult,
   type RestrictionSitesResult,
+  type ScorecardResult,
 } from "@/lib/agentTypes";
 
 /**
- * Read-only tool result cards (offtarget_scan / restriction_sites) so the
- * agent's read-only tools visibly produce something a scientist can inspect.
+ * Read-only tool result cards (scorecard / offtarget_scan / restriction_sites)
+ * so the agent's read-only tools visibly produce something a scientist can
+ * inspect instead of a wall of prose.
  */
 export default function ToolResultCard({ result }: { result: ToolResult }) {
+  if (isScorecard(result)) return <ScorecardCard r={result} />;
   if (isOffTargetScan(result)) return <OffTargetScanCard r={result} />;
   if (isRestrictionSites(result)) return <RestrictionSitesCard r={result} />;
   return null;
@@ -70,6 +74,68 @@ function StatRow({ stats }: { stats: { label: string; value: string; color?: str
         </span>
       ))}
     </div>
+  );
+}
+
+function scoreColor(value: number, lowerBetter: boolean): string {
+  const good = lowerBetter ? 1 - value : value;
+  if (good >= 0.6) return "var(--base-a, #7c9885)";
+  if (good >= 0.4) return "var(--base-g, #f59e0b)";
+  return "var(--base-t, #ef4444)";
+}
+
+function ScorecardCard({ r }: { r: ScorecardResult }) {
+  const rows = Array.isArray(r.scores) ? r.scores : [];
+  const combinedColor = scoreColor(r.combined, false);
+  return (
+    <CardShell
+      icon={<BarChart3 size={13} style={{ color: "var(--accent)" }} />}
+      title={`Candidate #${r.candidate_id} scorecard`}
+    >
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono font-bold text-[15px]" style={{ color: combinedColor }}>
+          {r.combined.toFixed(3)}
+        </span>
+        <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          {r.band} · combined
+        </span>
+        <span className="flex-1" />
+        <span className="text-[9.5px] font-mono" style={{ color: "var(--text-faint)" }}>
+          {r.length_bp} bp · GC {pct(r.gc_content)}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((row) => {
+          const lowerBetter = row.direction === "lower_better";
+          const color = scoreColor(row.value, lowerBetter);
+          return (
+            <div
+              key={row.key}
+              className="rounded-lg px-2.5 py-1.5"
+              style={{ background: "var(--surface-raised)", border: "1px solid var(--ghost-border)" }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                  {row.label}
+                </span>
+                <span className="flex-1" />
+                <span className="font-mono font-bold text-[11px]" style={{ color }}>
+                  {row.value.toFixed(3)}
+                </span>
+              </div>
+              <div className="text-[10px] mt-0.5 leading-snug" style={{ color: "var(--text-muted)" }}>
+                {row.meaning}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {r.provenance && (
+        <div className="text-[9.5px] leading-snug" style={{ color: "var(--text-faint)" }}>
+          {r.provenance}
+        </div>
+      )}
+    </CardShell>
   );
 }
 

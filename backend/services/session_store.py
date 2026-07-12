@@ -201,7 +201,10 @@ class RedisSessionStore(SessionStore):
         self._key_prefix = key_prefix
         self._ttl_seconds = ttl_seconds
         self._lock_timeout_seconds = 60
-        self._blocking_timeout_seconds = 5
+        # A second action should QUEUE behind a long op (e.g. an Evo2 NIM
+        # regenerate) rather than 423. Wait up to ~45s (kept below the 60s lock
+        # auto-expiry) so the lock frees and the waiter proceeds instead of erroring.
+        self._blocking_timeout_seconds = 45
 
     def _candidate_key(self, session_id: str) -> str:
         return f"{self._key_prefix}:{session_id}:candidates"

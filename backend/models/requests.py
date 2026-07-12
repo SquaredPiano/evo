@@ -118,6 +118,10 @@ class AgentContext(BaseModel):
     evidence_links: list[dict[str, str]] | None = None
     seed_source: str | None = None
     scoring_note: str | None = None
+    # Full candidate pool from the editor (id, sequence, scores, overall). The
+    # backend session store only persists candidate 0 + the active one, so the
+    # frontend sends the rest here to let "compare candidates" rank the real set.
+    candidates: list[dict[str, object]] | None = None
 
 
 class AgentChatRequest(BaseModel):

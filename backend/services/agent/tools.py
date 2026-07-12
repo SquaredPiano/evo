@@ -22,6 +22,53 @@ MAX_HILL_CLIMB_ROUNDS = 5
 VARIANTS_PER_ROUND = 16
 
 
+def _scorecard_rows(score_dict: dict[str, float]) -> list[dict[str, Any]]:
+    """Build a compact, plain-English scorecard from the 4D composition heuristics.
+
+    Each row carries the real value plus a one-line meaning grounded in that value
+    (honest: these are composition/motif heuristics, not clinical predictions).
+    functional / tissue_specificity / novelty are higher=better; off_target is
+    higher=worse, so its qualitative band is inverted.
+    """
+    def qual(value: float, *, invert: bool = False) -> str:
+        return band(1.0 - value) if invert else band(value)
+
+    functional = float(score_dict.get("functional", 0.0))
+    tissue = float(score_dict.get("tissue_specificity", 0.0))
+    off_target = float(score_dict.get("off_target", 0.0))
+    novelty = float(score_dict.get("novelty", 0.0))
+    return [
+        {
+            "key": "functional",
+            "label": "Functional",
+            "value": round(functional, 3),
+            "direction": "higher_better",
+            "meaning": f"{qual(functional)} - how plausibly this reads as a working sequence.",
+        },
+        {
+            "key": "tissue_specificity",
+            "label": "Tissue specificity",
+            "value": round(tissue, 3),
+            "direction": "higher_better",
+            "meaning": f"{qual(tissue)} - how selectively it would act in the intended tissue.",
+        },
+        {
+            "key": "off_target",
+            "label": "Off-target",
+            "value": round(off_target, 3),
+            "direction": "lower_better",
+            "meaning": f"{qual(off_target, invert=True)} - estimated risk of hitting unintended sites (lower is safer).",
+        },
+        {
+            "key": "novelty",
+            "label": "Novelty",
+            "value": round(novelty, 3),
+            "direction": "higher_better",
+            "meaning": f"{qual(novelty)} - how distinct it is from known references.",
+        },
+    ]
+
+
 async def tool_explain(
     *,
     service: Evo2Service,
@@ -55,6 +102,16 @@ async def tool_explain(
         f"{caveat.strip()}\n"
         "These are research demo metrics - not clinical predictions."
     )
+    scorecard = {
+        "tool": "scorecard",
+        "candidate_id": candidate_id,
+        "length_bp": len(sequence),
+        "gc_content": round(gc, 4),
+        "combined": round(float(score_dict["combined"]), 3),
+        "band": band(float(score_dict["combined"])),
+        "scores": _scorecard_rows(score_dict),
+        "provenance": caveat.strip(),
+    }
     return ToolExecution(
         call=AgentToolCall(tool="explain_candidate", status="ok", summary="Scored and summarized active candidate."),
         note=note,
@@ -64,6 +121,7 @@ async def tool_explain(
             scores=score_dict,
             per_position_scores=[{"position": x.position, "score": x.score} for x in per_position],
         ),
+        structured_result=scorecard,
     )
 
 
@@ -386,15 +444,43 @@ async def tool_optimize(
     )
 
 
+def _pool_from_candidates(candidates: list[dict[str, Any]] | None) -> dict[int, str]:
+    """Build a {candidate_id: sequence} pool from the editor's candidate list.
+
+    The frontend sends the full candidate set (id, sequence, scores) because the
+    backend session store only persists candidate 0 + the active one. Candidates
+    without a usable sequence are skipped so we never rank an empty entry.
+    """
+    pool: dict[int, str] = {}
+    for entry in candidates or []:
+        if not isinstance(entry, dict):
+            continue
+        seq = entry.get("sequence")
+        if not isinstance(seq, str) or not seq.strip():
+            continue
+        raw_id = entry.get("id", entry.get("candidate_id"))
+        try:
+            cid = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        pool[cid] = seq.upper()
+    return pool
+
+
 async def tool_compare(
     *,
     service: Evo2Service,
     store: SessionStore,
     session_id: str,
     candidate_id: int,
+    candidates: list[dict[str, Any]] | None = None,
     **_kwargs: Any,
 ) -> ToolExecution:
-    pool = await store.list_candidate_sequences(session_id)
+    # Prefer the full candidate pool the frontend sends (the store only persists
+    # candidate 0 + the active one); fall back to the store pool when absent.
+    pool = _pool_from_candidates(candidates)
+    if not pool:
+        pool = await store.list_candidate_sequences(session_id)
     if not pool:
         return ToolExecution(
             call=AgentToolCall(tool="compare_candidates", status="failed", summary="No candidates available."),
