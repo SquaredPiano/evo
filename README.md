@@ -73,14 +73,22 @@ through OpenRouter's OpenAI-compatible API, so swapping models is a one-line
 config change (`LLM_MODEL`).
 
 **Durable persistence (optional).** Redis stays the hot store for a live run
-(streaming, TTL'd). Set `MONGODB_URI` and each design run is *also* recorded in
-MongoDB — the English **goal**, the run config, and the resulting candidates,
-plus a session index and a durable mirror of experiment versions. This is what
-survives a restart or TTL expiry (the prompt history a session builds on). Leave
-`MONGODB_URI` blank and the app behaves exactly as before, Redis-only: every
-persistence call becomes a logged no-op, never a request error. Implementation:
-`backend/services/mongo_store.py`. Atlas note: the connecting host's IP must be
-on the cluster's Network Access allowlist or the store stays disabled.
+(streaming, TTL'd). Set `MONGODB_URI` and MongoDB adds two durable layers:
+
+- **Resumable session snapshots** — the full `useEvoStore` state per session
+  (candidates, chat, scores, structure, edits…), so a session is *resumed*, not
+  re-run. `GET /api/sessions` (summaries), `GET/PUT/DELETE /api/sessions/{id}`.
+  This implements the contract in `docs/session_persistence_interface.md`.
+- **Design-run history** — each run's English **goal**, config, and resulting
+  candidates, plus a durable mirror of experiment versions. `GET /api/history/{session_id}`.
+
+Both are best-effort: leave `MONGODB_URI` blank (or if Atlas is unreachable) and
+the app behaves exactly as before, Redis-only — every persistence call becomes a
+logged no-op, never a request error. Implementation: `backend/services/mongo_store.py`.
+Atlas note: the connecting host's IP must be on the cluster's Network Access
+allowlist or the store stays disabled. (The former `GET /api/sessions/{user_id}`
+Redis listing moved to `GET /api/users/{user_id}/sessions` to free the
+`/api/sessions/{id}` route for snapshots.)
 
 ---
 

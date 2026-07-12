@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Protocol
 
-from pymongo import AsyncMongoClient, ASCENDING, DESCENDING, ReturnDocument
+from pymongo import AsyncMongoClient, ASCENDING, DESCENDING
 from pymongo.errors import PyMongoError
 
 logger = logging.getLogger("evo")
@@ -27,6 +27,22 @@ logger = logging.getLogger("evo")
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+class SessionSnapshotStore(Protocol):
+    """Swappable storage seam for resumable session snapshots.
+
+    Defined by docs/session_persistence_interface.md (the MongoDB hand-off).
+    ``MongoStore`` is the default implementation; an in-memory impl could be
+    dropped in for tests. Named ``SessionSnapshotStore`` to avoid confusion with
+    the Redis hot-store ``SessionStore`` in services/session_store.py, which is a
+    different concern (live pipeline/edit state, not durable snapshots).
+    """
+
+    async def put_session_snapshot(self, snapshot: dict[str, Any]) -> bool: ...
+    async def get_session_snapshot(self, session_id: str) -> dict[str, Any] | None: ...
+    async def list_session_summaries(self, user_id: str | None = None) -> list[dict[str, Any]]: ...
+    async def delete_session_snapshot(self, session_id: str) -> bool: ...
 
 
 class MongoStore:
@@ -82,7 +98,9 @@ class MongoStore:
         await self._db.design_runs.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
         await self._db.design_runs.create_index([("parent_run_id", ASCENDING)])
         await self._db.design_runs.create_index([("user_id", ASCENDING)])
-        await self._db.sessions.create_index([("user_id", ASCENDING)])
+        # `sessions` holds resumable snapshots (frontend-native camelCase fields).
+        await self._db.sessions.create_index([("updatedAt", DESCENDING)])
+        await self._db.sessions.create_index([("userId", ASCENDING)])
         await self._db.experiment_versions.create_index(
             [("session_id", ASCENDING), ("candidate_id", ASCENDING)]
         )
@@ -204,34 +222,74 @@ class MongoStore:
             logger.warning("MongoStore.get_run failed for %s", run_id, exc_info=True)
             return None
 
-    # ── sessions index ──────────────────────────────────────────────────────
-    async def upsert_session(self, *, session_id: str, user_id: str | None, goal: str) -> None:
-        if not self._ready:
-            return
-        now = _utcnow_iso()
-        try:
-            await self._db.sessions.find_one_and_update(
-                {"_id": session_id},
-                {
-                    "$set": {"user_id": user_id, "last_goal": goal, "last_run_at": now},
-                    "$setOnInsert": {"session_id": session_id, "created_at": now},
-                    "$inc": {"run_count": 1},
-                },
-                upsert=True,
-                return_document=ReturnDocument.AFTER,
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning("MongoStore.upsert_session failed for %s", session_id, exc_info=True)
+    # ── session snapshots (the resumable-state store — interface-doc contract) ─
+    async def put_session_snapshot(self, snapshot: dict[str, Any]) -> bool:
+        """Upsert a full session snapshot (debounced client autosave).
 
-    async def list_user_sessions(self, user_id: str) -> list[dict[str, Any]]:
+        The snapshot is the frontend ``useEvoStore`` state; the client owns its
+        shape, so we round-trip it verbatim and only derive cheap summary fields
+        (candidateCount / length / updatedAt) for the listing endpoint. Returns
+        True when it was actually stored (False when persistence is disabled).
+        """
+        if not self._ready:
+            return False
+        session_id = snapshot.get("sessionId")
+        if not session_id:
+            return False
+        now = _utcnow_iso()
+        # _id and createdAt are managed here — keep them out of $set to avoid
+        # Mongo's immutable-_id error and a $set/$setOnInsert path conflict.
+        doc = {k: v for k, v in snapshot.items() if k not in ("_id", "createdAt")}
+        doc["sessionId"] = session_id
+        doc["updatedAt"] = snapshot.get("updatedAt") or now
+        doc["candidateCount"] = len(snapshot.get("candidates") or [])
+        doc["length"] = len(snapshot.get("rawSequence") or "")
+        try:
+            await self._db.sessions.update_one(
+                {"_id": session_id},
+                {"$set": doc, "$setOnInsert": {"createdAt": snapshot.get("createdAt") or now}},
+                upsert=True,
+            )
+            return True
+        except Exception:  # noqa: BLE001
+            logger.warning("MongoStore.put_session_snapshot failed for %s", session_id, exc_info=True)
+            return False
+
+    async def get_session_snapshot(self, session_id: str) -> dict[str, Any] | None:
+        if not self._ready:
+            return None
+        try:
+            doc = await self._db.sessions.find_one({"_id": session_id})
+            return self._clean(doc) if doc else None
+        except Exception:  # noqa: BLE001
+            logger.warning("MongoStore.get_session_snapshot failed for %s", session_id, exc_info=True)
+            return None
+
+    async def list_session_summaries(self, user_id: str | None = None) -> list[dict[str, Any]]:
+        """Session summaries for the home/resume list, newest first."""
         if not self._ready:
             return []
+        query = {"userId": user_id} if user_id else {}
+        projection = {
+            "sessionId": 1, "title": 1, "kind": 1, "updatedAt": 1,
+            "candidateCount": 1, "length": 1, "userId": 1,
+        }
         try:
-            cursor = self._db.sessions.find({"user_id": user_id}).sort("last_run_at", DESCENDING)
+            cursor = self._db.sessions.find(query, projection=projection).sort("updatedAt", DESCENDING)
             return [self._clean(doc) async for doc in cursor]
         except Exception:  # noqa: BLE001
-            logger.warning("MongoStore.list_user_sessions failed for %s", user_id, exc_info=True)
+            logger.warning("MongoStore.list_session_summaries failed", exc_info=True)
             return []
+
+    async def delete_session_snapshot(self, session_id: str) -> bool:
+        if not self._ready:
+            return False
+        try:
+            result = await self._db.sessions.delete_one({"_id": session_id})
+            return result.deleted_count > 0
+        except Exception:  # noqa: BLE001
+            logger.warning("MongoStore.delete_session_snapshot failed for %s", session_id, exc_info=True)
+            return False
 
     # ── experiment versions (durable mirror of the Redis tracker) ────────────
     async def save_experiment_version(self, version: dict[str, Any]) -> None:

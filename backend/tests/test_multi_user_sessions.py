@@ -163,7 +163,7 @@ class TestSessionEndpoints:
         assert "session_id" in data
 
     def test_list_sessions_empty(self, client):
-        response = client.get("/api/sessions/nonexistent-user")
+        response = client.get("/api/users/nonexistent-user/sessions")
         assert response.status_code == 200
         data = response.json()
         assert data["user_id"] == "nonexistent-user"
@@ -180,7 +180,7 @@ class TestSessionEndpoints:
         assert design_resp.status_code == 202
 
         # List sessions for that user
-        list_resp = client.get("/api/sessions/list-test-user")
+        list_resp = client.get("/api/users/list-test-user/sessions")
         assert list_resp.status_code == 200
         data = list_resp.json()
         assert "list-test-session" in data["sessions"]

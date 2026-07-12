@@ -44,6 +44,7 @@ from models.responses import (
     MutationResponse,
     StructureResponse,
 )
+from models.sessions import SessionSnapshot
 from config import SessionStoreMode, StructureMode, settings
 from pipeline.evo2_score import rescore_mutation_detailed, score_candidate
 from pipeline.orchestrator import (
@@ -190,7 +191,7 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
     )
 
     # Durable record of the prompt + config at submit time. Best-effort: when
-    # persistence is disabled these are fast no-ops and the run still proceeds.
+    # persistence is disabled this is a fast no-op and the run still proceeds.
     await mongo_store.save_design_run(
         run_id=run_id,
         session_id=session_id,
@@ -202,9 +203,6 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
         num_candidates=num_candidates,
         target_length=request.target_length,
         seed_sequence=request.seed_sequence or DEFAULT_SEED,
-    )
-    await mongo_store.upsert_session(
-        session_id=session_id, user_id=request.user_id, goal=request.goal
     )
 
     asyncio.create_task(
@@ -834,11 +832,55 @@ async def experiment_lineage(session_id: str, version_id: str) -> dict[str, obje
     }
 
 
-@app.get("/api/sessions/{user_id}")
-async def list_sessions(user_id: str) -> dict[str, object]:
-    """List all sessions owned by a user."""
+@app.get("/api/users/{user_id}/sessions")
+async def list_user_session_ids(user_id: str) -> dict[str, object]:
+    """Session IDs owned by a user, from the Redis hot store.
+
+    Relocated from GET /api/sessions/{user_id} so the session-snapshot API can
+    own the /api/sessions/{session_id} route (see docs/session_persistence_interface.md).
+    """
     session_ids = await session_store.list_user_sessions(user_id)
     return {"user_id": user_id, "sessions": session_ids, "count": len(session_ids)}
+
+
+# ── Resumable session snapshots (durable, MongoDB) ───────────────────────────
+# Contract from docs/session_persistence_interface.md: store/restore full store
+# state so a session is resumable, not just re-runnable. All four degrade to
+# safe no-ops (empty list / 404 / persisted:false) when Mongo is unavailable.
+@app.get("/api/sessions")
+async def list_session_snapshots(user_id: str | None = None) -> dict[str, object]:
+    """Session summaries for the home/resume list, newest first."""
+    summaries = await mongo_store.list_session_summaries(user_id)
+    return {
+        "persistence_enabled": mongo_store.ready,
+        "sessions": summaries,
+        "count": len(summaries),
+    }
+
+
+@app.get("/api/sessions/{session_id}")
+async def get_session_snapshot(session_id: str) -> dict[str, object]:
+    """Full resumable snapshot for a session (404 if none / persistence off)."""
+    snapshot = await mongo_store.get_session_snapshot(session_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="session snapshot not found")
+    return snapshot
+
+
+@app.put("/api/sessions/{session_id}")
+async def put_session_snapshot(session_id: str, snapshot: SessionSnapshot) -> dict[str, object]:
+    """Upsert a session snapshot (debounced autosave from the client)."""
+    payload = snapshot.model_dump(exclude_none=True)
+    payload["sessionId"] = session_id  # path id is authoritative
+    persisted = await mongo_store.put_session_snapshot(payload)
+    return {"session_id": session_id, "persisted": persisted}
+
+
+@app.delete("/api/sessions/{session_id}")
+async def delete_session_snapshot(session_id: str) -> dict[str, object]:
+    """Delete a stored session snapshot."""
+    deleted = await mongo_store.delete_session_snapshot(session_id)
+    return {"session_id": session_id, "deleted": deleted}
 
 
 @app.get("/api/history/{session_id}")
