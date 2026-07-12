@@ -72,28 +72,3 @@ export function reverseComplement(seq: string): string {
     .map((b) => complement(b.toUpperCase() as Nucleotide))
     .join("");
 }
-
-// Mock data for standalone demo rendering
-
-export const MOCK_SEQUENCE =
-  "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCCATCTGTCTGGAGTTGATCAAGGAACCTGTCTCCACAAAGTGTGACCACATATTTTGCAAATTTTGCATGCTGAAACTTCTCAACCAGAAGAAAGGGCCTTCACAGTGTCCTTTATGTAAGAATGATATAACCAAAAGGAGCCTACAAGAAAGTACGAGATTTAGTCAACTTGTTGAAGAGCTATTGAAAATCATTTGTGCTTTTCAGCTTGACACAGGTTTGGAGTATGCAAACAGCTATAATTTTGCAAAAAAGGAAAATAACTCTCCTGAACATCTAAAAGATGAAGTTTCTATCATCCAAAGTATGGGCTACAGAAACCGTGCCAAAAGACTTCTACAGAGTGAACCCGAAAATCCTTCCTTGCAGGAAACCAGTCTCAGTGTCCAACTCTCTAACCTTGGAACTGTGAGAACTCTAAGGACCTGCCTTCAGACAAGCTTCAGAATCTTCGAATAAGTCCTACTGAGCCACAGTCAAGAATGTTAACAGGG";
-
-export const MOCK_REGIONS: SequenceRegion[] = [
-  { start: 0, end: 72, type: "exon", label: "Exon 1" },
-  { start: 72, end: 135, type: "intron", label: "Intron 1" },
-  { start: 135, end: 249, type: "exon", label: "Exon 2" },
-  { start: 249, end: 312, type: "orf", label: "ORF-1" },
-  { start: 312, end: 378, type: "intron", label: "Intron 2" },
-  { start: 378, end: 465, type: "exon", label: "Exon 3" },
-  { start: 465, end: 500, type: "intergenic" },
-];
-
-export function generateMockScores(length: number) {
-  const scores = [];
-  for (let i = 0; i < length; i++) {
-    const wave = Math.sin(i / 15) * 2;
-    const noise = (Math.sin(i * 7.3) * 0.5 + Math.sin(i * 13.1) * 0.3);
-    scores.push({ position: i, score: -(Math.abs(wave + noise) + 0.5) });
-  }
-  return scores;
-}

@@ -4,8 +4,8 @@
  * INTEGRATION GUIDE:
  * - Set NEXT_PUBLIC_API_URL env var to point to the GPU-hosted backend
  *   (e.g., NEXT_PUBLIC_API_URL=http://192.168.1.100:8000)
- * - All functions throw on HTTP errors. Callers (hooks) catch and fall
- *   back to mock data when the backend is unreachable.
+ * - All functions throw on HTTP errors. Callers surface an honest error
+ *   state when the backend is unreachable; there is no mock fallback.
  * - Response shapes are mapped to frontend domain types here at the
  *   boundary. Components never see raw API shapes.
  *
@@ -18,13 +18,13 @@
  * - editBase:         Calls POST /api/edit/base. Backend implemented.
  * - editFollowup:     Calls POST /api/edit/followup. Backend implemented.
  *
- * When the backend is running on the GX10, just set the env var and
- * all mock fallbacks in the hooks will be bypassed automatically.
+ * Set NEXT_PUBLIC_API_URL to the backend host. There are no mock fallbacks;
+ * failures surface as honest error states.
  */
 
 import type { AnalysisResult, MutationEffect } from "@/types";
 
-// Default to the real local backend to avoid silently hitting mock Next routes.
+// Default to the real local backend.
 // Override with NEXT_PUBLIC_API_URL when backend runs on another machine.
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:8000";
 

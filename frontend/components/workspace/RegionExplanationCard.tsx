@@ -32,8 +32,8 @@ function badgeFor(source: string) {
  * region using real Evo 2 signals + evidence. The narrative lead lives in the
  * assistant message above; this renders the honest structured evidence beneath.
  *
- * HONESTY: the per-position mini-chart is a HEURISTIC proxy (honey) unless the
- * backend flags real model confidence, in which case an indigo strip labeled
+ * HONESTY: the per-position mini-chart is a composition signal (honey) unless
+ * the backend flags real model confidence, in which case an indigo strip labeled
  * "Evo 2 model confidence (real)" is shown. The two are never conflated.
  */
 export default function RegionExplanationCard({
@@ -101,7 +101,7 @@ export default function RegionExplanationCard({
           </div>
         )}
 
-        {/* Per-position mini-chart (heuristic proxy) */}
+        {/* Per-position mini-chart (composition signal) */}
         {perPos.length > 0 && (
           <PerPositionChart
             perPos={perPos}
@@ -151,12 +151,12 @@ export default function RegionExplanationCard({
             <div className="flex items-center gap-1.5">
               <ProvenanceBadge engine={mc?.engine ?? "unknown"} compact />
               <span className="font-semibold" style={{ color: "var(--text-secondary)" }}>
-                Heuristic signal — not real model confidence
+                Composition signal, not model confidence
               </span>
             </div>
             <p className="m-0">
               {prov?.per_position_signal ??
-                "The per-position bars above are a heuristic proxy, not a real Evo 2 forward pass. Regenerate this region to get genuine per-base model confidence."}
+                "The per-position bars above are a composition signal along the sequence, not Evo 2 model confidence. Regenerate this region to get genuine per-base model confidence."}
             </p>
           </div>
         )}
@@ -182,8 +182,9 @@ function fmt(n: number | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
-// Per-position heuristic mini-chart. Honey bars (heuristic), low-confidence
-// positions marked with a warm dot + tinted bar so the eye finds the weak spots.
+// Per-position composition mini-chart. Honey bars (composition signal),
+// low-confidence positions marked with a warm dot + tinted bar so the eye finds
+// the weak spots.
 // ---------------------------------------------------------------------------
 function PerPositionChart({
   perPos,
@@ -210,7 +211,7 @@ function PerPositionChart({
             className="inline-block w-1.5 h-1.5 rounded-full"
             style={{ background: "var(--honey-500, #f59e0b)" }}
           />
-          Per-position signal (heuristic)
+          Per-position signal (composition)
         </span>
         <span className="text-[9px]" style={{ color: "var(--text-faint)" }}>
           {perPos.length} bases

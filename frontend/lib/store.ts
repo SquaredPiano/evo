@@ -87,8 +87,8 @@ interface EvoState {
   selectedRegion: { start: number; end: number } | null;
   activePdb: string | null;
   originalPdb: string | null;
-  /** Provenance: esmfold | mock | unavailable | user_pdb | null.
-   * "user_pdb" = a structure file the user uploaded — NOT a model prediction. */
+  /** Provenance: esmfold | unavailable | user_pdb | null.
+   * "user_pdb" = a structure file the user uploaded, NOT a model prediction. */
   structureModel: string | null;
   highlightResidues: number[];
 

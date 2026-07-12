@@ -27,7 +27,8 @@ export interface RegenResult {
  * changed, a compact inline diff of old vs regenerated bases, the honest
  * constraint report, and — ONLY when the engine returned real Evo 2
  * probabilities — a per-base confidence strip visually distinct from the
- * heuristic 4D scores. In mock/mock_fallback it shows an honest note instead.
+ * heuristic 4D scores. When the engine returns no real probabilities it shows
+ * an honest note instead.
  */
 export default function RegenResultCard({ result }: { result: RegenResult }) {
   const { oldRegion, mutation: m } = result;
@@ -112,9 +113,9 @@ export default function RegenResultCard({ result }: { result: RegenResult }) {
               border: "1px solid color-mix(in oklch, var(--base-t), transparent 82%)",
             }}
           >
-            No real Evo 2 per-base confidence for this region — it came from the{" "}
+            No real Evo 2 per-base confidence for this region. It came from the{" "}
             <span style={{ fontWeight: 600 }}>{m.engine}</span> path, which does
-            not return genuine model probabilities. Confidence is intentionally
+            not return genuine model probabilities, so confidence is intentionally
             not shown rather than fabricated.
           </div>
         )}

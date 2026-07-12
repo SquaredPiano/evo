@@ -21,7 +21,7 @@ export const SCIENCE_TERMS: Record<
   "functional-plausibility": {
     title: "Functional Plausibility (heuristic)",
     explanation:
-      "A demo score from composition, ORF presence, and motif hits — plus model likelihood only when a real forward pass exists. Under NIM generate mode this is not a real Evo2 log-likelihood. Higher ≈ more gene-like patterns, not proof of a working protein.",
+      "A score from base composition, ORF presence, and short motif hits. A composition and motif heuristic, not a clinical assay. Higher means more gene-like patterns, not proof of a working protein.",
   },
   "tissue-specificity": {
     title: "Tissue Motif Score (heuristic)",
@@ -39,14 +39,14 @@ export const SCIENCE_TERMS: Record<
       "How different this string looks from simple composition baselines. Higher means more unusual DNA — not validated inventiveness.",
   },
   "log-likelihood": {
-    title: "Log-likelihood — “model surprise”",
+    title: "Log-likelihood (“model surprise”)",
     explanation:
-      "Evo 2 is autocomplete for DNA. Log-likelihood scores how EXPECTED each base was: high = looks like real gene DNA, low = unusual. It is NOT a prediction that a therapy works. Honesty: under the default NIM engine, generation is real but these per-base scores are calibrated (labeled) heuristics, not a true forward pass — a real forward pass needs local Evo 2.",
+      "Evo 2 is autocomplete for DNA. Log-likelihood scores how EXPECTED each base was: high = looks like real gene DNA, low = unusual. It is NOT a prediction that a therapy works. Generated candidates carry Evo 2's real model confidence (sampled_probs); the per-position 4D view shows composition and motif signals.",
   },
   "per-position-score": {
     title: "Per-position Score",
     explanation:
-      "One number per base along the sequence. Real Evo 2 log-likelihoods only when a local forward pass runs; under the default NIM engine these are calibrated (labeled) heuristics of the same length — check the scoring note.",
+      "One number per base along the sequence. For a generated candidate this is Evo 2's real model confidence; the per-position 4D view shows composition and motif signals of the same length. Check the scoring note.",
   },
   "gc-content": {
     title: "GC Content",
@@ -54,9 +54,9 @@ export const SCIENCE_TERMS: Record<
       "The percentage of bases that are G or C (vs A or T). Most genes have 40\u201360% GC content. Extreme values can cause problems with gene expression or stability.",
   },
   "overall-viability": {
-    title: "Combined Demo Score",
+    title: "Combined Score",
     explanation:
-      "Weighted blend of the four heuristic dimensions for ranking inside this IDE. Research demo only — not assay-backed viability.",
+      "Weighted blend of the four heuristic dimensions for ranking inside this IDE. A ranking heuristic, not assay-backed viability.",
   },
   cai: {
     title: "CAI — Codon Adaptation Index",
@@ -184,7 +184,7 @@ export const SCIENCE_TERMS: Record<
   evo2: {
     title: "Evo 2",
     explanation:
-      "Arc Institute’s genomic foundation model — “autocomplete for DNA.” Evo writes the candidate bases (generation) and, with a local forward pass, can score them. Generation and scoring are separate — always check which engine produced your numbers.",
+      "Arc Institute’s genomic foundation model, “autocomplete for DNA.” Evo writes the candidate bases (generation) and reports its own confidence for them. Generation and scoring are separate steps, so always check which engine produced your numbers.",
   },
   esmfold: {
     title: "ESMFold",

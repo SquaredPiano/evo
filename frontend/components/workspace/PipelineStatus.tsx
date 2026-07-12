@@ -52,7 +52,7 @@ export default function PipelineStatus() {
           {isStreaming
             ? generationTokenCount === 0 && pipelineStage === "generation"
               ? "Calling Evo 2… bases will stream here as soon as NIM responds."
-              : "Evo 2 is streaming DNA. NCBI seeds identity when available; scores stay labeled as heuristics under NIM."
+              : "Evo 2 is streaming DNA. NCBI seeds identity when available; the 4D scores are composition and motif signals."
             : "Scoring your sequence and preparing structure."}
         </p>
 

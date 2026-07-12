@@ -371,8 +371,6 @@ function pdbStats(pdbText: string): { atoms: number; residues: number } {
   return { atoms, residues: residues.size };
 }
 
-export const SAMPLE_PDB = `HEADER    SAMPLE PDB\nTITLE     HELIX SAMPLE\nMODEL     1\nATOM      1  N   MET A   1      12.345  23.456   5.678  1.00 92.30           N\nATOM      2  CA  MET A   1      13.100  24.200   6.100  1.00 93.10           C\nATOM      3  C   MET A   1      14.500  23.800   5.800  1.00 91.50           C\nATOM      4  O   MET A   1      14.800  22.700   5.400  1.00 89.20           O\nATOM      5  CB  MET A   1      12.900  25.700   5.900  1.00 88.70           C\nATOM      6  N   ASP A   2      15.300  24.800   6.000  1.00 90.80           N\nATOM      7  CA  ASP A   2      16.700  24.600   5.700  1.00 91.20           C\nATOM      8  C   ASP A   2      17.400  25.900   5.400  1.00 89.40           C\nATOM      9  O   ASP A   2      16.900  27.000   5.700  1.00 87.80           O\nATOM     10  CB  ASP A   2      17.300  23.600   4.700  1.00 86.40           C\nTER\nENDMDL\nEND`;
-
 export default function ProteinViewer({
   pdbData,
   highlightResidues = [],
@@ -413,13 +411,11 @@ export default function ProteinViewer({
   const modelLabel =
     structureModel === "esmfold"
       ? "ESMFold"
-      : structureModel === "mock"
-        ? "Mock fold"
-        : isUserPdb
-          ? "Uploaded"
-          : structureModel
-            ? structureModel
-            : "Structure";
+      : isUserPdb
+        ? "Uploaded"
+        : structureModel
+          ? structureModel
+          : "Structure";
 
   useEffect(() => {
     clickHandlerRef.current = onResidueClick;

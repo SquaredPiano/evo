@@ -210,7 +210,7 @@ export default function CompareView() {
       (strengths ? `${strengths}. ` : "They score about the same across every metric. ") +
       `Off-target is a safety metric where lower is better. ${overallLeaderLabel}. ` +
       `Explain what these differences mean and which candidate looks better and why. ` +
-      `These are demo heuristics, not clinical scores.`;
+      `These are composition and motif heuristics, not clinical scores.`;
     setChatOpen(true);
     setChatDraft(prompt);
   };
@@ -403,7 +403,7 @@ export default function CompareView() {
         <div className="rounded-xl p-5 mb-6" style={{ background: cardBg }}>
           <span className="text-[11px] font-medium uppercase tracking-wider block mb-1" style={{ color: "var(--text-muted)" }}>Score comparison</span>
           <p className="text-[11px] mb-4" style={{ color: "var(--text-faint)" }}>
-            Head-to-head metrics. Off-target is inverted — lower is better. These are demo heuristics, not clinical scores.
+            Head-to-head metrics. Off-target is inverted, so lower is better. These are composition and motif heuristics, not clinical scores.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
