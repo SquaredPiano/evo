@@ -102,7 +102,7 @@ class TestPredictStructure:
         assert result is None
 
     def test_no_start_codon_returns_none(self):
-        # 9 TTT codons = 9 F residues, below MIN_PROTEIN_LENGTH of 10
+        # 8 TTT codons = 8 F residues, below MIN_PROTEIN_LENGTH of 16
         dna = "TTTTTTTTTTTTTTTTTTTTTTTTT"
         result = asyncio.run(predict_structure(dna))
         assert result is None

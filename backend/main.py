@@ -179,7 +179,7 @@ MAX_SESSION_CONTEXT_ENTRIES = 512
 async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
     sequence = request.sequence
     scores, per_position = await score_candidate(evo2_service, sequence)
-    orfs = find_orfs(sequence, min_length=30)[:3]
+    orfs = find_orfs(sequence, min_length=24)[:3]
     proteins: list[dict[str, object]] = []
 
     for idx, orf in enumerate(orfs):
