@@ -55,8 +55,8 @@ export default function CandidateLeaderboard() {
 
   const topCandidate = candidates[0];
   const laySummary = topCandidate
-    ? `Best variant #${topCandidate.id}: function ${strengthLabel(topCandidate.scores.functional)}, tissue-motif ${strengthLabel(topCandidate.scores.tissue)}, panel safety ${safetyLabel(topCandidate.scores.offTarget)}. These are composition and motif heuristics, not clinical scores.`
-    : "No design variants have finished scoring yet.";
+    ? `Best candidate #${topCandidate.id}: function ${strengthLabel(topCandidate.scores.functional)}, tissue-motif ${strengthLabel(topCandidate.scores.tissue)}, panel safety ${safetyLabel(topCandidate.scores.offTarget)}. These are composition and motif heuristics, not clinical scores.`
+    : "No candidates have finished scoring yet.";
   const expertSummary = topCandidate
     ? `Functional ${topCandidate.scores.functional.toFixed(3)}, tissue ${topCandidate.scores.tissue.toFixed(3)}, panel off-target ${topCandidate.scores.offTarget.toFixed(3)}, novelty ${topCandidate.scores.novelty.toFixed(3)}.`
     : "";
@@ -68,12 +68,12 @@ export default function CandidateLeaderboard() {
 
   return (
     <div className="flex-1 overflow-auto px-4 lg:px-8 py-6" style={{ background: "var(--surface-base)" }}
-      role="region" aria-label="Design variants">
+      role="region" aria-label="Candidates">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center gap-2.5 mb-3">
             <span className="label-caps" style={{ color: "var(--accent-bright)", opacity: 1 }}>
-              Design variants
+              Candidates
             </span>
             <span className="h-3 w-px" style={{ background: "var(--ghost-border)" }} />
             <span className="text-[10px] font-mono" style={{ color: "var(--text-faint)" }}>
@@ -86,13 +86,13 @@ export default function CandidateLeaderboard() {
                 Ranked candidates
               </h2>
               <p className="text-[13px] max-w-xl leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                {candidates.length} alternative DNA sequences from this run, ranked by a <ScienceTooltip term="overall-viability">combined heuristic score</ScienceTooltip>. Pick one to inspect or edit.
+                {candidates.length} alternative DNA sequences from this run, ranked by a <ScienceTooltip term="combined-score">combined heuristic score</ScienceTooltip>. Pick one to inspect or edit.
               </p>
             </div>
             <button onClick={() => setViewMode("explorer")}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all hover:scale-[1.02] shrink-0"
               style={{ background: "var(--accent)", color: "var(--ink)", boxShadow: "0 10px 24px -8px rgba(245,158,11,0.4)" }}>
-              Inspect top variant <ArrowRight size={14} aria-hidden="true" />
+              Inspect top candidate <ArrowRight size={14} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -139,7 +139,7 @@ export default function CandidateLeaderboard() {
           {/* Simple-by-default control: reveal the four heuristic score columns. */}
           <div className="flex items-center justify-between px-5 pt-4 pb-1.5">
             <span className="label-caps">
-              Ranked variants
+              Ranked candidates
             </span>
             <button
               onClick={() => setShowScores((v) => !v)}
@@ -167,7 +167,7 @@ export default function CandidateLeaderboard() {
               </>
             )}
             <span className="w-24 text-right">Verdict</span>
-            <span className="w-20 text-right"><ScienceTooltip term="overall-viability">Overall</ScienceTooltip></span>
+            <span className="w-20 text-right"><ScienceTooltip term="combined-score">Combined</ScienceTooltip></span>
             <span className="w-8" />
           </div>
           {candidates.map((c, i) => (

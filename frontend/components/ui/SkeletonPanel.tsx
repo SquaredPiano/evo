@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Skeleton loading placeholders that match Helix panel patterns.
+ * Skeleton loading placeholders that match Proteus panel patterns.
  * Uses the .skeleton class from globals.css (shimmer animation).
  */
 

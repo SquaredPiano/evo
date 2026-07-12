@@ -118,7 +118,7 @@ export default function Home() {
 
       {/* ═══ HERO ═══ */}
       <section className="gridlines relative min-h-screen flex flex-col items-center justify-center px-6 pt-20 pb-16 text-center">
-        <p className="h-tag chip-honey mb-8">Evo 2 · 40B params · 9.3T base pairs</p>
+        <p className="h-tag chip-honey mb-8">Evo 2 · 40B params · 9.3T nucleotides</p>
         <h1 className="display max-w-5xl text-[clamp(2.8rem,8vw,6.5rem)] font-normal mb-8">
           <span className="h-line block">The genomic design IDE</span>
           <span className="h-line block">
@@ -217,7 +217,7 @@ export default function Home() {
             The interface layer genomic design has been missing.
           </h2>
           <p className="text-[16px] mb-10" style={{ color: "var(--rail-muted)" }}>
-            Evo 2 can generate DNA (NIM), ESMFold folds coding ORFs when live, NCBI/ClinVar supply context cards, and the copilot runs real tools. The 4D scores are composition and motif signals.
+            Evo 2 can generate DNA (NIM), ESMFold folds coding ORFs when live, NCBI/ClinVar supply context cards, and Helio runs real tools. The 4D scores are composition and motif signals.
           </p>
           <Link
             href="/analyze"

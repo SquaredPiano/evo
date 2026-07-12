@@ -51,19 +51,19 @@ const SIDEBAR_ITEMS = [
   { icon: Dna, label: "Overview", viewMode: "analyze" as const },
   { icon: Search, label: "Sequence", viewMode: "explorer" as const },
   { icon: Box, label: "Structure", viewMode: "structure" as const },
-  { icon: BarChart3, label: "Variants", viewMode: "leaderboard" as const },
+  { icon: BarChart3, label: "Candidates", viewMode: "leaderboard" as const },
 ];
 
 const VIEW_LABELS = {
   input: "Start", pipeline: "Working", analyze: "Overview",
-  structure: "Structure", leaderboard: "Variants",
+  structure: "Structure", leaderboard: "Candidates",
   explorer: "Sequence", ide: "Sequence", compare: "Compare",
 } as const;
 
 const VALID_VIEWS = ["input", "pipeline", "analyze", "structure", "leaderboard", "explorer", "ide", "compare"];
 
 // Views where edits actually apply to the active candidate - these get the
-// "Editing candidate #N" pill. Read-only surfaces (overview, variants grid,
+// "Editing candidate #N" pill. Read-only surfaces (overview, candidates grid,
 // compare, pipeline, input) deliberately do not.
 const EDIT_CAPABLE_VIEWS: string[] = ["explorer", "ide", "structure"];
 
@@ -194,6 +194,12 @@ function AnalyzePageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // Coding vs non-coding design. Codon<->residue linking only makes sense when
+  // a translated protein / ORF actually exists. The default design type is a
+  // regulatory element (promoter/enhancer), which does NOT encode a protein and
+  // has no reading frame from base 0, so we gate codon linking on this.
+  const isCodingDesign = (analysisResult?.predictedProteins?.length ?? 0) > 0;
+
   // Tutorial state
   const [showTutorial, setShowTutorial] = useState(false);
   useEffect(() => {
@@ -316,13 +322,17 @@ function AnalyzePageInner() {
   }, [setChatDraft, setChatOpen]);
 
   const handleResidueClick = useCallback((residueSeq: number) => {
-    const basePos = (residueSeq - 1) * 3;
-    if (basePos >= 0 && basePos < (bases.length || rawSequence.length)) {
-      setSelectedPosition(basePos);
+    // Only map a residue back to its codon for coding designs. A regulatory
+    // element does not encode a protein, so there is no residue->codon mapping.
+    if (isCodingDesign) {
+      const basePos = (residueSeq - 1) * 3;
+      if (basePos >= 0 && basePos < (bases.length || rawSequence.length)) {
+        setSelectedPosition(basePos);
+      }
     }
     setClickedResidue(residueSeq);
     setHighlightResidues([residueSeq]);
-  }, [bases.length, rawSequence.length, setSelectedPosition, setHighlightResidues]);
+  }, [isCodingDesign, bases.length, rawSequence.length, setSelectedPosition, setHighlightResidues]);
 
   const handleResidueHover = useCallback((residueSeq: number | null) => {
     setHoveredResidue(residueSeq);
@@ -808,7 +818,9 @@ function AnalyzePageInner() {
                 </motion.div>
 
                 {/* Plain-English framing for non-biologists */}
-                <ViewIntro text="The 3D shape your protein is predicted to fold into - hover or click a residue to link it back to the DNA that codes for it." />
+                <ViewIntro text={isCodingDesign
+                  ? "The 3D shape your protein is predicted to fold into - hover or click a residue to link it back to the DNA that codes for it."
+                  : "The predicted 3D shape for this design. This is a regulatory element and does not encode a protein, so residues are not linked to codons."} />
 
                 {/* Viewer */}
                 <motion.div
@@ -899,7 +911,7 @@ function AnalyzePageInner() {
                             #{inspectedResidue}
                           </div>
                         </div>
-                        {selectedPosition !== null && clickedResidue === inspectedResidue && (
+                        {isCodingDesign && selectedPosition !== null && clickedResidue === inspectedResidue && (
                           <div>
                             <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Linked base position</span>
                             <div className="text-sm font-mono" style={{ color: "var(--accent)" }}>{selectedPosition}</div>
@@ -907,13 +919,17 @@ function AnalyzePageInner() {
                         )}
                         {hoveredResidue !== null && (
                           <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-faint)" }}>
-                            Click to pin this residue and jump to its codon in the sequence.
+                            {isCodingDesign
+                              ? "Click to pin this residue and jump to its codon in the sequence."
+                              : "Click to pin this residue. This design does not encode a protein, so there is no codon to jump to."}
                           </p>
                         )}
                       </motion.div>
                     ) : (
                       <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                        Hover the ribbon to preview residues - click once to pin and link the DNA codon.
+                        {isCodingDesign
+                          ? "Hover the ribbon to preview residues - click once to pin and link the DNA codon."
+                          : "Hover the ribbon to preview residues. This regulatory design does not encode a protein, so residues are not linked to codons."}
                       </p>
                     )}
                   </div>
@@ -937,7 +953,7 @@ function AnalyzePageInner() {
                     )}
                     <div>
                       <span className="label-caps block mb-3">
-                        <ScienceTooltip term="overall-viability">Candidate scores</ScienceTooltip>
+                        <ScienceTooltip term="combined-score">Candidate scores</ScienceTooltip>
                       </span>
                       {candidates.length > 0 && (() => {
                         const c = candidates.find(c => c.id === (activeCandidateId ?? 0)) ?? candidates[0];
@@ -1068,7 +1084,7 @@ function AnalyzePageInner() {
                 <div className="flex items-center gap-3">
                   <EditingCandidateChrome variant="pill" />
                   <span className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
-                    <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> · {editHistory.length} <ScienceTooltip term="mutation">edit{editHistory.length !== 1 ? "s" : ""}</ScienceTooltip>
+                    <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> · {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1205,11 +1221,11 @@ function AnalyzePageInner() {
                       </div>
                     )}
 
-                    {/* ── SCORES: candidate viability ── */}
+                    {/* ── SCORES: candidate combined score ── */}
                     {railTab === "scores" && (
                       <div className="p-5">
                         <span className="label-caps block mb-3">
-                          <ScienceTooltip term="overall-viability">Candidate scores</ScienceTooltip>
+                          <ScienceTooltip term="combined-score">Candidate scores</ScienceTooltip>
                         </span>
                         {candidates.length > 0 ? (() => {
                           const c = candidates.find(c => c.id === (activeCandidateId ?? 0)) ?? candidates[0];

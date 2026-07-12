@@ -26,7 +26,7 @@ def test_mutations_endpoint() -> None:
     body = res.json()
     assert body["position"] == 3
     assert body["alternate_base"] == "C"
-    assert body["predicted_impact"] in {"benign", "moderate", "deleterious"}
+    assert body["predicted_impact"] in {"more_likely", "neutral", "less_likely"}
 
 
 def test_edit_base_endpoint() -> None:

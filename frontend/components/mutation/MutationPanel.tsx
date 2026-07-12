@@ -28,9 +28,9 @@ const IMPACT_STYLES: Record<
   MutationEffect["predictedImpact"],
   { color: string; label: string }
 > = {
-  benign: { color: "var(--impact-benign)", label: "Benign" },
-  moderate: { color: "var(--impact-moderate)", label: "Moderate" },
-  deleterious: { color: "var(--impact-deleterious)", label: "Deleterious" },
+  more_likely: { color: "var(--impact-benign)", label: "More likely" },
+  neutral: { color: "var(--impact-moderate)", label: "Neutral" },
+  less_likely: { color: "var(--impact-deleterious)", label: "Less likely" },
 };
 
 export default function MutationPanel({
