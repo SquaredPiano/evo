@@ -1,17 +1,31 @@
-"""Codon optimization service - organism-specific codon usage optimization.
+"""Codon optimization service - constraint-based codon optimization.
 
-Replaces rare codons with high-frequency synonymous codons for a target
-organism while preserving the amino acid sequence exactly. Computes
-Codon Adaptation Index (CAI) before and after optimization.
+Uses DNAChisel to codon-optimize a protein-coding sequence for a target
+organism while preserving the amino acid sequence exactly. Rather than the
+textbook-discouraged "one best codon per residue" substitution (which creates
+homopolymers, tandem repeats and local GC spikes), this solver:
 
-Codon usage tables sourced from the Codon Usage Database
-(https://www.kazusa.or.jp/codon/) - frequencies per thousand codons.
+  - enforces the exact protein translation (EnforceTranslation),
+  - matches the target organism's natural codon usage distribution
+    (CodonOptimize, method="match_codon_usage"),
+  - keeps GC content inside a target window (EnforceGCContent),
+  - caps homopolymer runs (AvoidPattern over HomopolymerPattern),
+  - avoids user-named restriction sites (AvoidPattern / EnzymeSitePattern),
+  - discourages repeated k-mers (UniquifyAllKmers).
+
+Codon usage tables are sourced from the Codon Usage Database
+(https://www.kazusa.or.jp/codon/) - frequencies per thousand codons - and are
+used offline (no network) as the DNAChisel target distribution. The Codon
+Adaptation Index (CAI) is reported before and after so the harmonization
+effect is visible.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+
+import numpy as np
 
 from services.translation import CODON_TABLE, STOP_CODONS, translate
 
@@ -230,6 +244,15 @@ class CodonOptimizationResult:
     gc_content_before: float
     gc_content_after: float
     preserved_motif_count: int
+    # Constraint-based reporting (honest labeling of what the solver did).
+    method: str = "constraint-based (DNAChisel match_codon_usage)"
+    gc_min: float = 0.0
+    gc_max: float = 1.0
+    max_homopolymer: int = 0
+    avoided_sites: list[str] = field(default_factory=list)
+    constraints_satisfied: bool = True
+    longest_homopolymer_before: int = 0
+    longest_homopolymer_after: int = 0
 
 
 def _gc_fraction(seq: str) -> float:
@@ -239,26 +262,93 @@ def _gc_fraction(seq: str) -> float:
     return gc / len(seq)
 
 
+def _longest_homopolymer(seq: str) -> int:
+    """Length of the longest single-base run in the sequence."""
+    best = run = 0
+    prev = ""
+    for b in seq:
+        if b == prev:
+            run += 1
+        else:
+            run = 1
+            prev = b
+        best = max(best, run)
+    return best
+
+
+# Deterministic RNG seed so identical inputs give identical output (DNAChisel
+# uses numpy's global RNG for its stochastic search).
+_OPTIMIZE_SEED = 0xC0D0
+
+# Standard IUPAC/enzyme site strings are resolved by DNAChisel; literal DNA
+# patterns are used directly. Both are supported for avoid_sites.
+_DNA_ONLY = frozenset("ACGT")
+
+
+def _to_dnachisel_codon_table(usage: dict[str, float]) -> dict[str, dict[str, float]]:
+    """Convert a per-1000 usage table to DNAChisel's nested format.
+
+    DNAChisel expects ``{amino_acid: {codon: relative_frequency}}`` where the
+    relative frequencies for each amino acid sum to 1. Stop is keyed as '*'.
+    """
+    table: dict[str, dict[str, float]] = {}
+    for aa, codons in AA_TO_CODONS.items():
+        freqs = {c: usage.get(c, 0.0) for c in codons}
+        total = sum(freqs.values()) or 1.0
+        table[aa] = {c: v / total for c, v in freqs.items()}
+    return table
+
+
+def _codons_changed(before: str, after: str) -> int:
+    """Count differing codons over the aligned coding region."""
+    n = min(len(before), len(after)) // 3
+    changed = 0
+    for i in range(n):
+        if before[i * 3:i * 3 + 3] != after[i * 3:i * 3 + 3]:
+            changed += 1
+    return changed
+
+
 def optimize_codons(
     dna: str,
     organism: str = "homo_sapiens",
     preserve_motifs: list[str] | None = None,
+    gc_min: float = 0.30,
+    gc_max: float = 0.70,
+    avoid_sites: list[str] | None = None,
+    max_homopolymer: int = 6,
 ) -> CodonOptimizationResult:
-    """Optimize codon usage for a target organism.
+    """Constraint-based codon optimization for a target organism (DNAChisel).
+
+    Replaces the previous "one best codon per residue" heuristic. The amino acid
+    sequence is preserved exactly; codon usage is harmonized toward the target
+    organism's natural distribution while respecting a GC window, a homopolymer
+    cap, avoided restriction sites and reduced k-mer repetition.
 
     Args:
-        dna: Protein-coding DNA sequence (should be multiple of 3).
-              Does NOT need to start with ATG or end with a stop codon.
+        dna: Protein-coding DNA sequence. Does NOT need to start with ATG or end
+             with a stop codon; trailing bases that do not complete a codon are
+             preserved verbatim.
         organism: Target organism key (see SUPPORTED_ORGANISMS).
-        preserve_motifs: DNA motif sequences that must not be altered.
-                        If a codon falls within a motif, it is left unchanged.
+        preserve_motifs: DNA motif sequences that must not be altered. Any codon
+             overlapping a match is frozen (DNAChisel AvoidChanges).
+        gc_min, gc_max: Target GC fraction window (0-1). Applied as a hard
+             constraint when feasible; relaxed automatically if it cannot be met.
+        avoid_sites: Restriction-enzyme names (e.g. "EcoRI") or literal DNA
+             patterns to avoid in the optimized sequence.
+        max_homopolymer: Maximum allowed single-base run length; runs of this
+             length or longer are avoided. Set <= 1 to disable.
 
     Returns:
-        CodonOptimizationResult with before/after sequences, CAI, and stats.
+        CodonOptimizationResult with before/after sequences, CAI, and the
+        constraint set that was applied.
 
     Raises:
-        ValueError: If organism is not supported or sequence has invalid length.
+        ValueError: If organism is not supported or the sequence is too short.
     """
+    # DNAChisel is imported lazily so unrelated endpoints do not pay its cost.
+    import dnachisel as dc
+
     dna = dna.upper()
     organism_key = organism.lower().replace(" ", "_")
 
@@ -272,65 +362,98 @@ def optimize_codons(
     if len(dna) < 3:
         raise ValueError("Sequence must be at least 3 nucleotides (one codon)")
 
-    # Identify positions protected by motifs
-    protected_positions: set[int] = set()
+    protein = translate(dna, to_stop=False)
+
+    # Coding region is the codon-aligned prefix; trailing bases are preserved.
+    remainder = len(dna) % 3
+    coding = dna[: len(dna) - remainder] if remainder else dna
+    trailing = dna[len(dna) - remainder:] if remainder else ""
+    total_codons = len(coding) // 3
+
+    # Frozen positions: motif matches (in the coding frame) plus every stop
+    # codon (synonymous stop swaps are biologically undesirable).
+    frozen_spans: list[tuple[int, int]] = []
     preserved_count = 0
     for motif in (preserve_motifs or []):
         motif = motif.upper()
+        if not motif:
+            continue
         start = 0
         while True:
-            idx = dna.find(motif, start)
+            idx = coding.find(motif, start)
             if idx == -1:
                 break
-            for pos in range(idx, idx + len(motif)):
-                protected_positions.add(pos)
+            frozen_spans.append((idx, min(idx + len(motif), len(coding))))
             preserved_count += 1
             start = idx + 1
+    for i in range(0, len(coding) - 2, 3):
+        if coding[i:i + 3] in STOP_CODONS:
+            frozen_spans.append((i, i + 3))
 
-    # Translate to get the amino acid sequence
-    protein = translate(dna, to_stop=False)
+    codon_table = _to_dnachisel_codon_table(usage)
+    avoided = [s for s in (avoid_sites or []) if s and s.strip()]
 
-    # Build optimized sequence codon by codon
-    optimized_codons: list[str] = []
-    codons_changed = 0
-    total_codons = 0
+    def build_problem(with_gc: bool) -> "dc.DnaOptimizationProblem":
+        constraints: list = [dc.EnforceTranslation(location=(0, len(coding)))]
+        if with_gc and 0.0 <= gc_min < gc_max <= 1.0:
+            constraints.append(dc.EnforceGCContent(mini=gc_min, maxi=gc_max))
+        if max_homopolymer and max_homopolymer > 1:
+            for base in "ACGT":
+                constraints.append(
+                    dc.AvoidPattern(dc.HomopolymerPattern(base, max_homopolymer))
+                )
+        for site in avoided:
+            token = site.strip()
+            if set(token.upper()) <= _DNA_ONLY:
+                constraints.append(dc.AvoidPattern(token.upper()))
+            else:
+                try:
+                    constraints.append(dc.AvoidPattern(dc.EnzymeSitePattern(token)))
+                except Exception:
+                    # Unknown enzyme name: skip rather than fail the whole run.
+                    continue
+        for a, b in frozen_spans:
+            constraints.append(dc.AvoidChanges(location=(a, b)))
 
-    for i in range(0, len(dna) - 2, 3):
-        codon = dna[i:i + 3]
-        aa = CODON_TABLE.get(codon, "X")
-        total_codons += 1
+        objectives: list = [
+            dc.CodonOptimize(codon_usage_table=codon_table, method="match_codon_usage")
+        ]
+        # Discourage tandem repeats without risking an infeasible hard constraint.
+        if len(coding) >= 40:
+            objectives.append(dc.UniquifyAllKmers(k=9, boost=0.5))
 
-        if aa == "*":
-            # Keep stop codons as-is
-            optimized_codons.append(codon)
-            continue
+        return dc.DnaOptimizationProblem(
+            sequence=coding,
+            constraints=constraints,
+            objectives=objectives,
+            logger=None,
+        )
 
-        if aa == "X":
-            # Unknown codon (contains N or invalid) - keep as-is
-            optimized_codons.append(codon)
-            continue
+    constraints_satisfied = True
+    optimized_coding = coding
+    for with_gc in (True, False):
+        np.random.seed(_OPTIMIZE_SEED)
+        try:
+            problem = build_problem(with_gc=with_gc)
+            problem.resolve_constraints()
+            problem.optimize()
+            optimized_coding = problem.sequence
+            constraints_satisfied = with_gc  # False if we had to drop GC to solve
+            break
+        except Exception:
+            # Retry once without the GC window; if that also fails, keep original
+            # coding sequence (honest: nothing changed) and report unsatisfied.
+            if not with_gc:
+                optimized_coding = coding
+                constraints_satisfied = False
 
-        # Check if any position in this codon is protected
-        codon_positions = set(range(i, i + 3))
-        if codon_positions & protected_positions:
-            optimized_codons.append(codon)
-            continue
+    optimized_dna = optimized_coding + trailing
 
-        best = _best_codon_for_aa(aa, usage)
-        if best != codon:
-            codons_changed += 1
-        optimized_codons.append(best)
-
-    optimized_dna = "".join(optimized_codons)
-    # Append any trailing bases that don't form a complete codon
-    remainder = len(dna) % 3
-    if remainder:
-        optimized_dna += dna[-remainder:]
-
-    # Verify amino acid preservation
+    # Amino acid preservation is guaranteed by EnforceTranslation; assert as a
+    # defensive invariant.
     optimized_protein = translate(optimized_dna, to_stop=False)
     assert optimized_protein == protein, (
-        f"BUG: optimization changed amino acid sequence! "
+        "BUG: optimization changed amino acid sequence! "
         f"Original: {protein[:20]}... Optimized: {optimized_protein[:20]}..."
     )
 
@@ -344,9 +467,17 @@ def optimize_codons(
         original_cai=round(original_cai, 4),
         optimized_cai=round(optimized_cai, 4),
         amino_acid_sequence=protein,
-        codons_changed=codons_changed,
+        codons_changed=_codons_changed(coding, optimized_coding),
         total_codons=total_codons,
         gc_content_before=round(_gc_fraction(dna), 4),
         gc_content_after=round(_gc_fraction(optimized_dna), 4),
         preserved_motif_count=preserved_count,
+        method="constraint-based (DNAChisel match_codon_usage)",
+        gc_min=gc_min,
+        gc_max=gc_max,
+        max_homopolymer=max_homopolymer,
+        avoided_sites=avoided,
+        constraints_satisfied=constraints_satisfied,
+        longest_homopolymer_before=_longest_homopolymer(dna),
+        longest_homopolymer_after=_longest_homopolymer(optimized_dna),
     )

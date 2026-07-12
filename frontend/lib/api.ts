@@ -425,20 +425,153 @@ export interface CodonOptimizationResult {
   gc_content_before: number;
   gc_content_after: number;
   preserved_motif_count: number;
+  // Constraint-based (DNAChisel) reporting.
+  method: string;
+  gc_min: number;
+  gc_max: number;
+  max_homopolymer: number;
+  avoided_sites: string[];
+  constraints_satisfied: boolean;
+  longest_homopolymer_before: number;
+  longest_homopolymer_after: number;
 }
 
-/** POST /api/optimize/codons - Organism-specific codon optimization. */
+export interface CodonOptimizationOptions {
+  preserveMotifs?: string[];
+  gcMin?: number;
+  gcMax?: number;
+  avoidSites?: string[];
+  maxHomopolymer?: number;
+}
+
+/**
+ * POST /api/optimize/codons - Constraint-based codon optimization (DNAChisel:
+ * EnforceTranslation + match_codon_usage + GC window + homopolymer/repeat caps).
+ */
 export async function optimizeCodons(
   sequence: string,
   organism: string,
-  preserveMotifs: string[] = []
+  opts: CodonOptimizationOptions = {}
 ): Promise<CodonOptimizationResult> {
+  const body: Record<string, unknown> = {
+    sequence,
+    organism,
+    preserve_motifs: opts.preserveMotifs ?? [],
+  };
+  if (opts.gcMin != null) body.gc_min = opts.gcMin;
+  if (opts.gcMax != null) body.gc_max = opts.gcMax;
+  if (opts.avoidSites != null) body.avoid_sites = opts.avoidSites;
+  if (opts.maxHomopolymer != null) body.max_homopolymer = opts.maxHomopolymer;
   const res = await fetch(`${API_BASE}/api/optimize/codons`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sequence, organism, preserve_motifs: preserveMotifs }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Codon optimization failed: ${res.status}`);
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Primer design (primer3) - POST /api/primers
+// ---------------------------------------------------------------------------
+
+export interface Primer {
+  sequence: string;
+  start: number;
+  length: number;
+  tm_celsius: number;
+  gc_percent: number;
+  self_any_th: number;
+  self_end_th: number;
+  hairpin_th: number;
+}
+
+export interface PrimerPair {
+  left: Primer;
+  right: Primer;
+  product_size: number;
+  product_tm: number | null;
+  pair_penalty: number;
+  compl_any_th: number;
+  compl_end_th: number;
+}
+
+export interface PrimerDesignResult {
+  sequence_length: number;
+  method: string;                 // "primer3"
+  pairs: PrimerPair[];
+  count: number;
+  explain_left: string;
+  explain_right: string;
+  explain_pair: string;
+  note: string;
+  settings: Record<string, unknown>;
+}
+
+export interface PrimerDesignOptions {
+  productSizeMin?: number;
+  productSizeMax?: number;
+  optTm?: number;
+  minTm?: number;
+  maxTm?: number;
+  numReturn?: number;
+}
+
+/** POST /api/primers - Design PCR/sequencing primer pairs (primer3). */
+export async function designPrimers(
+  sequence: string,
+  opts: PrimerDesignOptions = {}
+): Promise<PrimerDesignResult> {
+  const body: Record<string, unknown> = { sequence };
+  if (opts.productSizeMin != null) body.product_size_min = opts.productSizeMin;
+  if (opts.productSizeMax != null) body.product_size_max = opts.productSizeMax;
+  if (opts.optTm != null) body.opt_tm = opts.optTm;
+  if (opts.minTm != null) body.min_tm = opts.minTm;
+  if (opts.maxTm != null) body.max_tm = opts.maxTm;
+  if (opts.numReturn != null) body.num_return = opts.numReturn;
+  const res = await fetch(`${API_BASE}/api/primers`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Primer design failed: ${res.status}`);
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// RNA/DNA secondary structure (ViennaRNA) - POST /api/secondary-structure
+// ---------------------------------------------------------------------------
+
+export interface Hairpin {
+  stem_start: number;
+  stem_end: number;
+  loop_start: number;
+  loop_size: number;
+}
+
+export interface SecondaryStructureResult {
+  sequence: string;
+  length: number;
+  method: string;                 // "ViennaRNA MFE (RNA.fold)"
+  mfe_kcal_mol: number;
+  dot_bracket: string;
+  paired_fraction: number;
+  hairpins: Hairpin[];
+  hairpin_count: number;
+  input_was_dna: boolean;
+  note: string;
+}
+
+/** POST /api/secondary-structure - ViennaRNA MFE secondary structure. */
+export async function foldSecondaryStructure(
+  sequence: string
+): Promise<SecondaryStructureResult> {
+  const res = await fetch(`${API_BASE}/api/secondary-structure`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sequence }),
+  });
+  if (!res.ok) throw new Error(`Secondary-structure prediction failed: ${res.status}`);
   return res.json();
 }
 

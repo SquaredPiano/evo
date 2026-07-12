@@ -28,8 +28,10 @@ from models.requests import (
     LiteratureSearchRequest,
     MutationRequest,
     OffTargetRequest,
+    PrimerDesignRequest,
     ProteinParamsRequest,
     RegionEvidenceRequest,
+    SecondaryStructureRequest,
     SessionBootstrapRequest,
     StructureRequest,
     TmRequest,
@@ -44,12 +46,17 @@ from models.responses import (
     CandidateScoresResponse,
     DesignAcceptedResponse,
     FollowupAcceptedResponse,
+    HairpinModel,
     HealthResponse,
     LiteratureIndexResponse,
     LiteratureSearchResponse,
     LiteratureHit,
     MutationResponse,
+    PrimerDesignResponse,
+    PrimerModel,
+    PrimerPairModel,
     ProteinParamsResponse,
+    SecondaryStructureResponse,
     StructureResponse,
     TmResponse,
 )
@@ -737,7 +744,7 @@ async def protein_parameters(request: ProteinParamsRequest) -> ProteinParamsResp
 
 @app.post("/api/optimize/codons")
 async def optimize_codons_endpoint(request: CodonOptimizationRequest) -> dict[str, object]:
-    """Optimize codon usage for a target organism."""
+    """Constraint-based codon optimization for a target organism (DNAChisel)."""
     from services.codon_optimization import optimize_codons
 
     try:
@@ -745,6 +752,10 @@ async def optimize_codons_endpoint(request: CodonOptimizationRequest) -> dict[st
             dna=request.sequence,
             organism=request.organism,
             preserve_motifs=request.preserve_motifs or None,
+            gc_min=request.gc_min,
+            gc_max=request.gc_max,
+            avoid_sites=request.avoid_sites or None,
+            max_homopolymer=request.max_homopolymer,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -760,7 +771,114 @@ async def optimize_codons_endpoint(request: CodonOptimizationRequest) -> dict[st
         "gc_content_before": result.gc_content_before,
         "gc_content_after": result.gc_content_after,
         "preserved_motif_count": result.preserved_motif_count,
+        "method": result.method,
+        "gc_min": result.gc_min,
+        "gc_max": result.gc_max,
+        "max_homopolymer": result.max_homopolymer,
+        "avoided_sites": result.avoided_sites,
+        "constraints_satisfied": result.constraints_satisfied,
+        "longest_homopolymer_before": result.longest_homopolymer_before,
+        "longest_homopolymer_after": result.longest_homopolymer_after,
     }
+
+
+@app.post("/api/primers", response_model=PrimerDesignResponse)
+async def design_primers_endpoint(request: PrimerDesignRequest) -> PrimerDesignResponse:
+    """Design PCR/sequencing primer pairs for a template sequence (primer3).
+
+    Returns ranked primer pairs with primer3's thermodynamic metrics: per-primer
+    Tm, GC%, self-dimer and hairpin scores, plus product size and heterodimer
+    scores for each pair.
+    """
+    from services.primer_design import design_primers
+
+    try:
+        result = design_primers(
+            sequence=request.sequence,
+            product_size_min=request.product_size_min,
+            product_size_max=request.product_size_max,
+            opt_tm=request.opt_tm,
+            min_tm=request.min_tm,
+            max_tm=request.max_tm,
+            num_return=request.num_return,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    def to_model(p) -> PrimerModel:
+        return PrimerModel(
+            sequence=p.sequence,
+            start=p.start,
+            length=p.length,
+            tm_celsius=p.tm_celsius,
+            gc_percent=p.gc_percent,
+            self_any_th=p.self_any_th,
+            self_end_th=p.self_end_th,
+            hairpin_th=p.hairpin_th,
+        )
+
+    pairs = [
+        PrimerPairModel(
+            left=to_model(pair.left),
+            right=to_model(pair.right),
+            product_size=pair.product_size,
+            product_tm=pair.product_tm,
+            pair_penalty=pair.pair_penalty,
+            compl_any_th=pair.compl_any_th,
+            compl_end_th=pair.compl_end_th,
+        )
+        for pair in result.pairs
+    ]
+    return PrimerDesignResponse(
+        sequence_length=result.sequence_length,
+        method=result.method,
+        pairs=pairs,
+        count=len(pairs),
+        explain_left=result.explain_left,
+        explain_right=result.explain_right,
+        explain_pair=result.explain_pair,
+        note=result.note,
+        settings=result.settings,
+    )
+
+
+@app.post("/api/secondary-structure", response_model=SecondaryStructureResponse)
+async def secondary_structure_endpoint(
+    request: SecondaryStructureRequest,
+) -> SecondaryStructureResponse:
+    """Predict RNA/DNA secondary structure (ViennaRNA MFE).
+
+    Folds the sequence with ViennaRNA and returns the minimum free energy, the
+    dot-bracket structure, and the hairpin loops. DNA is folded as transcribed
+    RNA (T -> U) under the RNA energy model - an approximation, labeled as such.
+    """
+    from services.rna_structure import fold_sequence
+
+    try:
+        result = fold_sequence(request.sequence)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    return SecondaryStructureResponse(
+        sequence=result.sequence,
+        length=result.length,
+        method=result.method,
+        mfe_kcal_mol=result.mfe_kcal_mol,
+        dot_bracket=result.dot_bracket,
+        paired_fraction=result.paired_fraction,
+        hairpins=[
+            HairpinModel(
+                stem_start=h.stem_start,
+                stem_end=h.stem_end,
+                loop_start=h.loop_start,
+                loop_size=h.loop_size,
+            )
+            for h in result.hairpins
+        ],
+        hairpin_count=len(result.hairpins),
+        input_was_dna=result.input_was_dna,
+        note=result.note,
+    )
 
 
 @app.post("/api/variants")

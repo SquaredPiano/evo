@@ -150,6 +150,64 @@ class TmResponse(BaseModel):
     note: str
 
 
+class PrimerModel(BaseModel):
+    """A single primer (left or right) with primer3 metrics."""
+    sequence: str
+    start: int
+    length: int
+    tm_celsius: float
+    gc_percent: float
+    self_any_th: float
+    self_end_th: float
+    hairpin_th: float
+
+
+class PrimerPairModel(BaseModel):
+    """A primer pair with product size and heterodimer metrics."""
+    left: PrimerModel
+    right: PrimerModel
+    product_size: int
+    product_tm: float | None
+    pair_penalty: float
+    compl_any_th: float
+    compl_end_th: float
+
+
+class PrimerDesignResponse(BaseModel):
+    """primer3 primer-design result."""
+    sequence_length: int
+    method: str                        # "primer3"
+    pairs: list[PrimerPairModel]
+    count: int
+    explain_left: str
+    explain_right: str
+    explain_pair: str
+    note: str
+    settings: dict[str, object]
+
+
+class HairpinModel(BaseModel):
+    """A hairpin loop parsed from the dot-bracket structure."""
+    stem_start: int
+    stem_end: int
+    loop_start: int
+    loop_size: int
+
+
+class SecondaryStructureResponse(BaseModel):
+    """ViennaRNA minimum-free-energy secondary-structure result."""
+    sequence: str                      # folded sequence (RNA alphabet)
+    length: int
+    method: str                        # "ViennaRNA MFE (RNA.fold)"
+    mfe_kcal_mol: float
+    dot_bracket: str
+    paired_fraction: float
+    hairpins: list[HairpinModel]
+    hairpin_count: int
+    input_was_dna: bool
+    note: str
+
+
 class ProteinParamsResponse(BaseModel):
     """Protein physicochemical descriptors (ProtParam-style, deterministic)."""
     sequence: str

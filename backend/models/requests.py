@@ -5,7 +5,14 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 
-VALID_BASES = frozenset("ATCGN")
+# Full IUPAC nucleotide alphabet: the four bases, N, and the ambiguity codes
+# (R,Y,S,W,K,M,B,D,H,V). Import/translation already accept IUPAC, so the API
+# layer must not reject a legitimately-ambiguous imported sequence.
+VALID_BASES = frozenset("ATCGNRYSWKMBDHV")
+
+# Unambiguous single bases for point edits/substitutions (A/C/G/T/N only): an
+# edit must resolve to a concrete base, not an ambiguity code.
+VALID_EDIT_BASES = frozenset("ATCGN")
 
 
 def _validate_sequence(seq: str) -> str:
@@ -20,7 +27,7 @@ def _validate_sequence(seq: str) -> str:
 
 def _validate_base(base: str) -> str:
     base = base.upper().strip()
-    if base not in VALID_BASES:
+    if base not in VALID_EDIT_BASES:
         raise ValueError(f"Invalid base: {base}")
     return base
 
@@ -213,11 +220,63 @@ class CodonOptimizationRequest(BaseModel):
     sequence: str = Field(..., description="Protein-coding DNA sequence to optimize")
     organism: str = Field("homo_sapiens", description="Target organism for codon usage")
     preserve_motifs: list[str] = Field(default_factory=list, description="Motif sequences to preserve")
+    # Optional constraint-based fields (added; existing callers may omit them).
+    gc_min: float = Field(0.30, ge=0.0, le=1.0, description="Minimum GC fraction target")
+    gc_max: float = Field(0.70, ge=0.0, le=1.0, description="Maximum GC fraction target")
+    avoid_sites: list[str] = Field(
+        default_factory=list,
+        description="Restriction-enzyme names (e.g. EcoRI) or literal DNA patterns to avoid",
+    )
+    max_homopolymer: int = Field(
+        6, ge=1, le=20, description="Maximum single-base run length (<=1 disables the cap)"
+    )
 
     @field_validator("sequence")
     @classmethod
     def validate_sequence(cls, v: str) -> str:
         return _validate_sequence(v)
+
+    @field_validator("gc_max")
+    @classmethod
+    def validate_gc_window(cls, v: float, info) -> float:
+        gc_min = info.data.get("gc_min", 0.0)
+        if v <= gc_min:
+            raise ValueError("gc_max must be greater than gc_min")
+        return v
+
+
+class PrimerDesignRequest(BaseModel):
+    """PCR/sequencing primer design request (primer3)."""
+    sequence: str = Field(..., description="Template DNA sequence to design primers against")
+    product_size_min: int = Field(100, ge=40, le=10_000, description="Minimum amplicon size (bp)")
+    product_size_max: int = Field(1000, ge=50, le=20_000, description="Maximum amplicon size (bp)")
+    opt_tm: float = Field(60.0, ge=40.0, le=80.0, description="Optimal primer Tm (Celsius)")
+    min_tm: float = Field(57.0, ge=40.0, le=80.0, description="Minimum primer Tm (Celsius)")
+    max_tm: float = Field(63.0, ge=40.0, le=80.0, description="Maximum primer Tm (Celsius)")
+    num_return: int = Field(5, ge=1, le=20, description="Max number of primer pairs to return")
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
+class SecondaryStructureRequest(BaseModel):
+    """RNA/DNA secondary-structure (MFE) request (ViennaRNA)."""
+    sequence: str = Field(..., description="RNA or DNA sequence; DNA is folded as transcribed RNA")
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        # Accept RNA (U) in addition to the DNA IUPAC alphabet: this endpoint
+        # folds RNA directly and converts DNA (T) to RNA internally.
+        seq = v.upper().strip()
+        if not seq:
+            raise ValueError("Sequence must not be empty")
+        bad = set(seq) - (VALID_BASES | {"U"})
+        if bad:
+            raise ValueError(f"Invalid nucleotides: {bad}")
+        return seq
 
 
 class OffTargetRequest(BaseModel):
