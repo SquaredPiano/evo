@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from services.alignment import AlignmentTooLargeError, needleman_wunsch
 from services.session_store import SessionStore, SessionNotFoundError
 
 logger = logging.getLogger("evo.experiment_tracker")
@@ -158,13 +159,59 @@ class VersionDiff:
 
 
 def _diff_sequences(seq1: str, seq2: str) -> list[dict[str, Any]]:
-    """Compute position-level mutations between two sequences."""
+    """Compute position-level mutations between two sequences (gap-aware).
+
+    Uses a Needleman-Wunsch global alignment (services.alignment) so an indel
+    shifts coordinates correctly instead of turning every downstream base into a
+    spurious mismatch. Returns the same shape as before -
+    ``[{"position", "ref", "alt"}]`` - so existing callers are unaffected:
+
+    - substitution: ``ref``/``alt`` are the differing bases; ``position`` is the
+      0-based index in ``seq1``.
+    - insertion in ``seq2`` (gap in ``seq1``): ``ref="-"``; ``position`` is the
+      0-based index in ``seq2``.
+    - deletion from ``seq1`` (gap in ``seq2``): ``alt="-"``; ``position`` is the
+      0-based index in ``seq1``.
+
+    For pathologically long sequences the alignment matrix guard trips and we
+    fall back to the previous prefix/tail positional diff rather than allocating
+    an O(n*m) matrix.
+    """
+    try:
+        aln = needleman_wunsch(seq1, seq2)
+    except AlignmentTooLargeError:
+        return _diff_sequences_positional(seq1, seq2)
+
+    mutations: list[dict[str, Any]] = []
+    ia = 0
+    ib = 0
+    for ca, cb in zip(aln.aligned_a, aln.aligned_b):
+        if ca != "-" and cb != "-":
+            if ca != cb:
+                mutations.append({"position": ia, "ref": ca, "alt": cb})
+            ia += 1
+            ib += 1
+        elif ca == "-":  # base present in seq2 only -> insertion
+            mutations.append({"position": ib, "ref": "-", "alt": cb})
+            ib += 1
+        else:  # base present in seq1 only -> deletion
+            mutations.append({"position": ia, "ref": ca, "alt": "-"})
+            ia += 1
+    return mutations
+
+
+def _diff_sequences_positional(seq1: str, seq2: str) -> list[dict[str, Any]]:
+    """Prefix/tail positional diff. Fallback for over-long inputs only.
+
+    Not gap-aware - a single early indel makes the tail look fully mismatched.
+    Retained purely so very large sequences still produce *some* diff without
+    blowing up memory on the DP matrix.
+    """
     mutations: list[dict[str, Any]] = []
     min_len = min(len(seq1), len(seq2))
     for i in range(min_len):
         if seq1[i] != seq2[i]:
             mutations.append({"position": i, "ref": seq1[i], "alt": seq2[i]})
-    # Length differences are reported as insertions/deletions
     if len(seq2) > len(seq1):
         for i in range(min_len, len(seq2)):
             mutations.append({"position": i, "ref": "-", "alt": seq2[i]})

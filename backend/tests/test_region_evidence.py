@@ -24,6 +24,9 @@ from services.region_evidence import (
 
 
 def _mk_annotation(position: int, ref="C", alt="A") -> VariantAnnotation:
+    # coordinate_frame="candidate" simulates a variant successfully LIFTED onto
+    # the candidate frame - the only case region_evidence paints a per-base
+    # position. reference_position carries the original HGVS coordinate.
     return VariantAnnotation(
         position=position,
         ref_base=ref,
@@ -35,6 +38,8 @@ def _mk_annotation(position: int, ref="C", alt="A") -> VariantAnnotation:
         variation_type="single nucleotide variant",
         review_stars=3,
         allele_frequency=None,
+        reference_position=position + 1,
+        coordinate_frame="candidate",
     )
 
 
