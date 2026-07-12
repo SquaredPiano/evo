@@ -26,14 +26,14 @@ const GLOSSARY: GlossaryEntry[] = [
     plain:
       "Evo 2 is autocomplete for DNA. Log-likelihood scores how expected each base was. High = looks like real gene DNA; low = unusual.",
     honesty:
-      "NOT a prediction the therapy works. Under the default engine (NIM), generation is real but per-base scores are calibrated heuristics — a real forward pass needs local Evo 2. We label them heuristics.",
+      "NOT a prediction the therapy works. Generation is real Evo 2, and generated candidates carry the model's own confidence. The per-position 4D view shows composition and motif signals.",
   },
   {
     term: "Per-position score",
     plain:
       "One number for each base along the sequence, so you can see which stretches look gene-like and which look off.",
     honesty:
-      "Same caveat as log-likelihood: real Evo 2 values only under local mode; otherwise labeled heuristics of the same length.",
+      "Real Evo 2 model confidence for a generated candidate; the 4D view shows composition and motif signals of the same length.",
   },
   {
     term: "pLDDT",
@@ -64,7 +64,7 @@ const GLOSSARY: GlossaryEntry[] = [
     plain:
       "Arc Institute's genomic foundation model — the engine that writes the candidate DNA.",
     honesty:
-      "Generation (writing bases) and scoring (a forward pass) are separate. The default demo does live generation; scoring is heuristic unless run locally.",
+      "Generation (writing bases) and scoring are separate steps. Generation is live Evo 2; the 4D scores are composition and motif heuristics.",
   },
   {
     term: "ESMFold",

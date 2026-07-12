@@ -29,8 +29,8 @@ const STEPS = [
   {
     icon: <Gauge size={22} strokeWidth={2.5} />,
     kicker: "02 / Score",
-    title: "Four labeled heuristics",
-    body: "Composition/motif scores for function, tissue motifs, panel off-target overlap, and novelty — clearly marked as demo metrics, not clinical predictions.",
+    title: "Four composition and motif signals",
+    body: "Composition and motif scores for function, tissue motifs, panel off-target overlap, and novelty, clearly marked as ranking heuristics, not clinical predictions.",
   },
   {
     icon: <Boxes size={22} strokeWidth={2.5} />,
@@ -217,7 +217,7 @@ export default function Home() {
             The interface layer genomic design has been missing.
           </h2>
           <p className="text-[16px] mb-10" style={{ color: "var(--rail-muted)" }}>
-            Evo 2 can generate DNA (NIM), ESMFold folds coding ORFs when live, NCBI/ClinVar supply context cards, and the copilot runs real tools — scores stay labeled as heuristics until a forward endpoint exists.
+            Evo 2 can generate DNA (NIM), ESMFold folds coding ORFs when live, NCBI/ClinVar supply context cards, and the copilot runs real tools. The 4D scores are composition and motif signals.
           </p>
           <Link
             href="/analyze"

@@ -20,10 +20,11 @@ hypothesis or a ranking heuristic — never a clinical claim.
 > Then **ESMFold folds the candidate into a 3D structure** you can rotate, with
 > per-residue confidence (pLDDT).
 >
-> Every score is labeled for what it actually is. Under our default engine,
-> generation is real, but the per-base scores are **calibrated heuristics — we
-> say so, right on the screen** — a true forward pass needs local Evo 2. There's
-> a one-click **Story Mode** glossary so you can check any term yourself.
+> Every score is labeled for what it actually is. Generation is real Evo 2, and
+> generated candidates carry the model's own confidence. The 4D scores are
+> **composition and motif signals, not clinical assays, and we say so right on
+> the screen.** There's a one-click **Story Mode** glossary so you can check any
+> term yourself.
 >
 > So: goal in → real generation → live evidence → structure → edit and re-score.
 > A closed loop, honest about its limits."
@@ -37,11 +38,12 @@ and point at the honesty labels.
 
 - **Log-likelihood ("model surprise")** — Evo 2 is autocomplete for DNA.
   Log-likelihood scores how *expected* each base was. High = looks like real gene
-  DNA; low = unusual. **NOT** a prediction the therapy works. Under the default
-  engine (NIM), generation is real but per-base scores are **calibrated
-  heuristics**, not a true forward pass — real LL needs `EVO2_MODE=local`.
-- **Per-position score** — one number per base along the sequence; same caveat as
-  log-likelihood (real values only in local mode, otherwise labeled heuristics).
+  DNA; low = unusual. **NOT** a prediction the therapy works. Generated candidates
+  carry Evo 2's real model confidence (`sampled_probs`); the per-position 4D view
+  shows **composition and motif signals**.
+- **Per-position score** — one number per base along the sequence; real Evo 2
+  model confidence for a generated candidate, or composition and motif signals of
+  the same length in the 4D view.
 - **pLDDT** — ESMFold's confidence in the predicted 3D shape, per amino acid
   (0–100). Confidence of the **shape**, not proof of function.
 - **ORF (open reading frame)** — a start→stop stretch that could be a gene. A
@@ -69,8 +71,9 @@ and point at the honesty labels.
   developability.)
 - ❌ "The model **proved** this works / is functional." (Scores are hypotheses and
   ranking heuristics.)
-- ❌ "These are **real Evo 2 log-likelihoods**." (Only true under local mode; the
-  default engine uses labeled heuristics — check the scoring note.)
+- ❌ "The 4D scores are **real Evo 2 log-likelihoods**." (They are composition and
+  motif signals, not forward-pass log-likelihoods; generated candidates do carry
+  real Evo 2 confidence via `sampled_probs`. Check the scoring note.)
 - ❌ "We did a **genome-wide off-target scan**." (It's a small built-in panel.)
 
 When in doubt, downgrade the claim and point to Story Mode.

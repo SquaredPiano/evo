@@ -14,7 +14,7 @@ interface ProvenanceBadgeProps {
 
 /**
  * Reusable, HONEST provenance badge. Shows which engine actually produced a
- * sequence ("Evo 2 · NIM (live)" vs "Evo 2 · mock fallback") and surfaces the
+ * sequence ("Evo 2 · NIM (live)" vs an honest offline label) and surfaces the
  * prefix-conditioning + rejection-sampling caveats in a hover tooltip so a
  * scientist understands this is prefix-conditioned resampling, not native
  * infilling. Used on regen result cards AND redesign candidates.
@@ -39,8 +39,8 @@ export default function ProvenanceBadge({
     .join("\n\n");
 
   const liveColor = "var(--accent)";
-  const mockColor = "var(--base-t)";
-  const color = badge.isLive ? liveColor : mockColor;
+  const nonLiveColor = "var(--base-t)";
+  const color = badge.isLive ? liveColor : nonLiveColor;
 
   return (
     <span

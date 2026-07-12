@@ -50,7 +50,7 @@ export function useDesignPipeline() {
       setPipelineStage("intent");
       useEvoStore.getState().setSeedSource(null);
       useEvoStore.getState().setScoringNote(
-        "Under NIM, generation uses Evo2 tokens; 4D scores are labeled heuristics until a forward LL endpoint exists. ClinVar/PubMed are context cards — they do not rewrite DNA."
+        "Generation is real Evo 2, and generated candidates carry the model's own confidence (sampled_probs). The 4D scores are composition and motif signals, not clinical assays. ClinVar and PubMed are context cards; they do not rewrite DNA."
       );
       setRetrievalStatuses([
         { source: "ncbi", status: "pending" },
@@ -116,12 +116,6 @@ export function useDesignPipeline() {
           useEvoStore.getState().setWsStatus("disconnected");
         };
       } catch {
-        const allowUiMocks = process.env.NEXT_PUBLIC_ALLOW_UI_MOCKS === "true";
-        if (allowUiMocks) {
-          // Explicit opt-in for local mock demos only.
-          runMockPipeline(goal);
-          return;
-        }
         setPipelineStatus("error");
         setViewMode("input");
         setError("Could not connect to backend pipeline at http://localhost:8000 (or NEXT_PUBLIC_API_URL).");
@@ -136,58 +130,6 @@ export function useDesignPipeline() {
       setError,
     ]
   );
-
-  // ── Mock pipeline (no backend) ──
-  function runMockPipeline(goal: string) {
-    const store = useEvoStore.getState();
-    const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-    const seq = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCCATCTGTCTGGAGTTGATCAAGGAACCTGTCTCCACAAAGTGTGACCACATATTTTGCAAATTTTGCATGCTGAAACTTCTCAACCAGAAGAAAGGGCCTTCACAGTGTCCTTTATGTAAGAATGA";
-
-    (async () => {
-      await delay(600);
-      store.addCompletedStage("intent");
-      store.setPipelineStage("retrieval");
-      await delay(500);
-      store.updateRetrievalStatus("ncbi", "complete");
-      await delay(400);
-      store.updateRetrievalStatus("pubmed", "complete");
-      await delay(300);
-      store.updateRetrievalStatus("clinvar", "complete");
-      store.addCompletedStage("retrieval");
-      store.setPipelineStage("generation");
-      // Simulate token generation
-      for (let i = 0; i < 36; i++) {
-        await delay(30);
-        store.appendGeneratingToken("ATCG"[Math.floor(Math.random() * 4)]);
-      }
-      store.addCompletedStage("generation");
-      store.addCompletedStage("scoring");
-      store.setPipelineStage("structure");
-      await delay(800);
-      store.addCompletedStage("structure");
-      store.setPipelineStage("explanation");
-      await delay(600);
-      store.appendExplanation("Candidate preserves core promoter-like motifs consistent with the design goal.");
-      store.addCompletedStage("explanation");
-      await delay(400);
-      // Build result from the sequence
-      const { analyzeSequence } = await import("@/lib/api");
-      try {
-        const result = await analyzeSequence(seq);
-        store.setAnalysisResult(result);
-      } catch {
-        // If even the analyze call fails, build minimal result
-        const regions = parseSequenceToRegions(seq);
-        const perPositionScores = generateMockScores(seq);
-        store.setAnalysisResult({
-          rawSequence: seq,
-          regions,
-          perPositionScores,
-          predictedProteins: [],
-        });
-      }
-    })();
-  }
 
   // ── Event dispatcher ──
   function handleEvent(msg: { event: string; data: Record<string, unknown> }) {
@@ -460,8 +402,7 @@ export function useDesignPipeline() {
           const primarySeq = sortedIncoming[0].sequence;
           const regions = parseSequenceToRegions(primarySeq);
           const primaryScores =
-            candidateScoresRef.current[sortedIncoming[0].id] ??
-            generateMockScores(primarySeq);
+            candidateScoresRef.current[sortedIncoming[0].id] ?? [];
 
           // Build AnalysisResult from pipeline data
           const result = {
@@ -577,11 +518,4 @@ function parseSequenceToRegions(sequence: string) {
   }
 
   return regions;
-}
-
-function generateMockScores(sequence: string) {
-  return Array.from({ length: sequence.length }, (_, i) => ({
-    position: i,
-    score: -3 + Math.random() * 4,
-  }));
 }
