@@ -143,7 +143,6 @@ export default function CompareView() {
     return aWins ? "A" : "B";
   };
 
-  const cardBg = "var(--surface-raised)";
   const nameA = `Candidate_${candA.id.toString().padStart(3, "0")}`;
   const nameB = `Candidate_${candB.id.toString().padStart(3, "0")}`;
 
@@ -219,24 +218,37 @@ export default function CompareView() {
     <div className="flex-1 overflow-auto" style={{ background: "var(--surface-base)" }}>
       <div className="max-w-6xl mx-auto px-8 py-6">
         {/* Header */}
-        <div className="flex items-start justify-between mb-5 gap-4">
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight mb-1">Candidate comparison</h2>
-            <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-              See how two design variants stack up. The summary below says what changed and
-              which one is stronger; the table scores each metric head-to-head, and you can open
-              the base-level view for exact positions.
-            </p>
+        <div className="mb-6">
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="label-caps" style={{ color: "var(--accent-bright)", opacity: 1 }}>
+              Compare
+            </span>
+            <span className="h-3 w-px" style={{ background: "var(--ghost-border)" }} />
+            <span className="text-[10px] font-mono" style={{ color: "var(--text-faint)" }}>
+              A vs B
+            </span>
           </div>
-          <button onClick={() => { setActiveCandidateId(candA.id); setViewMode("explorer"); }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02] shrink-0"
-            style={{ background: "var(--accent)", color: "var(--ink)" }}>
-            Edit in Studio <ArrowRight size={14} />
-          </button>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="font-display text-[clamp(1.6rem,3vw,2.25rem)] leading-[1.05] tracking-tight mb-2">
+                Candidate comparison
+              </h2>
+              <p className="text-[13px] max-w-2xl leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                See how two design variants stack up. The summary below says what changed and
+                which one is stronger; the table scores each metric head-to-head, and you can open
+                the base-level view for exact positions.
+              </p>
+            </div>
+            <button onClick={() => { setActiveCandidateId(candA.id); setViewMode("explorer"); }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all hover:scale-[1.02] shrink-0"
+              style={{ background: "var(--accent)", color: "var(--ink)", boxShadow: "0 10px 24px -8px rgba(245,158,11,0.4)" }}>
+              Edit in Studio <ArrowRight size={14} />
+            </button>
+          </div>
         </div>
 
         {/* ── CANDIDATE PICKERS ── */}
-        <div className="rounded-xl p-4 mb-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3" style={{ background: cardBg }}>
+        <div className="card-flat p-4 mb-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <CandidatePicker
             label="A"
             value={candA.id}
@@ -261,14 +273,14 @@ export default function CompareView() {
         </div>
 
         {sameCandidate && (
-          <div className="rounded-xl p-4 mb-6 text-[13px]" style={{ background: cardBg, color: "var(--text-muted)" }}>
+          <div className="card-flat p-4 mb-6 text-[13px]" style={{ color: "var(--text-muted)" }}>
             A and B are the same candidate - pick two different variants to see a diff.
           </div>
         )}
 
         {/* ── PLAIN-LANGUAGE "WHAT CHANGED" SUMMARY (always visible, primary) ── */}
-        <div className="rounded-xl p-5 mb-6" style={{ background: cardBg }}>
-          <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+        <div className="card-elevated p-6 mb-6">
+          <span className="label-caps block mb-2.5" style={{ color: "var(--accent-bright)", opacity: 1 }}>
             What changed
           </span>
           <p className="text-[14px] leading-relaxed mb-1" style={{ color: "var(--text-primary)" }}>
@@ -310,7 +322,7 @@ export default function CompareView() {
 
         {/* ── BASE-LEVEL DIFF (collapsed by default - simple first) ── */}
         {!sameCandidate && diff && (
-          <div className="rounded-xl overflow-hidden mb-6" style={{ background: cardBg }}>
+          <div className="card-flat overflow-hidden mb-6">
             <button
               onClick={() => setShowDiff((v) => !v)}
               aria-expanded={showDiff}
@@ -400,8 +412,8 @@ export default function CompareView() {
         )}
 
         {/* ── SCORE DELTA TABLE ── */}
-        <div className="rounded-xl p-5 mb-6" style={{ background: cardBg }}>
-          <span className="text-[11px] font-medium uppercase tracking-wider block mb-1" style={{ color: "var(--text-muted)" }}>Score comparison</span>
+        <div className="card-elevated p-6 mb-6">
+          <span className="label-caps block mb-1.5">Score comparison</span>
           <p className="text-[11px] mb-4" style={{ color: "var(--text-faint)" }}>
             Head-to-head metrics. Off-target is inverted, so lower is better. These are composition and motif heuristics, not clinical scores.
           </p>
@@ -456,11 +468,11 @@ export default function CompareView() {
         </div>
 
         {/* ── STRUCTURE COMPARISON: candidate A vs candidate B ── */}
-        <div className="rounded-xl overflow-hidden" style={{ background: cardBg }}>
-          <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+        <div className="card-elevated overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3.5" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
             <Box size={14} style={{ color: "var(--accent)" }} />
-            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-              3D Structure - Candidate A vs Candidate B
+            <span className="label-caps">
+              3D structure - Candidate A vs Candidate B
             </span>
           </div>
           <div className="grid grid-cols-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
