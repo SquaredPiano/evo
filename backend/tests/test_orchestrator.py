@@ -4,7 +4,6 @@ import pytest
 
 import pipeline.orchestrator as orchestrator
 from pipeline.orchestrator import (
-    _filter_relevant_literature_hits,
     run_followup_pipeline,
     run_generation_pipeline,
 )
@@ -165,31 +164,6 @@ def _retrieval_with_pubmed(existing_articles: list[PubMedArticle]) -> RetrievalR
         pubmed=PubMedResult(query="BRCA1", articles=list(existing_articles), total_count=len(existing_articles)),
         clinvar=None,
     )
-
-
-class TestFilterRelevantLiteratureHits:
-    """Pure unit tests for the relevance filter, using the real observed score
-    ranges from the local-hash embedder (see the constants' comments)."""
-
-    def test_empty_hits_returns_empty(self):
-        assert _filter_relevant_literature_hits([]) == []
-
-    def test_strong_top_hit_keeps_hits_within_relative_cutoff(self):
-        hits = [{"score": 0.669}, {"score": 0.624}, {"score": 0.583}, {"score": 0.20}]
-        kept = _filter_relevant_literature_hits(hits)
-        # top=0.669, cutoff=0.669*0.7=0.468 -> first three pass, last does not.
-        assert [h["score"] for h in kept] == [0.669, 0.624, 0.583]
-
-    def test_weak_top_hit_excludes_everything(self):
-        """Real observed case: an off-topic query, still gene-filtered, whose
-        best hit only reaches ~0.49 - below the absolute floor, so nothing
-        should be cited even though the relative gap between hits is small."""
-        hits = [{"score": 0.4923}, {"score": 0.4917}, {"score": 0.4751}]
-        assert _filter_relevant_literature_hits(hits) == []
-
-    def test_floor_boundary_is_inclusive_just_above_and_exclusive_just_below(self):
-        assert _filter_relevant_literature_hits([{"score": 0.55}]) == [{"score": 0.55}]
-        assert _filter_relevant_literature_hits([{"score": 0.549}]) == []
 
 
 @pytest.mark.asyncio

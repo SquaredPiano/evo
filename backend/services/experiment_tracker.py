@@ -53,6 +53,90 @@ class ExperimentVersion:
 
 
 # ---------------------------------------------------------------------------
+# Novel-region extraction (edit-history signal)
+# ---------------------------------------------------------------------------
+#
+# There is no per-region novelty score to gate on: CandidateScores.novelty
+# (models/domain.py) is a single whole-candidate float, not per-position, so
+# it can't tell "this span is novel" from "that span is untouched". The
+# session's own edit/regenerate history is used instead - it already tracks
+# real per-coordinate spans for every operation that has an addressable one.
+
+
+def novel_regions_from_versions(versions: list[ExperimentVersion]) -> list[tuple[int, int]]:
+    """Derive the [start, end) spans a session's edit history actually touched.
+
+    Only operations that carry a genuine coordinate span *in the current
+    sequence* contribute a region:
+
+    - A base edit (``/api/edit/base``, ``operation_details={"position": ...}``,
+      no nested ``scope``) - treated as the one-base span ``[position, position+1)``.
+    - An agent ``insert_bases`` tool call (``scope="insert"``) - the span the
+      newly inserted bases occupy: ``[position, position+inserted_length)``.
+    - An agent ``regenerate_region`` tool call (``scope="regenerate"``) - the
+      regenerated span in the (possibly length-changed) new sequence:
+      ``[start, new_region_end)``.
+
+    Deliberately excluded, because neither has an addressable span in the
+    *current* sequence:
+
+    - ``scope="delete"`` - the deleted span no longer exists.
+    - ``scope="transform"`` (e.g. codon optimization, "replace all X") - a
+      whole-candidate change with no sub-span; gating on it would just
+      re-derive the whole-candidate case this function exists to avoid.
+    - The hill-climbing optimizer (``mode="hill_climb"``, no ``scope`` key -
+      see ``tool_optimize`` in services/agent/tools.py) applies MULTIPLE
+      independent single-base edits per call, one per round, nested in
+      ``operation_details["mutations"]`` (each with its own ``"position"``).
+      Every round's position contributes its own one-base span.
+
+    Returns spans **merged**: overlapping or adjacent edits collapse into one
+    span so re-editing the same region twice doesn't produce duplicate,
+    overlapping literature lookups.
+    """
+    spans: list[tuple[int, int]] = []
+    for version in versions:
+        details = version.operation_details or {}
+        scope = details.get("scope")
+        if details.get("mode") == "hill_climb":
+            for mutation in details.get("mutations") or []:
+                position = mutation.get("position") if isinstance(mutation, dict) else None
+                if isinstance(position, int):
+                    spans.append((position, position + 1))
+            continue
+        start: Any = None
+        end: Any = None
+        if scope == "regenerate":
+            start = details.get("start")
+            end = details.get("new_region_end", details.get("end"))
+        elif scope == "insert":
+            position = details.get("position")
+            length = details.get("inserted_length")
+            if isinstance(position, int) and isinstance(length, int):
+                start, end = position, position + length
+        elif scope in ("delete", "transform"):
+            continue
+        elif scope is None and "position" in details:
+            position = details.get("position")
+            if isinstance(position, int):
+                start, end = position, position + 1
+        if isinstance(start, int) and isinstance(end, int) and end > start:
+            spans.append((start, end))
+
+    if not spans:
+        return []
+    spans.sort()
+    merged: list[tuple[int, int]] = [spans[0]]
+    for start, end in spans[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+# ---------------------------------------------------------------------------
 # Version diff
 # ---------------------------------------------------------------------------
 

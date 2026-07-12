@@ -16,7 +16,7 @@ from pipeline.intent_parser import parse_intent
 from pipeline.explanation import generate_explanation
 from pipeline.retrieval import RetrievalResult, retrieve_context
 from services.evo2 import Evo2Service
-from services.literature_index import LiteratureIndex
+from services.literature_index import LiteratureIndex, filter_relevant_hits
 from services.pubmed import PubMedArticle, PubMedResult
 from services.regeneration import (
     parse_generation_constraints,
@@ -901,35 +901,6 @@ async def _emit_intent(manager: WebSocketManager, session_id: str, goal: str) ->
     return spec
 
 
-# Relative cutoff: keep hits within 30% of the best match for THIS query.
-# Starting point, not a fixed rule - tune once more real queries are observed.
-_LITERATURE_RELATIVE_CUTOFF = 0.7
-# Absolute floor: a relative cutoff alone can't tell "everything returned is
-# strong" from "everything returned is equally weak" - an irrelevant query
-# still has a top hit, just a mediocre one. Calibrated against this index's
-# actual local-hash-embedder scores: a genuinely relevant BRCA1 query's top
-# hit lands ~0.62-0.67; a plainly unrelated query (still gene-filtered to
-# BRCA1) tops out ~0.49. 0.55 sits between the two with margin either way.
-# Re-check this if EMBEDDING_API_KEY switches the index to a real embedder -
-# cosine scores from a different embedder aren't on the same scale.
-_LITERATURE_ABSOLUTE_FLOOR = 0.55
-
-
-def _filter_relevant_literature_hits(
-    hits: list[dict[str, object]],
-) -> list[dict[str, object]]:
-    """Keep hits that are both close to the best match and absolutely strong
-    enough. A weak top hit means nothing in the batch is genuinely relevant -
-    never cite the "least bad" option just because it was the closest match."""
-    if not hits:
-        return []
-    top_score = max(float(h.get("score", 0.0) or 0.0) for h in hits)
-    if top_score < _LITERATURE_ABSOLUTE_FLOOR:
-        return []
-    cutoff = top_score * _LITERATURE_RELATIVE_CUTOFF
-    return [h for h in hits if float(h.get("score", 0.0) or 0.0) >= cutoff]
-
-
 def _literature_hit_to_article(hit: dict[str, object]) -> PubMedArticle:
     """Adapt a LiteratureIndex.search() hit into the same shape search_literature()
     articles already have, so the frontend/agent-chat path needs no changes."""
@@ -973,7 +944,7 @@ async def _emit_retrieval(
             search_result = await literature_index.search(
                 spec.target_gene or "", k=5, gene=spec.target_gene
             )
-            relevant_hits = _filter_relevant_literature_hits(search_result.hits)
+            relevant_hits = filter_relevant_hits(search_result.hits)
             if relevant_hits:
                 existing_pmids = (
                     {a.pmid for a in result.pubmed.articles if a.pmid}

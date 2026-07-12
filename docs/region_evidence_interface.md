@@ -47,7 +47,10 @@ Request body:
   "region_start": 0,            // optional, default 0
   "region_end": null,           // optional, default = len(sequence)
   "max_variants": 25,           // optional, 1..100
-  "include_clinvar": true       // optional; false skips the ClinVar network call
+  "include_clinvar": true,      // optional; false skips the ClinVar network call
+  "include_literature": true,   // optional; false skips the literature RAG lookup
+  "session_id": null,           // optional; enables edit-history-gated literature (see §5)
+  "candidate_id": 0             // optional, default 0; which candidate's edit history to read
 }
 ```
 
@@ -121,9 +124,9 @@ embedder when `EMBEDDING_API_KEY` is set, else a deterministic local
 feature-hashing embedder) → `services/literature_index.py::LiteratureIndex`
 stores them (MongoDB Atlas `$vectorSearch` when reachable, in-memory cosine
 fallback otherwise) → `LiteratureRagProvider.fetch()` queries the index per
-region and condenses each hit's abstract via
-`services/evidence_synthesis.py::synthesize_detail` (Gemini, with a
-truncated-abstract fallback) into the `detail` field.
+region, applies the shared relevance filter (below), and condenses each
+surviving hit's abstract via `services/evidence_synthesis.py::synthesize_detail`
+(Gemini, with a truncated-abstract fallback) into the `detail` field.
 
 To populate the index for a gene, run from `backend/`:
 ```bash
@@ -132,6 +135,60 @@ python -m scripts.ingest_literature BRCA1
 
 The Protocol below remains a generic seam - a different index or retrieval
 strategy can implement it the same way and merge in without any UI change.
+
+### Shared relevance filter
+
+`services/literature_index.py::filter_relevant_hits` (with constants
+`LITERATURE_ABSOLUTE_FLOOR = 0.55` and `LITERATURE_RELATIVE_CUTOFF = 0.7`) is
+the **one** relevance bar both literature surfaces apply - this hover-card
+path (`LiteratureRagProvider.fetch`) and the chat-retrieval path
+(`pipeline/orchestrator.py::_emit_retrieval`, see `docs/vector_search.md`'s
+"Chat retrieval integration"). It used to be a private copy inside
+`orchestrator.py`; it moved here so the two surfaces can't silently drift to
+different bars. A weak top hit means nothing in the batch is genuinely
+relevant - neither surface will cite/show the "least bad" option just because
+it was the closest match.
+
+### Per-region gating (edit history, not a per-region novelty score)
+
+Literature is bound to the regions Evo2 actually made novel, not shown
+identically across the whole sequence. There is no per-region novelty score to
+gate on - `CandidateScores.novelty` (`backend/models/domain.py`) is a single
+whole-candidate float, not per-position - so this reads the session's own
+edit/regenerate history instead, via
+`services/experiment_tracker.py::novel_regions_from_versions`:
+
+- A base edit (`POST /api/edit/base`) contributes its one-base span.
+- An agent `insert_bases` tool call contributes the inserted span.
+- An agent `regenerate_region` tool call contributes the regenerated span
+  (using the length-adjusted `new_region_end`, not the original `end`).
+- The agent's hill-climbing optimizer (`optimize_candidate`, no `scope` key -
+  positions are nested per-round in `operation_details["mutations"]`)
+  contributes one one-base span per round.
+- `delete`, whole-candidate `transform` (codon optimization, "replace all X"),
+  and `restore_sequence` (which records only a *count* of changed positions,
+  not their coordinates) contribute **no** span - none has an addressable
+  range in the current sequence to bind evidence to.
+- Overlapping/adjacent spans are merged, so re-editing the same region twice
+  doesn't produce duplicate literature lookups.
+
+`region_evidence()` in `backend/main.py` builds **one `RegionQuery` per novel
+span** (intersected with the requested `[region_start, region_end)` window),
+not one blanket query over the whole sequence. A window with no novel span
+inside it gets zero literature evidence - the correct, honest result, not a
+fallback to generic gene-wide papers.
+
+This requires knowing *which* session/candidate to read edit history from:
+`RegionEvidenceRequest` gained `session_id` (optional) and `candidate_id`
+(default `0`). **Without `session_id`, there is no known novel region, so
+literature comes back empty** - today, `frontend/lib/store.ts`'s
+`loadRegionEvidence(sequence, gene)` does not pass `session_id`/
+`activeCandidateId` (both already exist in the store) through to
+`fetchRegionEvidence`. Wiring that one call site is a small, separate frontend
+change, deliberately left undone here - everything on the backend is
+implemented and tested (`backend/tests/test_region_evidence.py`'s
+`TestPerRegionLiteratureGating`) by calling the endpoint directly with
+`session_id` set, exactly as a frontend that passes it through would.
 
 ### Protocol
 
@@ -178,9 +235,13 @@ returns an awaitable, isolates per-region failures, and forces
 ### Where it's called
 
 Wired into the HTTP endpoint only: `region_evidence()` in `backend/main.py`
-builds a `RegionQuery` from the request span after `assemble_region_evidence(...)`
-and merges in `await attach_literature_evidence([query], literature_rag_provider)`.
-Gated by `RegionEvidenceRequest.include_literature` (default `True`).
+builds one `RegionQuery` per novel span (see above) after
+`assemble_region_evidence(...)` and merges in
+`await attach_literature_evidence(literature_queries, literature_rag_provider)`
+- a list, not a single query, so `attach_literature_evidence`'s existing
+per-region iteration does the fetching. Gated by
+`RegionEvidenceRequest.include_literature` (default `True`) *and* by there
+being at least one novel span to query.
 
 Deliberately **not** added to the WS emission (`orchestrator._emit_structure`,
 which emits `region_evidence_ready`) - that path stays regulatory-only by

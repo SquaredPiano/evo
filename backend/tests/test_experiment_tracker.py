@@ -27,6 +27,7 @@ from services.experiment_tracker import (
     ExperimentVersionNotFoundError,
     VersionDiff,
     _diff_sequences,
+    novel_regions_from_versions,
 )
 from services.session_store import MemorySessionStore
 
@@ -737,3 +738,133 @@ class TestAutoRecording:
         last = versions[-1]
         second_last = versions[-2]
         assert last["parent_version_id"] == second_last["version_id"]
+
+
+# ---------------------------------------------------------------------------
+# novel_regions_from_versions - the edit-history signal for literature gating
+# ---------------------------------------------------------------------------
+
+
+def _mk_version(operation_details: dict, operation: str = "edit") -> ExperimentVersion:
+    return ExperimentVersion(
+        version_id="v1",
+        session_id="s1",
+        candidate_id=0,
+        sequence="A" * 100,
+        scores={},
+        operation=operation,
+        operation_details=operation_details,
+        timestamp="2026-01-01T00:00:00+00:00",
+    )
+
+
+class TestNovelRegionsFromVersions:
+    def test_no_versions_returns_empty(self):
+        assert novel_regions_from_versions([]) == []
+
+    def test_plain_base_edit_becomes_one_base_span(self):
+        versions = [_mk_version({"position": 10, "ref_base": "A", "new_base": "G"})]
+        assert novel_regions_from_versions(versions) == [(10, 11)]
+
+    def test_insert_scope_uses_position_and_length(self):
+        versions = [_mk_version(
+            {"scope": "insert", "position": 20, "inserted_bases": "GATTACA", "inserted_length": 7}
+        )]
+        assert novel_regions_from_versions(versions) == [(20, 27)]
+
+    def test_regenerate_scope_uses_start_and_new_region_end(self):
+        """new_region_end, not the original end - the regenerated region may
+        have changed length, so the span must reflect the NEW sequence."""
+        versions = [_mk_version(
+            {"scope": "regenerate", "start": 30, "end": 40, "new_region_end": 45}
+        )]
+        assert novel_regions_from_versions(versions) == [(30, 45)]
+
+    def test_regenerate_scope_falls_back_to_end_if_new_region_end_missing(self):
+        versions = [_mk_version({"scope": "regenerate", "start": 30, "end": 40})]
+        assert novel_regions_from_versions(versions) == [(30, 40)]
+
+    def test_delete_scope_contributes_no_span(self):
+        """The deleted span no longer exists in the current sequence - there
+        is nothing to attach evidence to."""
+        versions = [_mk_version({"scope": "delete", "start": 5, "end": 15})]
+        assert novel_regions_from_versions(versions) == []
+
+    def test_transform_scope_contributes_no_span(self):
+        """A whole-candidate transform (e.g. codon optimization) has no
+        addressable sub-span - gating on it would just re-derive the
+        whole-candidate case this function exists to avoid."""
+        versions = [_mk_version(
+            {"scope": "transform", "mode": "codon_optimize"}, operation="transform"
+        )]
+        assert novel_regions_from_versions(versions) == []
+
+    def test_hill_climb_mode_contributes_one_span_per_round(self):
+        """tool_optimize's hill-climbing mode has no "scope" key at all -
+        each round is an independent single-base edit nested in
+        operation_details["mutations"], not a top-level position/scope."""
+        versions = [_mk_version({
+            "mode": "hill_climb",
+            "objective": "functional",
+            "rounds_used": 3,
+            "mutations": [
+                {"round": 1, "position": 5, "ref_base": "A", "new_base": "G", "objective_delta": 0.01},
+                {"round": 2, "position": 40, "ref_base": "T", "new_base": "C", "objective_delta": 0.02},
+                {"round": 3, "position": 41, "ref_base": "A", "new_base": "T", "objective_delta": 0.01},
+            ],
+        })]
+        # position 40 and 41 are adjacent -> merged; position 5 stays separate.
+        assert novel_regions_from_versions(versions) == [(5, 6), (40, 42)]
+
+    def test_hill_climb_with_no_mutations_contributes_no_span(self):
+        """rounds_used == 0 (converged immediately, nothing improved)."""
+        versions = [_mk_version({
+            "mode": "hill_climb", "objective": "functional",
+            "rounds_used": 0, "mutations": [],
+        })]
+        assert novel_regions_from_versions(versions) == []
+
+    def test_whole_sequence_transform_mode_contributes_no_span(self):
+        """tool_transform (e.g. "replace all T") sets mutation={"mode": mode}
+        with no scope and no position - a whole-candidate change, same
+        no-addressable-span reasoning as codon optimization."""
+        versions = [_mk_version({"mode": "all_t"})]
+        assert novel_regions_from_versions(versions) == []
+
+    def test_restore_mode_contributes_no_span(self):
+        """tool_restore records only a COUNT of changed positions
+        ("changed_positions": int), not the actual coordinates - there is
+        nothing to bind evidence to even though positions did change."""
+        versions = [_mk_version({"mode": "restore_sequence", "changed_positions": 12})]
+        assert novel_regions_from_versions(versions) == []
+
+    def test_malformed_operation_details_are_skipped_not_raised(self):
+        versions = [
+            _mk_version({}),
+            _mk_version({"scope": "insert", "position": "not-an-int", "inserted_length": 5}),
+            _mk_version({"scope": "regenerate"}),  # missing start/end entirely
+        ]
+        assert novel_regions_from_versions(versions) == []
+
+    def test_overlapping_edits_are_merged(self):
+        versions = [
+            _mk_version({"position": 10}),  # [10, 11)
+            _mk_version({"scope": "regenerate", "start": 8, "end": 12, "new_region_end": 12}),  # [8, 12)
+        ]
+        assert novel_regions_from_versions(versions) == [(8, 12)]
+
+    def test_disjoint_edits_stay_separate(self):
+        versions = [
+            _mk_version({"position": 10}),
+            _mk_version({"position": 50}),
+        ]
+        assert novel_regions_from_versions(versions) == [(10, 11), (50, 51)]
+
+    def test_adjacent_spans_are_merged(self):
+        """[10, 11) and [11, 12) touch exactly at the boundary - treated as
+        one continuous edited region, not two separate one-base spans."""
+        versions = [
+            _mk_version({"position": 10}),
+            _mk_version({"position": 11}),
+        ]
+        assert novel_regions_from_versions(versions) == [(10, 12)]

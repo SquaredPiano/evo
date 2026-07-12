@@ -16,9 +16,42 @@ import pytest
 
 from config import settings
 from services.embeddings import LocalHashEmbedder
-from services.literature_index import LiteratureIndex, LiteratureRagProvider
+from services.literature_index import (
+    LiteratureIndex,
+    LiteratureRagProvider,
+    SearchResult,
+    filter_relevant_hits,
+)
 from services.pubmed import PubMedArticle, PubMedResult
 from services.region_evidence import RegionQuery
+
+
+class TestFilterRelevantHits:
+    """Pure unit tests for the relevance filter shared by the chat-retrieval
+    path (pipeline/orchestrator.py::_emit_retrieval) and the region-evidence
+    hover-card path (LiteratureRagProvider.fetch, below) - using the real
+    observed score ranges from the local-hash embedder (see the constants'
+    comments in services/literature_index.py)."""
+
+    def test_empty_hits_returns_empty(self):
+        assert filter_relevant_hits([]) == []
+
+    def test_strong_top_hit_keeps_hits_within_relative_cutoff(self):
+        hits = [{"score": 0.669}, {"score": 0.624}, {"score": 0.583}, {"score": 0.20}]
+        kept = filter_relevant_hits(hits)
+        # top=0.669, cutoff=0.669*0.7=0.468 -> first three pass, last does not.
+        assert [h["score"] for h in kept] == [0.669, 0.624, 0.583]
+
+    def test_weak_top_hit_excludes_everything(self):
+        """Real observed case: an off-topic query, still gene-filtered, whose
+        best hit only reaches ~0.49 - below the absolute floor, so nothing
+        should be cited even though the relative gap between hits is small."""
+        hits = [{"score": 0.4923}, {"score": 0.4917}, {"score": 0.4751}]
+        assert filter_relevant_hits(hits) == []
+
+    def test_floor_boundary_is_inclusive_just_above_and_exclusive_just_below(self):
+        assert filter_relevant_hits([{"score": 0.55}]) == [{"score": 0.55}]
+        assert filter_relevant_hits([{"score": 0.549}]) == []
 
 
 @pytest.fixture(autouse=True)
@@ -53,6 +86,22 @@ BRCA1_ARTICLE = {
     "journal": "Nature Genetics",
     "gene": "BRCA1",
 }
+def _brca1_hit(score: float) -> dict:
+    """A search hit at a caller-controlled score. Used to test fetch()'s
+    filter-application logic in isolation from LocalHashEmbedder's actual
+    cosine output, which - for a single-word query against a small, synthetic
+    test corpus - doesn't reliably land in the same range as the real,
+    multi-document production index the filter's floor was calibrated
+    against (see LITERATURE_ABSOLUTE_FLOOR's comment)."""
+    return {
+        "doc_id": "pmid:40000001", "title": BRCA1_ARTICLE["title"],
+        "abstract": BRCA1_ARTICLE["abstract"], "score": score,
+        "pmid": "40000001", "gene": "BRCA1", "year": "2025",
+        "journal": "Nature Genetics",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/40000001/", "source": "pubmed",
+    }
+
+
 UNRELATED_ARTICLE = {
     "pmid": "40000002",
     "title": "Photosynthetic efficiency in engineered cyanobacteria",
@@ -162,7 +211,10 @@ class TestLiteratureRagProvider:
 
     @pytest.mark.asyncio
     async def test_fetch_binds_coordinates_and_forces_literature_tag(self, index: LiteratureIndex):
-        await index.index_articles([BRCA1_ARTICLE])
+        async def fake_search(query, *, k=5, gene=None):
+            return SearchResult(hits=[_brca1_hit(score=0.9)], backend="memory")
+
+        index.search = fake_search
         provider = LiteratureRagProvider(index, k=1)
         query = RegionQuery(start=100, end=250, sequence="A" * 300, gene="BRCA1")
         out = await provider.fetch(query)
@@ -179,10 +231,25 @@ class TestLiteratureRagProvider:
     async def test_detail_comes_from_synthesize_detail_fallback(self, index: LiteratureIndex):
         """With no Gemini key configured, detail is the deterministic truncated
         abstract, not the raw un-truncated abstract and not a hardcoded snippet."""
-        await index.index_articles([BRCA1_ARTICLE])
+        async def fake_search(query, *, k=5, gene=None):
+            return SearchResult(hits=[_brca1_hit(score=0.9)], backend="memory")
+
+        index.search = fake_search
         provider = LiteratureRagProvider(index, k=1)
         out = await provider.fetch(RegionQuery(start=0, end=10, sequence="A" * 10, gene="BRCA1"))
         assert out[0].detail == BRCA1_ARTICLE["abstract"]  # short enough to pass through verbatim
+
+    @pytest.mark.asyncio
+    async def test_fetch_excludes_hits_below_the_shared_relevance_floor(self, index: LiteratureIndex):
+        """The same filter the chat path applies also gates the hover-card
+        path - a weak match must not surface as a citation here either."""
+        async def fake_search(query, *, k=5, gene=None):
+            return SearchResult(hits=[_brca1_hit(score=0.49)], backend="memory")
+
+        index.search = fake_search
+        provider = LiteratureRagProvider(index, k=1)
+        out = await provider.fetch(RegionQuery(start=0, end=10, sequence="A" * 10, gene="BRCA1"))
+        assert out == []
 
     @pytest.mark.asyncio
     async def test_no_matching_hits_returns_empty(self, index: LiteratureIndex):

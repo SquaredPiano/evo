@@ -230,6 +230,20 @@ class TestEndpoint:
         assert resp.status_code == 200
         assert resp.json()["items"] == []
 
+    @staticmethod
+    def _bootstrap_with_one_edit(client: TestClient, session_id: str, sequence: str, position: int) -> None:
+        """Set up a session/candidate with exactly one edited position, so
+        novel_regions_from_versions has something to gate on."""
+        client.post(
+            "/api/session/bootstrap",
+            json={"session_id": session_id, "candidate_id": 0, "sequence": sequence},
+        )
+        new_base = "C" if sequence[position].upper() != "C" else "G"
+        client.post("/api/edit/base", json={
+            "session_id": session_id, "candidate_id": 0,
+            "position": position, "new_base": new_base,
+        })
+
     def test_endpoint_merges_literature_from_rag_provider(self, monkeypatch):
         """The endpoint wires the RAG seam in: a provider hit shows up as a
         source="literature" item alongside regulatory evidence, not a separate
@@ -251,9 +265,15 @@ class TestEndpoint:
         monkeypatch.setattr(main, "literature_rag_provider", FakeProvider())
         client = TestClient(app)
         seq = "TATAAA" + "G" * 40
+        session_id = "session-merge-literature"
+        self._bootstrap_with_one_edit(client, session_id, seq, position=10)
+
         resp = client.post(
             "/api/region-evidence",
-            json={"sequence": seq, "gene": "BRCA1", "include_clinvar": False},
+            json={
+                "sequence": seq, "gene": "BRCA1", "include_clinvar": False,
+                "session_id": session_id, "candidate_id": 0,
+            },
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -273,16 +293,25 @@ class TestEndpoint:
 
         monkeypatch.setattr(main, "literature_rag_provider", TrackingProvider())
         client = TestClient(app)
+        seq = "TATAAA" + "G" * 40
+        session_id = "session-literature-flag-off"
+        self._bootstrap_with_one_edit(client, session_id, seq, position=10)
+
         resp = client.post(
             "/api/region-evidence",
             json={
-                "sequence": "TATAAA" + "G" * 40,
+                "sequence": seq,
                 "gene": "BRCA1",
                 "include_clinvar": False,
                 "include_literature": False,
+                "session_id": session_id,
+                "candidate_id": 0,
             },
         )
         assert resp.status_code == 200
+        # Edit history exists (session_id set, one edit recorded) - proves it
+        # was include_literature=False that skipped the call, not the absence
+        # of any known novel region.
         assert calls == []
 
     def test_endpoint_literature_provider_failure_degrades_gracefully(self, monkeypatch):
@@ -293,9 +322,15 @@ class TestEndpoint:
         monkeypatch.setattr(main, "literature_rag_provider", BoomProvider())
         client = TestClient(app)
         seq = "TATAAA" + "G" * 40
+        session_id = "session-literature-provider-boom"
+        self._bootstrap_with_one_edit(client, session_id, seq, position=10)
+
         resp = client.post(
             "/api/region-evidence",
-            json={"sequence": seq, "gene": "BRCA1", "include_clinvar": False},
+            json={
+                "sequence": seq, "gene": "BRCA1", "include_clinvar": False,
+                "session_id": session_id, "candidate_id": 0,
+            },
         )
         assert resp.status_code == 200
         body = resp.json()
@@ -315,15 +350,128 @@ class TestEndpoint:
 
         monkeypatch.setattr(main, "literature_rag_provider", RecordingProvider())
         client = TestClient(app)
+        sequence = "A" * 30
+        session_id = "session-literature-out-of-range"
+        self._bootstrap_with_one_edit(client, session_id, sequence, position=5)
+
         resp = client.post(
             "/api/region-evidence",
             json={
-                "sequence": "A" * 30,
+                "sequence": sequence,
                 "gene": "BRCA1",
                 "region_start": 1000,
                 "include_clinvar": False,
+                "session_id": session_id,
+                "candidate_id": 0,
             },
         )
         assert resp.status_code == 200
         # Out of range once clamped to [0, len(sequence)) -> start >= end -> skipped entirely.
         assert seen_queries == []
+
+
+class TestPerRegionLiteratureGating:
+    """Literature is gated to regions the session's edit history actually
+    touched (services.experiment_tracker.novel_regions_from_versions), not a
+    single blanket query over the whole sequence."""
+
+    def test_literature_bound_to_edited_regions_only(self, monkeypatch):
+        seen_queries: list[tuple[int, int]] = []
+
+        class RecordingProvider:
+            def fetch(self, query):
+                seen_queries.append((query.start, query.end))
+                return [
+                    RegionEvidence(
+                        start=query.start, end=query.end,
+                        source="literature", kind="paper",
+                        title=f"Paper for [{query.start},{query.end})",
+                        url="https://pubmed.ncbi.nlm.nih.gov/1/",
+                        identifier="1",
+                    )
+                ]
+
+        monkeypatch.setattr(main, "literature_rag_provider", RecordingProvider())
+
+        client = TestClient(app)
+        session_id = "session-region-gating"
+        sequence = "A" * 200
+
+        client.post(
+            "/api/session/bootstrap",
+            json={"session_id": session_id, "candidate_id": 0, "sequence": sequence},
+        )
+        # Two disjoint base edits: near position 20 and near position 150.
+        client.post("/api/edit/base", json={
+            "session_id": session_id, "candidate_id": 0, "position": 20, "new_base": "G",
+        })
+        client.post("/api/edit/base", json={
+            "session_id": session_id, "candidate_id": 0, "position": 150, "new_base": "T",
+        })
+
+        resp = client.post("/api/region-evidence", json={
+            "sequence": sequence, "session_id": session_id, "candidate_id": 0,
+            "include_clinvar": False,
+        })
+        assert resp.status_code == 200
+        body = resp.json()
+
+        # Exactly two literature queries, bound to the two edited spans - not
+        # one blanket query over the whole 200bp sequence.
+        assert sorted(seen_queries) == [(20, 21), (150, 151)]
+
+        literature_items = [i for i in body["items"] if i["source"] == "literature"]
+        assert sorted(i["start"] for i in literature_items) == [20, 150]
+
+    def test_untouched_region_gets_no_literature(self, monkeypatch):
+        """A requested window that doesn't overlap any edited span gets zero
+        literature - the correct, honest result, not a fallback to
+        gene-wide papers."""
+        calls: list[object] = []
+
+        class RecordingProvider:
+            def fetch(self, query):
+                calls.append(query)
+                return [RegionEvidence(start=query.start, end=query.end, source="literature", kind="paper", title="x")]
+
+        monkeypatch.setattr(main, "literature_rag_provider", RecordingProvider())
+
+        client = TestClient(app)
+        session_id = "session-region-gating-untouched"
+        sequence = "A" * 200
+
+        client.post(
+            "/api/session/bootstrap",
+            json={"session_id": session_id, "candidate_id": 0, "sequence": sequence},
+        )
+        client.post("/api/edit/base", json={
+            "session_id": session_id, "candidate_id": 0, "position": 20, "new_base": "G",
+        })
+
+        # Ask only about a window nowhere near the edit.
+        resp = client.post("/api/region-evidence", json={
+            "sequence": sequence, "session_id": session_id, "candidate_id": 0,
+            "region_start": 100, "region_end": 120, "include_clinvar": False,
+        })
+        assert resp.status_code == 200
+        assert calls == []
+        assert all(i["source"] != "literature" for i in resp.json()["items"])
+
+    def test_no_session_id_means_no_literature(self, monkeypatch):
+        """Without a session_id there is no known novel region - honest
+        empty, not a fallback to whole-gene literature."""
+        calls: list[object] = []
+
+        class RecordingProvider:
+            def fetch(self, query):
+                calls.append(query)
+                return []
+
+        monkeypatch.setattr(main, "literature_rag_provider", RecordingProvider())
+        client = TestClient(app)
+        resp = client.post("/api/region-evidence", json={
+            "sequence": "A" * 50, "gene": "BRCA1", "include_clinvar": False,
+        })
+        assert resp.status_code == 200
+        assert calls == []
+        assert all(i["source"] != "literature" for i in resp.json()["items"])

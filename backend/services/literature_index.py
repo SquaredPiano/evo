@@ -38,6 +38,42 @@ from services.region_evidence import RegionEvidence, RegionQuery
 logger = logging.getLogger("evo")
 
 
+# ---------------------------------------------------------------------------
+# Relevance filter - shared by the chat-retrieval path
+# (pipeline/orchestrator.py::_emit_retrieval) and the region-evidence
+# hover-card path (LiteratureRagProvider.fetch, below), so both surfaces cite
+# the same bar of "relevant enough" instead of maintaining two copies of the
+# same numbers that can silently drift apart.
+# ---------------------------------------------------------------------------
+
+# Relative cutoff: keep hits within 30% of the best match for THIS query.
+# Starting point, not a fixed rule - tune once more real queries are observed.
+LITERATURE_RELATIVE_CUTOFF = 0.7
+# Absolute floor: a relative cutoff alone can't tell "everything returned is
+# strong" from "everything returned is equally weak" - an irrelevant query
+# still has a top hit, just a mediocre one. Calibrated against this index's
+# actual local-hash-embedder scores: a genuinely relevant BRCA1 query's top
+# hit lands ~0.62-0.67; a plainly unrelated query (still gene-filtered to
+# BRCA1) tops out ~0.49. 0.55 sits between the two with margin either way.
+# Re-check this if EMBEDDING_API_KEY switches the index to a real embedder -
+# cosine scores from a different embedder aren't on the same scale.
+LITERATURE_ABSOLUTE_FLOOR = 0.55
+
+
+def filter_relevant_hits(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep hits that are both close to the best match and absolutely strong
+    enough. A weak top hit means nothing in the batch is genuinely relevant -
+    never cite/show the "least bad" option just because it was the closest
+    match."""
+    if not hits:
+        return []
+    top_score = max(float(h.get("score", 0.0) or 0.0) for h in hits)
+    if top_score < LITERATURE_ABSOLUTE_FLOOR:
+        return []
+    cutoff = top_score * LITERATURE_RELATIVE_CUTOFF
+    return [h for h in hits if float(h.get("score", 0.0) or 0.0) >= cutoff]
+
+
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -372,13 +408,17 @@ class LiteratureRagProvider:
         # already run the ingestion script/pre-warm against.
         await self._index.ensure_indexed(query.gene)
         result = await self._index.search(text, k=self._k, gene=query.gene)
-        if not result.hits:
+        # Same relevance bar the chat-retrieval path applies (see
+        # filter_relevant_hits) - a weak match shouldn't show up as a hover-
+        # card citation any more than it should show up as a chat citation.
+        hits = filter_relevant_hits(result.hits)
+        if not hits:
             return []
 
         details = await asyncio.gather(
             *(
                 synthesize_detail(_hit_to_article(hit), gene=query.gene, label=query.label)
-                for hit in result.hits
+                for hit in hits
             )
         )
         return [
@@ -394,5 +434,5 @@ class LiteratureRagProvider:
                 score=hit["score"],
                 confidence=f"vector search ({result.backend})",
             )
-            for hit, detail in zip(result.hits, details)
+            for hit, detail in zip(hits, details)
         ]

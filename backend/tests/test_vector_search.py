@@ -23,7 +23,7 @@ from services.embeddings import (
     cosine_similarity,
     create_embedder,
 )
-from services.literature_index import LiteratureIndex, LiteratureRagProvider
+from services.literature_index import LiteratureIndex, LiteratureRagProvider, SearchResult
 from services.region_evidence import RegionEvidence, RegionQuery
 
 
@@ -240,6 +240,28 @@ class TestLiteratureRagProvider:
         await idx.index_articles([BRCA1_ARTICLE, CFTR_ARTICLE])
         provider = LiteratureRagProvider(idx, k=2)
         query = RegionQuery(start=10, end=40, sequence="ACGT" * 20, gene="BRCA1", label="BRCA1 breast cancer")
+
+        # fetch() now applies the shared relevance filter (filter_relevant_hits,
+        # services/literature_index.py) on top of the raw search - the same
+        # bar the chat-retrieval path applies. LocalHashEmbedder's cosine
+        # score for a short synthetic query against a two-document test index
+        # doesn't reliably clear that bar (it's calibrated against a real,
+        # larger production index - see the constants' comments), so the
+        # underlying search() call is stubbed here to isolate what this test
+        # actually checks: fetch()'s coordinate binding and RegionEvidence
+        # shaping, not LocalHashEmbedder's absolute score for this fixture.
+        async def fake_search(text, *, k=5, gene=None):
+            return SearchResult(
+                hits=[{
+                    "doc_id": "pmid:1001", "title": BRCA1_ARTICLE["title"],
+                    "abstract": BRCA1_ARTICLE["abstract"], "score": 0.9,
+                    "pmid": "1001", "gene": "BRCA1", "year": "", "journal": "",
+                    "url": "https://pubmed.ncbi.nlm.nih.gov/1001/", "source": "pubmed",
+                }],
+                backend="memory",
+            )
+
+        idx.search = fake_search
         evidence = await provider.fetch(query)
 
         assert evidence, "expected literature evidence"

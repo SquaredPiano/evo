@@ -180,6 +180,13 @@ class RegionEvidenceRequest(BaseModel):
     max_variants: int = Field(25, ge=1, le=100)
     include_clinvar: bool = Field(True, description="Set False to skip the ClinVar network fetch")
     include_literature: bool = Field(True, description="Set False to skip the literature RAG lookup")
+    session_id: str | None = Field(
+        None,
+        description="Session id for edit-history-gated literature: without it, "
+        "there is no known novel region, so literature comes back empty (honest, "
+        "not a fallback to generic gene-wide papers).",
+    )
+    candidate_id: int = Field(0, ge=0, description="Candidate whose edit history gates literature")
 
     @field_validator("sequence")
     @classmethod

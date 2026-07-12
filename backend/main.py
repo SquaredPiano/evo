@@ -72,6 +72,7 @@ from services.translation import find_orfs
 from services.experiment_tracker import (
     ExperimentTracker,
     ExperimentVersionNotFoundError,
+    novel_regions_from_versions,
 )
 from services.mongo_store import create_mongo_store
 from services.embeddings import create_embedder
@@ -750,6 +751,14 @@ async def region_evidence(request: RegionEvidenceRequest) -> dict[str, object]:
     per-base pathogenicity claim), regulatory motifs, and semantically-retrieved
     literature (post-2025 PubMed papers, vector-searched via literature_index -
     see services.region_evidence.attach_literature_evidence).
+
+    Literature is gated to regions Evo2 actually made novel: with a
+    ``session_id``, one RegionQuery is built per edited/regenerated span from
+    that candidate's experiment history (see
+    services.experiment_tracker.novel_regions_from_versions) instead of one
+    blanket query over the whole sequence - an untouched region correctly
+    gets zero literature evidence, not generic gene-wide papers. Without a
+    ``session_id`` there is no known novel region, so literature is empty.
     """
     from services.region_evidence import RegionQuery, assemble_region_evidence, attach_literature_evidence
 
@@ -770,17 +779,43 @@ async def region_evidence(request: RegionEvidenceRequest) -> dict[str, object]:
         include_clinvar=request.include_clinvar,
     )
 
+    literature_queries: list[RegionQuery] = []
     if request.include_literature and literature_start < literature_end:
-        query = RegionQuery(
-            start=literature_start,
-            end=literature_end,
-            sequence=request.sequence,
-            gene=request.gene,
-        )
-        # Independent I/O (ClinVar/regulatory vs. the literature RAG lookup) -
+        versions: list = []
+        if not request.session_id:
+            # Observability: distinguish "no session context, so no known
+            # novel region" from a genuine fetch failure below - both
+            # legitimately result in zero literature, but for different
+            # reasons. Expected to be the common case until the frontend
+            # caller is updated to pass session_id/candidate_id through (see
+            # docs/region_evidence_interface.md §5) - debug, not warning.
+            logger.debug("region-evidence: no session_id, skipping literature gating")
+        else:
+            try:
+                versions = await experiment_tracker.list_versions(
+                    request.session_id, candidate_id=request.candidate_id
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to load edit history for literature gating (session=%s)",
+                    request.session_id, exc_info=True,
+                )
+        for novel_start, novel_end in novel_regions_from_versions(versions):
+            span_start = max(novel_start, literature_start)
+            span_end = min(novel_end, literature_end)
+            if span_start < span_end:
+                literature_queries.append(
+                    RegionQuery(
+                        start=span_start, end=span_end,
+                        sequence=request.sequence, gene=request.gene,
+                    )
+                )
+
+    if literature_queries:
+        # Independent I/O (ClinVar/regulatory vs. the literature RAG lookups) -
         # run concurrently rather than paying the sum of both latencies.
         items, literature_items = await asyncio.gather(
-            assemble_task, attach_literature_evidence([query], literature_rag_provider)
+            assemble_task, attach_literature_evidence(literature_queries, literature_rag_provider)
         )
         items = sorted(items + literature_items, key=lambda e: (e.start, e.source))
     else:
