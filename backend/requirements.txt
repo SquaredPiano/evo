@@ -29,3 +29,13 @@ python-dotenv>=1.0.0
 
 # Agent state machine (LLM calls go through OpenRouter via services/llm.py)
 langgraph>=1.0.0
+
+# --- Bioinformatics (scientific correctness) ---
+# Biopython: sequence/PWM/motif utilities + JASPAR matrix parsing.
+biopython>=1.83
+# DNAChisel: constraint-based codon optimization (GC, restriction, repeats).
+dnachisel>=3.2.11
+# primer3-py: PCR/sequencing primer design + Tm (C extension).
+primer3-py>=2.0.0
+# ViennaRNA: RNA/DNA secondary structure (MFE, hairpins) (C bindings).
+ViennaRNA>=2.6.4
