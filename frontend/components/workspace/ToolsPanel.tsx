@@ -29,6 +29,7 @@ import {
   clinvarGeneUrl,
   pubmedGeneUrl,
 } from "@/lib/evidence";
+import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
 type Tab = "offtarget" | "codon" | "variants" | "validate" | "export";
 
@@ -167,9 +168,9 @@ export default function ToolsPanel() {
           </button>
           {offtarget && (
             <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
-              <div className="flex justify-between"><span>Repeat fraction</span><span className="font-mono">{(offtarget.repeat_fraction * 100).toFixed(1)}%</span></div>
+              <div className="flex justify-between"><span><ScienceTooltip term="repeat-fraction">Repeat fraction</ScienceTooltip></span><span className="font-mono">{(offtarget.repeat_fraction * 100).toFixed(1)}%</span></div>
               <div className="flex justify-between">
-                <span>GC balance risk</span>
+                <span><ScienceTooltip term="gc-balance-risk">GC balance risk</ScienceTooltip></span>
                 <span className="font-mono capitalize" style={{ color: RISK_COLOR[offtarget.gc_balance_risk] ?? "var(--text-muted)" }}>{offtarget.gc_balance_risk}</span>
               </div>
               <div className="pt-1" style={{ color: "var(--text-muted)" }}>{offtarget.hits.length} hit(s) vs known elements</div>
@@ -203,9 +204,9 @@ export default function ToolsPanel() {
           </button>
           {codon && (
             <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
-              <div className="flex justify-between"><span>CAI</span><span className="font-mono">{codon.original_cai.toFixed(3)} → {codon.optimized_cai.toFixed(3)}</span></div>
+              <div className="flex justify-between"><span><ScienceTooltip term="cai">CAI</ScienceTooltip></span><span className="font-mono">{codon.original_cai.toFixed(3)} → {codon.optimized_cai.toFixed(3)}</span></div>
               <div className="flex justify-between"><span>GC content</span><span className="font-mono">{(codon.gc_content_before * 100).toFixed(0)}% → {(codon.gc_content_after * 100).toFixed(0)}%</span></div>
-              <div className="flex justify-between"><span>Codons changed</span><span className="font-mono">{codon.codons_changed}/{codon.total_codons}</span></div>
+              <div className="flex justify-between"><span><ScienceTooltip term="codon">Codons</ScienceTooltip> changed</span><span className="font-mono">{codon.codons_changed}/{codon.total_codons}</span></div>
               <button
                 onClick={() => setEditedSequence(codon.optimized_sequence)}
                 className={btn}
@@ -314,7 +315,7 @@ export default function ToolsPanel() {
           {calibration && (
             <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
               <div className="flex justify-between">
-                <span>AUROC</span>
+                <span><ScienceTooltip term="auroc">AUROC</ScienceTooltip></span>
                 <span className="font-mono" style={{ color: calibration.auroc == null ? "var(--text-muted)" : calibration.auroc >= 0.7 ? "var(--accent)" : calibration.auroc >= 0.55 ? "var(--annotation-rrna)" : "var(--base-t)" }}>
                   {calibration.auroc == null ? "n/a" : calibration.auroc.toFixed(3)}
                 </span>
