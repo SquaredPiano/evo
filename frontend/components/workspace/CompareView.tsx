@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
+import { formatDelta } from "@/lib/format";
 import dynamic from "next/dynamic";
 import { useProteusStore } from "@/lib/store";
 import {
@@ -669,7 +670,7 @@ function HunkBlock({
               {hasScoreDeltas && c.scoreDelta !== undefined && (
                 <span style={{ color: c.scoreDelta > 0 ? "var(--accent)" : c.scoreDelta < 0 ? "var(--base-t)" : "var(--text-muted)" }}>
                   <ScienceTooltip term="log-likelihood">
-                    confidence {c.scoreDelta > 0 ? "+" : ""}{c.scoreDelta.toFixed(2)}
+                    confidence {c.scoreDelta > 0 ? "+" : ""}{formatDelta(c.scoreDelta)}
                   </ScienceTooltip>
                 </span>
               )}

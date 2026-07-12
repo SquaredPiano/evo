@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { formatDelta } from "@/lib/format";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MutationEffect, Nucleotide } from "@/types";
 import { useProteusStore } from "@/lib/store";
@@ -221,7 +222,7 @@ export default function MutationPanel({
                 }}
               >
                 {mutationEffect.deltaLikelihood > 0 ? "+" : ""}
-                {mutationEffect.deltaLikelihood.toFixed(2)}
+                {formatDelta(mutationEffect.deltaLikelihood)}
               </span>
               <span className="text-[11px] font-mono text-[var(--text-faint)]">
                 <ScienceTooltip term="delta-likelihood">delta log-likelihood</ScienceTooltip>

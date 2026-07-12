@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { formatDelta } from "@/lib/format";
 import type { MutationEffect } from "@/types";
 
 interface MutationDiffProps {
@@ -32,7 +33,7 @@ export default function MutationDiff({ effect }: MutationDiffProps) {
         </span>
         <span className="text-[11px] font-mono text-[var(--text-faint)]">
           {effect.deltaLikelihood > 0 ? "+" : ""}
-          {effect.deltaLikelihood.toFixed(2)}
+          {formatDelta(effect.deltaLikelihood)}
         </span>
       </div>
 
