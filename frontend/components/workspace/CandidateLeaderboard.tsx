@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useEvoStore } from "@/lib/store";
-import { ChevronRight, ArrowRight, GitCompare } from "lucide-react";
+import { ChevronRight, ArrowRight, GitCompare, SlidersHorizontal } from "lucide-react";
 import { motion } from "framer-motion";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 import ProvenanceBadge from "@/components/workspace/ProvenanceBadge";
@@ -18,6 +19,13 @@ function safetyLabel(offTarget: number): "Strong" | "Moderate" | "Risky" {
   return "Risky";
 }
 
+// Colour token per plain-language verdict, reused for the badge fill + text.
+function verdictColor(verdict: "Strong" | "Promising" | "Weak"): string {
+  if (verdict === "Strong") return "var(--base-g)";
+  if (verdict === "Promising") return "var(--accent)";
+  return "var(--base-t)";
+}
+
 export default function CandidateLeaderboard() {
   const candidates = useEvoStore((s) => s.candidates);
   const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
@@ -28,6 +36,10 @@ export default function CandidateLeaderboard() {
   const compareLeftId = useEvoStore((s) => s.compareLeftId);
   const setCompareLeftId = useEvoStore((s) => s.setCompareLeftId);
   const setCompareRightId = useEvoStore((s) => s.setCompareRightId);
+
+  // Simple by default: the four heuristic score columns stay hidden until the
+  // reader opts into depth. Local-only, resets on remount.
+  const [showScores, setShowScores] = useState(false);
 
   // Two-click compare: first row picks A, a different second row picks B and
   // jumps to the compare view.
@@ -111,14 +123,37 @@ export default function CandidateLeaderboard() {
 
         {/* Ranking table */}
         <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)" }}>
+          {/* Simple-by-default control: reveal the four heuristic score columns. */}
+          <div className="flex items-center justify-between px-5 pt-3 pb-1">
+            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              Ranked variants
+            </span>
+            <button
+              onClick={() => setShowScores((v) => !v)}
+              aria-pressed={showScores}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] transition-colors hover:bg-white/[0.06]"
+              style={{
+                background: showScores ? "color-mix(in oklch, var(--accent), transparent 82%)" : "var(--surface-base)",
+                color: showScores ? "var(--accent)" : "var(--text-secondary)",
+              }}
+            >
+              <SlidersHorizontal size={12} aria-hidden="true" />
+              {showScores ? "Hide scores" : "Show scores"}
+            </button>
+          </div>
           <div className="flex items-center gap-3 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider"
             style={{ color: "var(--text-muted)" }}>
             <span className="w-10">Rank</span>
             <span className="flex-1">Candidate</span>
-            <span className="w-20 text-right"><ScienceTooltip term="functional-plausibility">Functional</ScienceTooltip></span>
-            <span className="w-20 text-right"><ScienceTooltip term="tissue-specificity">Tissue</ScienceTooltip></span>
-            <span className="w-20 text-right"><ScienceTooltip term="off-target-risk">Off-target</ScienceTooltip></span>
-            <span className="w-20 text-right"><ScienceTooltip term="novelty">Novelty</ScienceTooltip></span>
+            {showScores && (
+              <>
+                <span className="w-20 text-right"><ScienceTooltip term="functional-plausibility">Functional</ScienceTooltip></span>
+                <span className="w-20 text-right"><ScienceTooltip term="tissue-specificity">Tissue</ScienceTooltip></span>
+                <span className="w-20 text-right"><ScienceTooltip term="off-target-risk">Off-target</ScienceTooltip></span>
+                <span className="w-20 text-right"><ScienceTooltip term="novelty">Novelty</ScienceTooltip></span>
+              </>
+            )}
+            <span className="w-24 text-right">Verdict</span>
             <span className="w-20 text-right"><ScienceTooltip term="overall-viability">Overall</ScienceTooltip></span>
             <span className="w-8" />
           </div>
@@ -163,10 +198,26 @@ export default function CandidateLeaderboard() {
                   </span>
                 )}
               </span>
-              <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--accent)" }}>{(c.scores.functional * 100).toFixed(0)}%</span>
-              <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--base-c)" }}>{(c.scores.tissue * 100).toFixed(0)}%</span>
-              <span className="w-20 text-right text-[13px] font-mono" style={{ color: c.scores.offTarget > 0.03 ? "var(--base-t)" : "var(--accent)" }}>{(c.scores.offTarget * 100).toFixed(1)}%</span>
-              <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--base-g)" }}>{(c.scores.novelty * 100).toFixed(0)}%</span>
+              {showScores && (
+                <>
+                  <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--accent)" }}>{(c.scores.functional * 100).toFixed(0)}%</span>
+                  <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--base-c)" }}>{(c.scores.tissue * 100).toFixed(0)}%</span>
+                  <span className="w-20 text-right text-[13px] font-mono" style={{ color: c.scores.offTarget > 0.03 ? "var(--base-t)" : "var(--accent)" }}>{(c.scores.offTarget * 100).toFixed(1)}%</span>
+                  <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--base-g)" }}>{(c.scores.novelty * 100).toFixed(0)}%</span>
+                </>
+              )}
+              <span className="w-24 flex justify-end">
+                {(() => {
+                  const verdict = strengthLabel(c.overall / 100);
+                  const color = verdictColor(verdict);
+                  return (
+                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full"
+                      style={{ background: `color-mix(in oklch, ${color}, transparent 82%)`, color }}>
+                      {verdict}
+                    </span>
+                  );
+                })()}
+              </span>
               <span className="w-20 text-right text-base font-semibold font-mono" style={{ color: "var(--text-primary)" }}>{c.overall.toFixed(1)}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); handleCompare(c.id); }}
