@@ -213,14 +213,16 @@ class TestOptimizationSafety:
 class TestStructureEndpoint:
     """The structure endpoint must produce valid PDB."""
 
-    # Use a 200bp+ sequence ensuring >40 residue protein so candidate_id phase matters.
-    # This encodes a 50+ residue protein before the first stop codon.
+    # A 200bp+ sequence encoding a genuine ORF: ATG start ... in-frame TAA stop,
+    # ~70 residues. Folding is now gated on a REAL ORF (ATG...stop over six
+    # frames), so the trailing TAA is required - a stop-free reading frame is no
+    # longer folded as a translational artifact.
     LONG_SEQ = (
         "ATGAAAGCTATCGGTCGTCGTTTCCCGAAAGCGGCGCTGACCGAACTG"
         "GAAACCCTGGAAGATCTGGGTATTGACCTGAAAGGCCGCAGCCTGCGTG"
         "AAGCAATGCTGCGTCGTATTAACGATCCGGCGATCCTGGACGTGGCGAA"
         "CTACTTCAACCAGACCAGCGGTTTTACCCGTCTGATCGGCACCAAAGCGG"
-        "GTGCGTTTGGCCCGA"
+        "GTGCGTTTGGCCCGTAA"
     )
 
     def test_produces_valid_pdb(self, client: TestClient):
@@ -238,11 +240,12 @@ class TestStructureEndpoint:
         """Different foldable proteins → different REAL ESMFold output.
 
         There is no synthetic fallback: a region that cannot be folded returns
-        503 (fail closed), never a fabricated structure. seq2 keeps the ATG start
-        then switches to a run of Ala (GCG) codons - no premature stops - so it is
-        a distinct, foldable protein of comparable length to LONG_SEQ.
+        503 (fail closed), never a fabricated structure. seq2 keeps the ATG start,
+        switches to a run of Ala (GCG) codons, then an in-frame TAA stop - a
+        genuine ORF (folding now requires a real ATG...stop), distinct from and of
+        comparable length to LONG_SEQ.
         """
-        seq2 = self.LONG_SEQ[:63] + "GCG" * 40
+        seq2 = self.LONG_SEQ[:63] + "GCG" * 40 + "TAA"
         r0 = client.post("/api/structure", json={
             "sequence": self.LONG_SEQ, "candidate_id": 0,
             "region_start": 0, "region_end": len(self.LONG_SEQ),

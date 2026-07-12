@@ -19,7 +19,11 @@ class TestExtractMeanPlddt:
             "END\n"
         )
         result = _extract_mean_plddt(pdb)
-        assert abs(result - 0.875) < 0.001  # (85 + 90) / 2 / 100
+        # pLDDT is per-residue: average CA atoms only (one value per residue),
+        # not every atom. Residue 1's CA B-factor is 90 -> 0.90. (Old atom-count
+        # averaging gave (85 + 90) / 2 / 100 = 0.875 and biased toward larger
+        # residues.)
+        assert abs(result - 0.90) < 0.001
 
     def test_empty_pdb_returns_zero(self):
         assert _extract_mean_plddt("") == 0.0
@@ -34,7 +38,8 @@ class TestExtractMeanPlddt:
             "END\n"
         )
         result = _extract_mean_plddt(pdb)
-        assert abs(result - 0.875) < 0.001
+        # CA-only, already normalized: residue 1's CA B-factor is 0.90.
+        assert abs(result - 0.90) < 0.001
 
 
 class TestPdbExtraction:
@@ -102,7 +107,9 @@ class TestPredictStructure:
         assert result is None
 
     def test_no_start_codon_returns_none(self):
-        # 8 TTT codons = 8 F residues, below MIN_PROTEIN_LENGTH of 16
+        # No ATG anywhere in any of the six frames => no real ORF => no protein.
+        # Folding is now gated on a genuine ORF, so a non-coding stretch yields
+        # "" (no protein product) instead of folding an arbitrary stop-free frame.
         dna = "TTTTTTTTTTTTTTTTTTTTTTTTT"
         result = asyncio.run(predict_structure(dna))
         assert result is None

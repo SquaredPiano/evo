@@ -22,6 +22,18 @@ class AnnotationType(str, Enum):
     UNKNOWN = "unknown"
 
 
+# Neutral half-band for the SUM-based windowed delta (see
+# evo2._windowed_mutation_delta). delta is now the SUM of per-position
+# log-likelihood differences over the +/-10 bp window around the edit, not the
+# old sequence-wide mean, so it lives on a much larger scale: a single
+# transition change alone shifts the local sum by ~0.3-0.9 nats. A pure
+# GC-content swap that changes no dinucleotide transition contributes only
+# ~0.02-0.04, so 0.05 marks the floor below which the local composition signal
+# is within heuristic noise. (The old +/-0.001 band was tuned for the mean and
+# would flag that noise as directional.)
+IMPACT_NEUTRAL_BAND = 0.05
+
+
 class Impact(str, Enum):
     """How a single-base edit shifts sequence likelihood under the model.
 
@@ -38,16 +50,17 @@ class Impact(str, Enum):
     def from_delta(delta: float) -> Impact:
         """Classify a single-base edit from its SIGNED delta log-likelihood.
 
-        delta = LL(alt) - LL(ref). The SIGN carries the meaning:
-          delta >  0.001   -> MORE_LIKELY  (model finds the edited base more expected)
-          |delta| <= 0.001 -> NEUTRAL      (little change in model likelihood)
-          delta < -0.001   -> LESS_LIKELY  (model finds the edited base less expected)
+        delta = sum over a +/-10 bp window of [ LL(alt) - LL(ref) ]. The SIGN
+        carries the meaning:
+          delta >  IMPACT_NEUTRAL_BAND   -> MORE_LIKELY  (edit more expected locally)
+          |delta| <= IMPACT_NEUTRAL_BAND -> NEUTRAL       (little change)
+          delta < -IMPACT_NEUTRAL_BAND   -> LESS_LIKELY  (edit less expected locally)
 
         A model-likelihood score, not a clinical assay.
         """
-        if delta > 0.001:
+        if delta > IMPACT_NEUTRAL_BAND:
             return Impact.MORE_LIKELY
-        if delta < -0.001:
+        if delta < -IMPACT_NEUTRAL_BAND:
             return Impact.LESS_LIKELY
         return Impact.NEUTRAL
 

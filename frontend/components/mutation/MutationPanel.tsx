@@ -44,6 +44,8 @@ export default function MutationPanel({
   const [alternate, setAlternate] = useState<Nucleotide | null>(null);
   const selectedPosition = useProteusStore((s) => s.selectedPosition);
   const structureRefolding = useProteusStore((s) => s.structureRefolding);
+  const scoringNote = useProteusStore((s) => s.scoringNote);
+  const scoresAreHeuristic = Boolean(scoringNote);
 
   // Auto-fill position when user clicks a base in the sequence
   useEffect(() => {
@@ -251,6 +253,16 @@ export default function MutationPanel({
                 {mutationEffect.alternateBase} at {mutationEffect.position}
               </span>
             </div>
+
+            {/* Honesty qualifier: under the hosted composition-logit path the
+                per-edit signal is a model-likelihood estimate, not a definitive
+                call from a real per-position forward pass. */}
+            {scoresAreHeuristic && (
+              <p className="mt-2 text-[10px] leading-snug text-[var(--text-faint)]">
+                Model-likelihood estimate from a composition signal, not a
+                definitive call.
+              </p>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

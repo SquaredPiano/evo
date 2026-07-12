@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { formatDelta } from "@/lib/format";
 import type { MutationEffect } from "@/types";
+import { useProteusStore } from "@/lib/store";
 
 interface MutationDiffProps {
   effect: MutationEffect;
@@ -15,6 +16,8 @@ const IMPACT_COLORS: Record<MutationEffect["predictedImpact"], string> = {
 };
 
 export default function MutationDiff({ effect }: MutationDiffProps) {
+  const scoringNote = useProteusStore((s) => s.scoringNote);
+  const scoresAreHeuristic = Boolean(scoringNote);
   const maxDelta = 10;
   const normalized = Math.min(Math.abs(effect.deltaLikelihood) / maxDelta, 1);
   const barPercent = normalized * 50; // max 50% of total width (one side from center)
@@ -72,6 +75,12 @@ export default function MutationDiff({ effect }: MutationDiffProps) {
         <span className="text-[10px] text-[var(--text-faint)] font-mono">0</span>
         <span className="text-[10px] text-[var(--text-faint)] font-mono">+{maxDelta}</span>
       </div>
+
+      {scoresAreHeuristic && (
+        <p className="mt-1.5 text-[10px] leading-snug text-[var(--text-faint)]">
+          Model-likelihood estimate, composition signal.
+        </p>
+      )}
     </motion.div>
   );
 }

@@ -115,17 +115,24 @@ class TestMutation:
     @pytest.mark.asyncio
     async def test_impact_classification(self) -> None:
         """Verify Impact.from_delta is SIGN-aware: negative delta = less likely
-        under the model, positive = more likely, near-zero = neutral."""
-        # Near-zero magnitude: neutral regardless of sign
-        assert Impact.from_delta(0.0005) == Impact.NEUTRAL
-        assert Impact.from_delta(-0.0005) == Impact.NEUTRAL
+        under the model, positive = more likely, near-zero = neutral.
+
+        delta is now the SUM of per-position log-likelihood differences over the
+        +/-10 bp window around the edit (not the old sequence-wide mean), so the
+        neutral half-band was re-tuned from 0.001 to IMPACT_NEUTRAL_BAND (0.05):
+        below that, the local composition signal is within heuristic noise (a
+        pure GC-content swap contributes only ~0.02-0.04)."""
+        # Within the neutral band: neutral regardless of sign
+        assert Impact.from_delta(0.02) == Impact.NEUTRAL
+        assert Impact.from_delta(-0.02) == Impact.NEUTRAL
+        assert Impact.from_delta(0.05) == Impact.NEUTRAL  # boundary is inclusive
         assert Impact.from_delta(0.0) == Impact.NEUTRAL
-        # Positive delta = model finds the edit MORE likely
-        assert Impact.from_delta(0.003) == Impact.MORE_LIKELY
-        assert Impact.from_delta(0.01) == Impact.MORE_LIKELY
-        # Negative delta = model finds the edit LESS likely
-        assert Impact.from_delta(-0.003) == Impact.LESS_LIKELY
-        assert Impact.from_delta(-0.01) == Impact.LESS_LIKELY
+        # Positive delta beyond the band = model finds the edit MORE likely
+        assert Impact.from_delta(0.08) == Impact.MORE_LIKELY
+        assert Impact.from_delta(0.5) == Impact.MORE_LIKELY
+        # Negative delta beyond the band = model finds the edit LESS likely
+        assert Impact.from_delta(-0.08) == Impact.LESS_LIKELY
+        assert Impact.from_delta(-0.5) == Impact.LESS_LIKELY
 
     @pytest.mark.asyncio
     async def test_position_out_of_range(
