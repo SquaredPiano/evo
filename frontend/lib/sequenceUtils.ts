@@ -65,21 +65,22 @@ export function gcContent(seq: string): number {
   return gc / normalized.length;
 }
 
-export function complement(base: Nucleotide): Nucleotide {
-  const map: Record<Nucleotide, Nucleotide> = {
-    A: "T",
-    T: "A",
-    C: "G",
-    G: "C",
-    N: "N",
-  };
-  return map[base];
+// Full IUPAC complement (mirrors backend translation.COMPLEMENT). U treated as
+// the RNA form of T. Preserves ambiguity codes instead of collapsing them to N.
+const IUPAC_COMPLEMENT: Record<string, string> = {
+  A: "T", T: "A", U: "A", C: "G", G: "C", N: "N",
+  R: "Y", Y: "R", S: "S", W: "W", K: "M", M: "K",
+  B: "V", V: "B", D: "H", H: "D",
+};
+
+export function complement(base: string): string {
+  return IUPAC_COMPLEMENT[base.toUpperCase()] ?? "N";
 }
 
 export function reverseComplement(seq: string): string {
   return seq
     .split("")
     .reverse()
-    .map((b) => complement(b.toUpperCase() as Nucleotide))
+    .map((b) => complement(b))
     .join("");
 }

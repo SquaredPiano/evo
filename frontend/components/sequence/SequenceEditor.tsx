@@ -37,7 +37,11 @@ interface SequenceEditorProps {
 const BASES_PER_LINE = 60;
 const BASES_PER_BLOCK = 10;
 const VALID = new Set(["A", "T", "C", "G", "N"]);
-const COMPLEMENT: Record<string, string> = { A: "T", T: "A", C: "G", G: "C", N: "N" };
+// Full IUPAC complement so a reverse-complement of ambiguous bases is not corrupted to N.
+const COMPLEMENT: Record<string, string> = {
+  A: "T", T: "A", U: "A", C: "G", G: "C", N: "N",
+  R: "Y", Y: "R", S: "S", W: "W", K: "M", M: "K", B: "V", V: "B", D: "H", H: "D",
+};
 
 const BASE_COLOR: Record<string, string> = {
   A: "var(--base-a)",
@@ -62,7 +66,7 @@ function reverseComplement(seq: string): string {
   return seq
     .split("")
     .reverse()
-    .map((b) => COMPLEMENT[b] ?? "N")
+    .map((b) => COMPLEMENT[b.toUpperCase()] ?? "N")
     .join("");
 }
 

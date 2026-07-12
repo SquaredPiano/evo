@@ -268,8 +268,21 @@ async def annotate_variants(
 
             if reference_sequence and sequence:
                 # Approach (a): lift the reference coordinate into the candidate
-                # frame by aligning candidate <-> reference. Only emit a
-                # candidate-frame position when it lands inside an aligned block.
+                # frame by aligning candidate <-> reference. CONCORDANCE GUARD:
+                # the HGVS reference base must match the reference sequence at
+                # that coordinate, else we are in the wrong frame (a CDS-relative
+                # c. offset against a genomic reference, or RefSeq version drift)
+                # and must NOT paint a candidate-frame position. A global
+                # alignment lifts almost any in-range index, so without this
+                # check the lift "succeeds" onto a biologically wrong base.
+                if (
+                    not ref_base
+                    or pos_0 < 0
+                    or pos_0 >= len(reference_sequence)
+                    or reference_sequence[pos_0].upper() != ref_base.upper()
+                ):
+                    unmapped += 1
+                    continue
                 lifted = lift_position(reference_sequence, sequence, pos_0)
                 if lifted is None or not (0 <= lifted < len(sequence)):
                     unmapped += 1

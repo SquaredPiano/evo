@@ -1086,8 +1086,14 @@ async def tool_restriction_sites(
 
         cut_positions: list[int] | None = None
         if isinstance(cut_offset, int):
-            # Absolute top-strand cut coordinate = match start + 5' cut offset.
-            cut_positions = [p + cut_offset for p in positions]
+            # Top-strand cut coordinate. Forward hits cut at (start + 5' offset);
+            # bottom-strand hits mirror to (start + site_len - offset), so a
+            # non-palindromic cutter reports correct coordinates for both strands.
+            site_len = len(recognition_site)
+            cut_positions = sorted(
+                {p + cut_offset for p in fwd}
+                | {p + (site_len - cut_offset) for p in rev}
+            )
 
         count = len(positions)
         is_single = count == 1

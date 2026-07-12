@@ -31,6 +31,10 @@ class AnnotationType(str, Enum):
 # ~0.02-0.04, so 0.05 marks the floor below which the local composition signal
 # is within heuristic noise. (The old +/-0.001 band was tuned for the mean and
 # would flag that noise as directional.)
+# NOTE: this band is calibrated for the shipped heuristic engines (nim_api /
+# mock composition signal). Under EVO2_MODE=local (real Evo2 forward pass, not
+# deployed) the summed real log-likelihood scale differs and would want a
+# per-engine band; revisit if local is ever enabled.
 IMPACT_NEUTRAL_BAND = 0.05
 
 
