@@ -19,6 +19,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Protocol
 
+import certifi
 from pymongo import AsyncMongoClient, ASCENDING, DESCENDING
 from pymongo.errors import PyMongoError
 
@@ -27,6 +28,10 @@ logger = logging.getLogger("evo")
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _is_cert_verify_failure(exc: Exception) -> bool:
+    return "CERTIFICATE_VERIFY_FAILED" in str(exc)
 
 
 class SessionSnapshotStore(Protocol):
@@ -79,19 +84,27 @@ class MongoStore:
             logger.info("MongoDB persistence disabled (no MONGODB_URI configured).")
             return False
         try:
-            self._client = AsyncMongoClient(
-                self._uri,
-                serverSelectionTimeoutMS=self._connect_timeout_ms,
-                connectTimeoutMS=self._connect_timeout_ms,
-                appname="evo-backend",
-            )
-            await self._client.admin.command("ping")
-            self._db = self._client[self._db_name]
-            await self._ensure_indexes()
-            self._ready = True
-            logger.info("MongoDB persistence connected (db=%s).", self._db_name)
+            await self._connect_once(tls_ca_file=None)
             return True
         except PyMongoError as exc:
+            if _is_cert_verify_failure(exc):
+                # Some Python builds (notably macOS python.org/Homebrew
+                # installs) don't wire up the system trust store for the ssl
+                # module, which surfaces as CERTIFICATE_VERIFY_FAILED against
+                # Atlas's TLS endpoints even though the URI/allowlist are
+                # correct. Retry once with an explicit CA bundle — ONLY on
+                # this specific failure: passing tlsCAFile unconditionally
+                # would implicitly force TLS on and break non-TLS/self-hosted
+                # deployments that connect fine without it.
+                logger.info(
+                    "MongoDB TLS handshake failed against the system trust store — "
+                    "retrying once with certifi's CA bundle."
+                )
+                try:
+                    await self._connect_once(tls_ca_file=certifi.where())
+                    return True
+                except Exception:
+                    pass
             self._ready = False
             logger.warning(
                 "MongoDB unreachable — running Redis-only, persistence is a no-op. "
@@ -103,6 +116,26 @@ class MongoStore:
             self._ready = False
             logger.warning("MongoDB connection failed unexpectedly — persistence disabled.", exc_info=True)
             return False
+
+    async def _connect_once(self, *, tls_ca_file: str | None) -> None:
+        kwargs: dict[str, Any] = {
+            "serverSelectionTimeoutMS": self._connect_timeout_ms,
+            "connectTimeoutMS": self._connect_timeout_ms,
+            "appname": "evo-backend",
+        }
+        if tls_ca_file is not None:
+            kwargs["tlsCAFile"] = tls_ca_file
+        client = AsyncMongoClient(self._uri, **kwargs)
+        try:
+            await client.admin.command("ping")
+        except Exception:
+            await client.close()
+            raise
+        self._client = client
+        self._db = self._client[self._db_name]
+        await self._ensure_indexes()
+        self._ready = True
+        logger.info("MongoDB persistence connected (db=%s).", self._db_name)
 
     async def _ensure_indexes(self) -> None:
         await self._db.design_runs.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
@@ -133,7 +166,8 @@ class MongoStore:
         try:
             from pymongo.operations import SearchIndexModel
 
-            existing = [ix["name"] async for ix in self._db.literature.list_search_indexes()]
+            cursor = await self._db.literature.list_search_indexes()
+            existing = [ix["name"] async for ix in cursor]
             if self._vector_index_name in existing:
                 return
             model = SearchIndexModel(

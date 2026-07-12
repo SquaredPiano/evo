@@ -11,6 +11,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
+import main
 from main import app
 from services.variant_annotation import AnnotationResult, VariantAnnotation
 from services.region_evidence import (
@@ -224,7 +225,105 @@ class TestEndpoint:
         client = TestClient(app)
         resp = client.post(
             "/api/region-evidence",
-            json={"sequence": "A" * 30, "include_clinvar": False},
+            json={"sequence": "A" * 30, "include_clinvar": False, "include_literature": False},
         )
         assert resp.status_code == 200
         assert resp.json()["items"] == []
+
+    def test_endpoint_merges_literature_from_rag_provider(self, monkeypatch):
+        """The endpoint wires the RAG seam in: a provider hit shows up as a
+        source="literature" item alongside regulatory evidence, not a separate
+        response shape."""
+        class FakeProvider:
+            def fetch(self, query):
+                return [
+                    RegionEvidence(
+                        start=query.start, end=query.end,
+                        source="literature", kind="paper",
+                        title="A 2025 BRCA1 study",
+                        detail="Honest one-line summary.",
+                        url="https://pubmed.ncbi.nlm.nih.gov/40000001/",
+                        identifier="40000001", score=0.87,
+                        confidence="vector search (memory)",
+                    )
+                ]
+
+        monkeypatch.setattr(main, "literature_rag_provider", FakeProvider())
+        client = TestClient(app)
+        seq = "TATAAA" + "G" * 40
+        resp = client.post(
+            "/api/region-evidence",
+            json={"sequence": seq, "gene": "BRCA1", "include_clinvar": False},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        literature_items = [i for i in body["items"] if i["source"] == "literature"]
+        assert len(literature_items) == 1
+        assert literature_items[0]["url"] == "https://pubmed.ncbi.nlm.nih.gov/40000001/"
+        # merged with regulatory evidence in the same list, not a separate field
+        assert any(i["source"] == "regulatory" for i in body["items"])
+
+    def test_endpoint_include_literature_false_skips_rag_call(self, monkeypatch):
+        calls: list[object] = []
+
+        class TrackingProvider:
+            def fetch(self, query):
+                calls.append(query)
+                return []
+
+        monkeypatch.setattr(main, "literature_rag_provider", TrackingProvider())
+        client = TestClient(app)
+        resp = client.post(
+            "/api/region-evidence",
+            json={
+                "sequence": "TATAAA" + "G" * 40,
+                "gene": "BRCA1",
+                "include_clinvar": False,
+                "include_literature": False,
+            },
+        )
+        assert resp.status_code == 200
+        assert calls == []
+
+    def test_endpoint_literature_provider_failure_degrades_gracefully(self, monkeypatch):
+        class BoomProvider:
+            def fetch(self, query):
+                raise RuntimeError("index unavailable")
+
+        monkeypatch.setattr(main, "literature_rag_provider", BoomProvider())
+        client = TestClient(app)
+        seq = "TATAAA" + "G" * 40
+        resp = client.post(
+            "/api/region-evidence",
+            json={"sequence": seq, "gene": "BRCA1", "include_clinvar": False},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # No crash; regulatory evidence still comes back, literature silently absent.
+        assert all(i["source"] != "literature" for i in body["items"])
+        assert any(i["source"] == "regulatory" for i in body["items"])
+
+    def test_endpoint_clamps_out_of_range_region_before_literature_lookup(self, monkeypatch):
+        """region_start beyond the sequence length must not reach the RAG
+        provider as an inverted/overflowing span (start > end)."""
+        seen_queries: list[object] = []
+
+        class RecordingProvider:
+            def fetch(self, query):
+                seen_queries.append(query)
+                return []
+
+        monkeypatch.setattr(main, "literature_rag_provider", RecordingProvider())
+        client = TestClient(app)
+        resp = client.post(
+            "/api/region-evidence",
+            json={
+                "sequence": "A" * 30,
+                "gene": "BRCA1",
+                "region_start": 1000,
+                "include_clinvar": False,
+            },
+        )
+        assert resp.status_code == 200
+        # Out of range once clamped to [0, len(sequence)) -> start >= end -> skipped entirely.
+        assert seen_queries == []

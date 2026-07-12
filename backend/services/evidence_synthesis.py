@@ -40,15 +40,23 @@ def gemini_available() -> bool:
     return bool(_gemini_api_key())
 
 
+def _truncate(text: str, limit: int = _FALLBACK_ABSTRACT_CHARS) -> str:
+    """Hard length cap — applies to every path (Gemini success or fallback) so
+    ``detail`` is always hover-card-sized, never a model's unbounded/verbose
+    response if it doesn't fully honor the "1-2 sentences" prompt instruction."""
+    text = (text or "").strip()
+    if not text or len(text) <= limit:
+        return text
+    return text[:limit].rsplit(" ", 1)[0] + "…"
+
+
 def _fallback_detail(article: PubMedArticle) -> str:
     """Truncated-abstract fallback — never claims more than the source does."""
     abstract = (article.abstract or "").strip()
     if not abstract:
         title = article.title.strip() or "Untitled"
         return f"{title} ({article.year or 'year unknown'}) — no abstract available."
-    if len(abstract) <= _FALLBACK_ABSTRACT_CHARS:
-        return abstract
-    return abstract[:_FALLBACK_ABSTRACT_CHARS].rsplit(" ", 1)[0] + "…"
+    return _truncate(abstract)
 
 
 def _build_prompt(article: PubMedArticle, gene: str | None, label: str | None) -> str:
@@ -85,9 +93,19 @@ async def synthesize_detail(
     if not api_key:
         return _fallback_detail(article)
 
+    generation_config: dict[str, object] = {"temperature": 0.2, "maxOutputTokens": 300}
+    if "2.5" in settings.gemini_model:
+        # gemini-2.5-* models think by default, and thinking tokens are billed
+        # against maxOutputTokens — without this, a small budget can be
+        # entirely consumed by hidden reasoning, leaving a sentence fragment
+        # (observed: e.g. "In BRCA1-deficient cells") instead of the actual
+        # summary. Not needed for a short, non-reasoning condense task, so
+        # disable it outright. Gated to 2.5-* since older/other models reject
+        # an unrecognized thinkingConfig field outright.
+        generation_config["thinkingConfig"] = {"thinkingBudget": 0}
     payload = {
         "contents": [{"parts": [{"text": _build_prompt(article, gene, label)}]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 200},
+        "generationConfig": generation_config,
     }
     url = f"{GEMINI_BASE_URL}/models/{settings.gemini_model}:generateContent"
 
@@ -100,8 +118,13 @@ async def synthesize_detail(
             )
             resp.raise_for_status()
             data = resp.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"]
-        text = (text or "").strip()
+        candidate = data["candidates"][0]
+        if candidate.get("finishReason") == "MAX_TOKENS":
+            # Truncated mid-sentence — a cut-off fragment is worse than an
+            # honest fallback, never present it as the summary.
+            logger.warning("Gemini response truncated (MAX_TOKENS) for PMID=%s", article.pmid)
+            return _fallback_detail(article)
+        text = _truncate(candidate["content"]["parts"][0]["text"])
         return text or _fallback_detail(article)
     except Exception:
         logger.warning("Gemini detail synthesis failed for PMID=%s", article.pmid, exc_info=True)

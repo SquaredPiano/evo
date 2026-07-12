@@ -23,6 +23,7 @@ the existing coordinate-bound evidence list with ``source="literature"``.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass, field
@@ -30,6 +31,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from services.embeddings import Embedder, cosine_similarity
+from services.evidence_synthesis import synthesize_detail
+from services.pubmed import PubMedArticle
 from services.region_evidence import RegionEvidence, RegionQuery
 
 logger = logging.getLogger("evo")
@@ -256,9 +259,16 @@ class LiteratureIndex:
 # ---------------------------------------------------------------------------
 
 
-def _snippet(text: str, limit: int = 240) -> str:
-    text = (text or "").strip()
-    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+def _hit_to_article(hit: dict[str, Any]) -> PubMedArticle:
+    """Adapt a search hit dict back into the PubMedArticle shape synthesize_detail expects."""
+    return PubMedArticle(
+        pmid=hit.get("pmid") or "",
+        title=hit.get("title", ""),
+        authors=[],
+        abstract=hit.get("abstract", ""),
+        year=hit.get("year", ""),
+        journal=hit.get("journal", ""),
+    )
 
 
 class LiteratureRagProvider:
@@ -269,7 +279,9 @@ class LiteratureRagProvider:
     so semantically-retrieved papers merge into the same evidence list the UI
     already renders. Honest by construction: URLs come straight from the indexed
     document (or None — never fabricated), and the confidence string names the
-    backend that answered.
+    backend that answered. ``detail`` is a Gemini-synthesized 1-2 sentence
+    summary (see services.evidence_synthesis) with a truncated-abstract
+    fallback — never a raw, hover-card-unfriendly abstract dump.
     """
 
     def __init__(self, index: LiteratureIndex, *, k: int = 3) -> None:
@@ -281,6 +293,15 @@ class LiteratureRagProvider:
         if not text:
             return []
         result = await self._index.search(text, k=self._k, gene=query.gene)
+        if not result.hits:
+            return []
+
+        details = await asyncio.gather(
+            *(
+                synthesize_detail(_hit_to_article(hit), gene=query.gene, label=query.label)
+                for hit in result.hits
+            )
+        )
         return [
             RegionEvidence(
                 start=query.start,
@@ -288,11 +309,11 @@ class LiteratureRagProvider:
                 source="literature",
                 kind="paper",
                 title=hit["title"],
-                detail=_snippet(hit["abstract"]),
+                detail=detail,
                 url=hit["url"],
                 identifier=hit["pmid"],
                 score=hit["score"],
                 confidence=f"vector search ({result.backend})",
             )
-            for hit in result.hits
+            for hit, detail in zip(result.hits, details)
         ]

@@ -71,6 +71,31 @@ class TestFallbackPath:
 
         assert result == "Fallback text should win here."
 
+    def test_truncated_max_tokens_response_falls_back(self, monkeypatch):
+        """A MAX_TOKENS finishReason means a cut-off sentence fragment, not a
+        usable summary — must degrade to the honest fallback, not surface the
+        fragment (regression test for the gemini-2.5 thinking-budget bug)."""
+        monkeypatch.setattr(settings, "gemini_api_key", "fake-test-key")
+        mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.json.return_value = {
+            "candidates": [{
+                "finishReason": "MAX_TOKENS",
+                "content": {"parts": [{"text": "In BRCA1-deficient cells"}]},
+            }]
+        }
+
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("services.evidence_synthesis.httpx.AsyncClient", return_value=mock_client):
+            article = _article(abstract="Fallback text should win over the fragment.")
+            result = asyncio.run(synthesize_detail(article))
+
+        assert result == "Fallback text should win over the fragment."
+
     def test_never_raises_on_malformed_response(self, monkeypatch):
         monkeypatch.setattr(settings, "gemini_api_key", "fake-test-key")
         mock_response = MagicMock()

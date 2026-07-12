@@ -161,13 +161,14 @@ class VariantAnnotationRequest(BaseModel):
 
 
 class RegionEvidenceRequest(BaseModel):
-    """Assemble coordinate-bound evidence (ClinVar + regulatory) for a sequence."""
+    """Assemble coordinate-bound evidence (ClinVar + regulatory + literature) for a sequence."""
     sequence: str = Field(..., description="Candidate DNA sequence; evidence coords are in its frame")
-    gene: str | None = Field(None, description="Optional gene symbol for ClinVar context")
+    gene: str | None = Field(None, description="Optional gene symbol for ClinVar/literature context")
     region_start: int = Field(0, ge=0)
     region_end: int | None = None
     max_variants: int = Field(25, ge=1, le=100)
     include_clinvar: bool = Field(True, description="Set False to skip the ClinVar network fetch")
+    include_literature: bool = Field(True, description="Set False to skip the literature RAG lookup")
 
     @field_validator("sequence")
     @classmethod

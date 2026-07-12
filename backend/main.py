@@ -76,7 +76,7 @@ from services.experiment_tracker import (
 )
 from services.mongo_store import create_mongo_store
 from services.embeddings import create_embedder
-from services.literature_index import LiteratureIndex
+from services.literature_index import LiteratureIndex, LiteratureRagProvider
 from ws.manager import WebSocketManager
 from ws.events import (
     CandidateStatusData,
@@ -141,6 +141,10 @@ experiment_tracker = ExperimentTracker(session_store, mongo_store=mongo_store)
 # index uses Atlas $vectorSearch when available and falls back to in-memory.
 embedder = create_embedder(settings)
 literature_index = LiteratureIndex(embedder=embedder, mongo_store=mongo_store)
+# Adapts literature_index to the region_evidence RAG seam (RegionRagProvider) —
+# feeds semantically-retrieved papers into /api/region-evidence alongside
+# ClinVar + regulatory evidence.
+literature_rag_provider = LiteratureRagProvider(literature_index)
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 MAX_SESSION_CONTEXT_ENTRIES = 512
 
@@ -708,25 +712,51 @@ async def variant_annotation(request: VariantAnnotationRequest) -> dict[str, obj
 async def region_evidence(request: RegionEvidenceRequest) -> dict[str, object]:
     """Assemble coordinate-bound evidence for a sequence region.
 
-    Binds coordinates → research/evidence using the sources that exist today:
-    ClinVar variants (known variants for the GENE overlapping these coordinates —
-    context, not a per-base pathogenicity claim) + regulatory motifs. A future
-    RAG (per-region papers) drops in via services.region_evidence.attach_literature_evidence.
+    Binds coordinates → research/evidence from three sources: ClinVar variants
+    (known variants for the GENE overlapping these coordinates — context, not a
+    per-base pathogenicity claim), regulatory motifs, and semantically-retrieved
+    literature (post-2025 PubMed papers, vector-searched via literature_index —
+    see services.region_evidence.attach_literature_evidence).
     """
-    from services.region_evidence import assemble_region_evidence
+    from services.region_evidence import RegionQuery, assemble_region_evidence, attach_literature_evidence
 
-    items = await assemble_region_evidence(
+    region_end = request.region_end if request.region_end is not None else len(request.sequence)
+
+    # Clamp to the sequence bounds — mirrors assemble_region_evidence's own
+    # clamping (region_evidence.py) so an out-of-range region_start/region_end
+    # can't hand the literature provider an inverted or overflowing span.
+    literature_start = max(0, min(request.region_start, len(request.sequence)))
+    literature_end = max(0, min(region_end, len(request.sequence)))
+
+    assemble_task = assemble_region_evidence(
         sequence=request.sequence,
         gene=request.gene,
         region_start=request.region_start,
-        region_end=request.region_end,
+        region_end=region_end,
         max_variants=request.max_variants,
         include_clinvar=request.include_clinvar,
     )
+
+    if request.include_literature and literature_start < literature_end:
+        query = RegionQuery(
+            start=literature_start,
+            end=literature_end,
+            sequence=request.sequence,
+            gene=request.gene,
+        )
+        # Independent I/O (ClinVar/regulatory vs. the literature RAG lookup) —
+        # run concurrently rather than paying the sum of both latencies.
+        items, literature_items = await asyncio.gather(
+            assemble_task, attach_literature_evidence([query], literature_rag_provider)
+        )
+        items = sorted(items + literature_items, key=lambda e: (e.start, e.source))
+    else:
+        items = await assemble_task
+
     return {
         "gene": request.gene,
         "region_start": request.region_start,
-        "region_end": request.region_end if request.region_end is not None else len(request.sequence),
+        "region_end": region_end,
         "items": [e.to_dict() for e in items],
         "count": len(items),
     }
