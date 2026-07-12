@@ -29,7 +29,23 @@ export default function AnnotationTrack({
   const rawSequence = useEvoStore((s) => s.rawSequence);
   const storeEvidence = useEvoStore((s) => s.regionEvidence);
   const loadRegionEvidence = useEvoStore((s) => s.loadRegionEvidence);
+  const selectedRegion = useEvoStore((s) => s.selectedRegion);
+  const setSelectedRegion = useEvoStore((s) => s.setSelectedRegion);
+  const setSelectedPosition = useEvoStore((s) => s.setSelectedPosition);
+  const setChatOpen = useEvoStore((s) => s.setChatOpen);
+  const setChatDraft = useEvoStore((s) => s.setChatDraft);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
+  // Clicking a region bar SELECTS that range for a region-aware Helio ask, then
+  // opens Helio pre-filled with the explain prompt (the user still hits send).
+  const selectRegion = (region: SequenceRegion) => {
+    setSelectedRegion({ start: region.start, end: region.end });
+    setSelectedPosition(region.start);
+    setChatOpen(true);
+    setChatDraft(
+      "Explain the selected region in plain English — what it does, why it matters, and how confident the model is."
+    );
+  };
 
   const items = evidence ?? storeEvidence;
 
@@ -77,14 +93,40 @@ export default function AnnotationTrack({
             const leftPct = (region.start / sequenceLength) * 100;
             const widthPct = ((region.end - region.start) / sequenceLength) * 100;
             const count = evidenceForRegion(items, region).length;
+            const isSelected =
+              selectedRegion !== null &&
+              selectedRegion.start === region.start &&
+              selectedRegion.end === region.end;
             return (
               <div
                 key={`hit-${region.start}-${region.end}-${i}`}
                 className="absolute top-0 bottom-0 cursor-pointer"
                 style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                role="button"
+                tabIndex={0}
+                aria-label={`Explain region ${region.label ?? region.type} (${region.start}–${region.end})`}
+                title="Click to explain this region with Helio"
+                onClick={() => selectRegion(region)}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Enter" || ev.key === " ") {
+                    ev.preventDefault();
+                    selectRegion(region);
+                  }
+                }}
                 onMouseEnter={() => setHoveredIndex(i)}
                 onMouseLeave={() => setHoveredIndex((cur) => (cur === i ? null : cur))}
               >
+                {isSelected && (
+                  <span
+                    aria-hidden
+                    className="absolute inset-0"
+                    style={{
+                      border: "1.5px solid var(--accent)",
+                      borderRadius: "3px",
+                      boxShadow: "0 0 0 1px color-mix(in oklch, var(--accent), transparent 60%)",
+                    }}
+                  />
+                )}
                 {count > 0 && (
                   <span
                     aria-hidden

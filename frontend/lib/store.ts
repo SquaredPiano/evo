@@ -81,6 +81,10 @@ interface EvoState {
 
   selectedPosition: number | null;
   selectedRegionIndex: number | null;
+  /** A selected coordinate RANGE (half-open [start, end)) for region-aware
+   *  Helio explanations. Distinct from selectedPosition (a single base) and
+   *  selectedRegionIndex (an index into `regions`). Additive. */
+  selectedRegion: { start: number; end: number } | null;
   activePdb: string | null;
   originalPdb: string | null;
   /** Provenance: esmfold | mock | unavailable | user_pdb | null.
@@ -145,6 +149,7 @@ interface EvoState {
   setAnalysisResult: (result: AnalysisResult) => void;
   setSelectedPosition: (pos: number | null) => void;
   setSelectedRegionIndex: (idx: number | null) => void;
+  setSelectedRegion: (region: { start: number; end: number } | null) => void;
   setActivePdb: (pdb: string | null) => void;
   setStructureModel: (model: string | null) => void;
   setHighlightResidues: (residues: number[]) => void;
@@ -214,6 +219,7 @@ const initialState = {
   analysisResult: null as AnalysisResult | null,
   selectedPosition: null as number | null,
   selectedRegionIndex: null as number | null,
+  selectedRegion: null as { start: number; end: number } | null,
   activePdb: null as string | null,
   originalPdb: null as string | null,
   structureModel: null as string | null,
@@ -334,13 +340,15 @@ export const useEvoStore = create<EvoState>((set, get) => ({
       candidates,
       activeCandidateId,
       error: null,
-      // Stale compare pins from a previous run must not carry into a new one.
-      ...(freshRun ? { compareLeftId: null, compareRightId: null } : {}),
+      // Stale compare pins / region selection from a previous run must not
+      // carry into a new one.
+      ...(freshRun ? { compareLeftId: null, compareRightId: null, selectedRegion: null } : {}),
     });
   },
 
   setSelectedPosition: (pos) => set({ selectedPosition: pos }),
   setSelectedRegionIndex: (idx) => set({ selectedRegionIndex: idx }),
+  setSelectedRegion: (region) => set({ selectedRegion: region }),
   setActivePdb: (pdb) => {
     const state = get();
     // Save the first PDB as the original for comparison

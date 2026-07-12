@@ -2,12 +2,23 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useEvoStore } from "@/lib/store";
-import { X, Send, Sparkles, Check, Loader2, AlertCircle, RefreshCw, PenLine } from "lucide-react";
+import { X, Send, Sparkles, Check, Loader2, AlertCircle, RefreshCw, PenLine, MapPin } from "lucide-react";
 import { buildEvidenceLinks } from "@/lib/evidence";
 import { getCandidateDisplay } from "@/lib/candidateDisplay";
 import { useDesignPipeline } from "@/hooks/useDesignPipeline";
 import { isRegenerationMutation } from "@/lib/regen";
 import RegenResultCard, { type RegenResult } from "./RegenResultCard";
+import RegionExplanationCard from "./RegionExplanationCard";
+import SuggestedActionButton from "./SuggestedActionButton";
+import ToolResultCard from "./ToolResultCard";
+import {
+  isRegionExplanation,
+  isSuggestedAction,
+  messageForSuggestedAction,
+  type RegionExplanation,
+  type SuggestedAction,
+  type ToolResult,
+} from "@/lib/agentTypes";
 
 /** Window (bp) regenerated around a single selected base when no range exists. */
 const REGEN_WINDOW = 30;
@@ -86,6 +97,7 @@ export default function ChatPanel() {
   const candidates = useEvoStore((s) => s.candidates);
   const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
   const selectedPosition = useEvoStore((s) => s.selectedPosition);
+  const selectedRegion = useEvoStore((s) => s.selectedRegion);
   const editHistoryLength = useEvoStore((s) => s.editHistory.length);
   const chatDraft = useEvoStore((s) => s.chatDraft);
   const setChatDraft = useEvoStore((s) => s.setChatDraft);
@@ -99,6 +111,9 @@ export default function ChatPanel() {
   const [reasoningSteps, setReasoningSteps] = useState<string[]>([]);
   const [comparison, setComparison] = useState<Record<string, any>[]>([]);
   const [regenResults, setRegenResults] = useState<RegenResult[]>([]);
+  const [regionExplanation, setRegionExplanation] = useState<RegionExplanation | null>(null);
+  const [suggestedAction, setSuggestedAction] = useState<SuggestedAction | null>(null);
+  const [toolResults, setToolResults] = useState<ToolResult[]>([]);
   const [iterations, setIterations] = useState(0);
   const [streamingText, setStreamingText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -112,6 +127,24 @@ export default function ChatPanel() {
     );
     return buildEvidenceLinks(map);
   }, [retrievalStatuses]);
+
+  // Gene symbol from NCBI retrieval — enables ClinVar gene context in region
+  // evidence. Same derivation used in analyze/page.tsx; read from the shared
+  // store state so ChatPanel can thread `gene` into the agent context.
+  const activeGene = useMemo(() => {
+    const ncbi = retrievalStatuses.find((r) => r.source === "ncbi")?.result as
+      | Record<string, unknown>
+      | undefined;
+    const sym = ncbi?.symbol ?? ncbi?.gene;
+    return typeof sym === "string" && sym && sym !== "Gene" ? sym : null;
+  }, [retrievalStatuses]);
+
+  // Human-readable target of an "Explain this region" ask, for the button hint.
+  const explainTargetLabel = useMemo(() => {
+    if (selectedRegion) return `positions ${selectedRegion.start}–${selectedRegion.end}`;
+    if (selectedPosition !== null) return `a ±20 bp window around base ${selectedPosition}`;
+    return "the current selection";
+  }, [selectedRegion, selectedPosition]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -348,7 +381,19 @@ export default function ChatPanel() {
     setComparison([]);
     setReasoningSteps([]);
     setActiveToolCalls([]);
+    setRegionExplanation(null);
+    setSuggestedAction(null);
+    setToolResults([]);
     setInput("");
+  };
+
+  // Clicking Helio's suggested action fires the follow-up that triggers the
+  // underlying tool (regenerate_region / optimize_candidate). We compose a
+  // natural-language message the backend already routes and reuse handleSend —
+  // the same path used by every other regen/agent action.
+  const handleSuggestedAction = (action: SuggestedAction) => {
+    if (isTyping) return;
+    void handleSend(messageForSuggestedAction(action));
   };
 
   const handleSend = async (text?: string) => {
@@ -361,6 +406,9 @@ export default function ChatPanel() {
     setActiveToolCalls([]);
     setReasoningSteps([]);
     setComparison([]);
+    setRegionExplanation(null);
+    setSuggestedAction(null);
+    setToolResults([]);
     setIterations(0);
 
     const s = useEvoStore.getState();
@@ -505,6 +553,11 @@ export default function ChatPanel() {
           context: {
             view_mode: s.viewMode,
             selected_position: s.selectedPosition ?? undefined,
+            // Region-aware ask: an explicit half-open range when one is
+            // selected; otherwise the backend derives a ±20bp window from
+            // selected_position. `gene` enables ClinVar gene context.
+            selected_region: s.selectedRegion ?? undefined,
+            gene: activeGene ?? undefined,
             scores: activeCand
               ? {
                   functional: activeCand.scores.functional,
@@ -571,6 +624,22 @@ export default function ChatPanel() {
           ...prev,
           { tool: "compare", status: "ok", summary: `Ranked ${data.comparison.length} candidates` },
         ]);
+      }
+
+      // Region-aware payloads (all nullable — guard every field).
+      if (isRegionExplanation(data.region_explanation)) {
+        setRegionExplanation(data.region_explanation);
+      }
+      if (isSuggestedAction(data.suggested_action)) {
+        setSuggestedAction(data.suggested_action);
+      }
+      if (Array.isArray(data.tool_results) && data.tool_results.length > 0) {
+        setToolResults(
+          data.tool_results.filter(
+            (t: unknown): t is ToolResult =>
+              Boolean(t) && typeof (t as { tool?: unknown }).tool === "string",
+          ),
+        );
       }
 
       const assistantText = data.assistant_message ?? "I couldn't process that.";
@@ -663,6 +732,34 @@ export default function ChatPanel() {
             </div>
           </div>
         )}
+        {/* Region-aware STAR affordance: explain the selected region in plain
+            English. Uses selected_region (explicit range) or selected_position
+            (backend derives a ±20bp window). */}
+        {rawSequence.length > 0 && (
+          <button
+            onClick={() =>
+              handleSend(
+                "Explain the selected region in plain English — what it does, why it matters, and how confident the model is."
+              )
+            }
+            disabled={isTyping}
+            className="w-full text-left rounded-2xl px-3.5 py-2.5 transition-all hover:brightness-105 disabled:opacity-50"
+            style={{
+              background: "color-mix(in oklch, var(--accent), transparent 90%)",
+              border: "1px solid color-mix(in oklch, var(--accent), transparent 62%)",
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <MapPin size={14} style={{ color: "var(--accent)" }} />
+              <span className="text-[12.5px] font-semibold" style={{ color: "var(--text-primary)" }}>
+                Explain this region
+              </span>
+            </div>
+            <div className="text-[10.5px] mt-1 leading-snug" style={{ color: "var(--text-secondary)" }}>
+              What it does &amp; why it matters — for {explainTargetLabel}.
+            </div>
+          </button>
+        )}
         {guidedPrompts.length > 0 && (
           <div className="space-y-1.5">
             <div className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
@@ -726,6 +823,29 @@ export default function ChatPanel() {
             <div className="label-caps" style={{ fontSize: "9px" }}>Regeneration Results</div>
             {regenResults.slice(-4).map((r, i) => (
               <RegenResultCard key={`regen-${i}-${r.mutation.start}-${r.mutation.end}`} result={r} />
+            ))}
+          </div>
+        )}
+
+        {/* Region explanation — the STAR card for a non-biologist */}
+        {regionExplanation && (
+          <RegionExplanationCard explanation={regionExplanation} />
+        )}
+
+        {/* Helio's proactive one-click follow-up */}
+        {suggestedAction && (
+          <SuggestedActionButton
+            action={suggestedAction}
+            onClick={() => handleSuggestedAction(suggestedAction)}
+            disabled={isTyping}
+          />
+        )}
+
+        {/* Read-only tool result cards (off-target scan, restriction sites) */}
+        {toolResults.length > 0 && (
+          <div className="space-y-2">
+            {toolResults.map((tr, i) => (
+              <ToolResultCard key={`tool-${i}-${tr.tool}`} result={tr} />
             ))}
           </div>
         )}

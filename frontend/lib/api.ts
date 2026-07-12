@@ -289,6 +289,21 @@ export async function checkHealth(): Promise<{
 // Agent copilot
 // ---------------------------------------------------------------------------
 
+/** Region-aware context the agent request may carry. All fields optional. */
+export interface AgentChatContext {
+  view_mode?: string;
+  selected_position?: number;
+  /** Half-open [start, end) candidate frame; enables region_explanation. */
+  selected_region?: { start: number; end: number };
+  /** Gene symbol — enables ClinVar gene context in region evidence. */
+  gene?: string;
+  scores?: Record<string, number>;
+  evidence_links?: Array<Record<string, unknown>>;
+  seed_source?: string;
+  scoring_note?: string;
+  [key: string]: unknown;
+}
+
 export interface AgentChatResult {
   assistant_message: string;
   tool_calls: Array<{ tool: string; status: string; summary: string }>;
@@ -304,6 +319,10 @@ export interface AgentChatResult {
   comparison?: unknown;
   iterations?: number;
   reasoning_steps?: string[] | null;
+  // Region-aware payloads (nullable). See lib/agentTypes.ts for full shapes.
+  region_explanation?: unknown | null;
+  suggested_action?: unknown | null;
+  tool_results?: unknown[] | null;
 }
 
 /** POST /api/agent/chat - Run the agentic copilot for one turn. */
@@ -311,7 +330,11 @@ export async function agentChat(
   sessionId: string,
   candidateId: number,
   message: string,
-  options: { history?: Array<{ role: string; content: string }>; sequence?: string } = {}
+  options: {
+    history?: Array<{ role: string; content: string }>;
+    sequence?: string;
+    context?: AgentChatContext;
+  } = {}
 ): Promise<AgentChatResult> {
   const res = await fetch(`${API_BASE}/api/agent/chat`, {
     method: "POST",
@@ -322,6 +345,7 @@ export async function agentChat(
       message,
       history: options.history ?? [],
       sequence: options.sequence,
+      ...(options.context ? { context: options.context } : {}),
     }),
   });
   if (!res.ok) throw new Error(`Agent chat failed: ${res.status}`);
