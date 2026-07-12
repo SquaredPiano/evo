@@ -355,6 +355,60 @@ class TestRelativeAdaptiveness:
 
 
 # ---------------------------------------------------------------------------
+# Constraint-based optimization (DNAChisel)
+# ---------------------------------------------------------------------------
+
+# A sequence engineered to contain a long poly-A run and a repeated block so the
+# constraint solver has something to fix. Encodes Lys-rich + Pro repeats.
+CONSTRAINT_SEQ = "ATG" + "AAAAAA" * 3 + "CCTCCTCCTCCTCCTCCT" + "GAAGAAGAAGAAGAA"
+
+
+class TestConstraintOptimization:
+    def test_homopolymer_capped(self):
+        """A poly-A input must have its longest run reduced under the cap."""
+        result = optimize_codons(CONSTRAINT_SEQ, "homo_sapiens", max_homopolymer=4)
+        assert result.longest_homopolymer_after < result.longest_homopolymer_before
+        assert result.longest_homopolymer_after < 4 + 1
+        # Amino acids preserved.
+        assert translate(result.optimized_sequence, to_stop=False) == translate(
+            CONSTRAINT_SEQ, to_stop=False
+        )
+
+    def test_gc_window_respected(self):
+        """Optimized GC should fall inside the requested window (or be flagged)."""
+        result = optimize_codons(GFP_WILD, "homo_sapiens", gc_min=0.45, gc_max=0.60)
+        if result.constraints_satisfied:
+            assert 0.45 <= result.gc_content_after <= 0.60
+
+    def test_avoid_restriction_site_literal(self):
+        """A named literal DNA site must be absent from the optimized sequence."""
+        # GAATTC is EcoRI; force GFP away from it if present.
+        result = optimize_codons(GFP_WILD, "homo_sapiens", avoid_sites=["GAATTC"])
+        if result.constraints_satisfied:
+            assert "GAATTC" not in result.optimized_sequence
+        assert result.avoided_sites == ["GAATTC"]
+
+    def test_avoid_enzyme_name(self):
+        """A restriction-enzyme name is accepted and reported."""
+        result = optimize_codons(GFP_WILD, "homo_sapiens", avoid_sites=["EcoRI"])
+        assert result.avoided_sites == ["EcoRI"]
+        assert translate(result.optimized_sequence, to_stop=False) == translate(
+            GFP_WILD, to_stop=False
+        )
+
+    def test_method_labeled_honestly(self):
+        result = optimize_codons(GFP_WILD, "homo_sapiens")
+        assert "DNAChisel" in result.method
+        assert "match_codon_usage" in result.method
+
+    def test_deterministic_output(self):
+        """Same input + organism must yield identical output (seeded solver)."""
+        r1 = optimize_codons(GFP_WILD, "homo_sapiens")
+        r2 = optimize_codons(GFP_WILD, "homo_sapiens")
+        assert r1.optimized_sequence == r2.optimized_sequence
+
+
+# ---------------------------------------------------------------------------
 # API endpoint
 # ---------------------------------------------------------------------------
 
@@ -422,5 +476,9 @@ class TestCodonOptimizationAPI:
             "original_cai", "optimized_cai", "amino_acid_sequence",
             "codons_changed", "total_codons",
             "gc_content_before", "gc_content_after", "preserved_motif_count",
+            # Constraint-based reporting fields (DNAChisel).
+            "method", "gc_min", "gc_max", "max_homopolymer", "avoided_sites",
+            "constraints_satisfied",
+            "longest_homopolymer_before", "longest_homopolymer_after",
         }
         assert set(body.keys()) == expected_keys
