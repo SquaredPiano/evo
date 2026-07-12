@@ -471,7 +471,10 @@ export const useProteusStore = create<ProteusState>((set, get) => ({
       set({ regionEvidence: [], regionEvidenceKey: null });
       return;
     }
-    const key = `${cleaned.length}:${gene ?? ""}:${cleaned.slice(0, 32)}`;
+    // Session id enables edit-history-gated literature (papers on the regions
+    // Evo2 made novel), so it is part of the dedup key.
+    const sessionId = get().sessionId;
+    const key = `${cleaned.length}:${gene ?? ""}:${sessionId ?? ""}:${cleaned.slice(0, 32)}`;
     if (get().regionEvidenceKey === key) return; // already loaded / in flight
     set({ regionEvidenceKey: key });
     try {
@@ -479,6 +482,8 @@ export const useProteusStore = create<ProteusState>((set, get) => ({
         sequence: cleaned,
         gene: gene ?? undefined,
         includeClinvar: Boolean(gene),
+        includeLiterature: true,
+        sessionId,
       });
       // Guard against races: only apply if this is still the latest request.
       if (get().regionEvidenceKey === key) {

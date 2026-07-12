@@ -491,6 +491,11 @@ export async function fetchRegionEvidence(payload: {
   regionEnd?: number;
   maxVariants?: number;
   includeClinvar?: boolean;
+  includeLiterature?: boolean;
+  // Session id enables edit-history-gated literature: papers attach to the
+  // regions Evo2 actually made novel (edited/regenerated spans). Without it the
+  // backend returns no literature by design.
+  sessionId?: string | null;
 }): Promise<{
   gene: string | null;
   region_start: number;
@@ -508,6 +513,8 @@ export async function fetchRegionEvidence(payload: {
       region_end: payload.regionEnd,
       max_variants: payload.maxVariants ?? 25,
       include_clinvar: payload.includeClinvar ?? true,
+      include_literature: payload.includeLiterature ?? true,
+      session_id: payload.sessionId ?? null,
     }),
   });
   if (!res.ok) throw new Error(`Region evidence failed: ${res.status}`);
