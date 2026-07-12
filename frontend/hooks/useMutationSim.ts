@@ -21,6 +21,10 @@ export function useMutationSim() {
         store.saveVersion();
 
         let effect;
+        // Whether a background protein refold is worth running, and any
+        // per-position score patch the backend sent back for the heatmap.
+        let refold = true;
+        let perPositionPatch: { position: number; score: number }[] | null = null;
         if (store.sessionId && store.activeCandidateId !== null) {
           const response = await editBase(store.sessionId, store.activeCandidateId, position, alternateBase);
           effect = {
@@ -30,6 +34,9 @@ export function useMutationSim() {
             deltaLikelihood: response.delta_likelihood,
             predictedImpact: response.predicted_impact,
           };
+          // Default to refolding unless the backend says the coding region is unchanged.
+          refold = response.refold_recommended !== false;
+          perPositionPatch = response.per_position_scores ?? null;
           const candidates = [...store.candidates];
           const idx = candidates.findIndex((c) => c.id === store.activeCandidateId);
           if (idx >= 0) {
@@ -55,25 +62,48 @@ export function useMutationSim() {
 
         setMutationEffect(effect);
 
-        // Actually apply the mutation to the sequence in the store
+        // Apply the mutation to the sequence, patching in the per-position score
+        // window from the backend so the heatmap (LikelihoodGraph / SequenceEditor)
+        // updates immediately instead of showing stale colors.
         const mutated = sequence.slice(0, position) + alternateBase + sequence.slice(position + 1);
-        const newBases = parseSequence(mutated, store.regions).map((base, i) => ({
+        const latest = useEvoStore.getState();
+        let nextScores = latest.scores;
+        if (perPositionPatch && perPositionPatch.length) {
+          nextScores = [...latest.scores];
+          for (const p of perPositionPatch) {
+            if (p.position >= 0 && p.position < nextScores.length) {
+              nextScores[p.position] = { position: p.position, score: p.score };
+            }
+          }
+        }
+        const newBases = parseSequence(mutated, latest.regions).map((base, i) => ({
           ...base,
-          likelihoodScore: store.scores[i]?.score,
+          likelihoodScore: nextScores[i]?.score,
         }));
         store.setSequence(mutated);
-        useEvoStore.setState({ bases: newBases });
+        useEvoStore.setState({ bases: newBases, scores: nextScores });
 
-        // Re-fold protein structure — keep loading state while folding
-        try {
-          const pdb = await fetchStructure(0, mutated.length, mutated);
-          useEvoStore.getState().setActivePdb(pdb);
-        } catch {
-          // Structure prediction may fail — keep old PDB
+        // Scores are in — release the blocking spinner NOW. A single-base edit
+        // should feel instant instead of waiting ~10-90s on protein folding.
+        setMutationLoading(false);
+
+        // Re-fold the protein structure in the BACKGROUND. Keep the previous PDB
+        // visible meanwhile; only swap it in once the new fold lands.
+        if (refold) {
+          void (async () => {
+            useEvoStore.getState().setStructureRefolding(true);
+            try {
+              const pdb = await fetchStructure(0, mutated.length, mutated);
+              useEvoStore.getState().setActivePdb(pdb);
+            } catch {
+              // Structure prediction may fail — keep old PDB
+            } finally {
+              useEvoStore.getState().setStructureRefolding(false);
+            }
+          })();
         }
       } catch {
         // Mutation prediction failed
-      } finally {
         setMutationLoading(false);
       }
     },

@@ -27,6 +27,9 @@ interface SequenceEditorProps {
   onSequenceChange: (next: string) => void;
   onRescoreBase?: (position: number, base: string) => void;
   onSelectPosition?: (position: number | null) => void;
+  /** Store playhead. When it changes externally (graph, scrubber, 3D residue
+   *  click) the editor moves its caret there and scrolls the base into view. */
+  selectedPosition?: number | null;
   /** Sequences longer than this are windowed for rendering performance. */
   maxRender?: number;
 }
@@ -69,6 +72,7 @@ export default function SequenceEditor({
   onSequenceChange,
   onRescoreBase,
   onSelectPosition,
+  selectedPosition = null,
   maxRender = 6000,
 }: SequenceEditorProps) {
   const [caret, setCaret] = useState(0);
@@ -96,6 +100,23 @@ export default function SequenceEditor({
   useEffect(() => {
     if (caret > len) setCaret(len);
   }, [len, caret]);
+
+  // Follow the store playhead when it moves *externally* (LikelihoodGraph,
+  // scrubber, 3D residue click). We key off the incoming prop value — not the
+  // local caret — so ordinary typing/arrow edits never get yanked backwards.
+  const prevSelectedRef = useRef<number | null>(selectedPosition);
+  useEffect(() => {
+    if (selectedPosition === null) {
+      prevSelectedRef.current = null;
+      return;
+    }
+    if (selectedPosition === prevSelectedRef.current) return;
+    prevSelectedRef.current = selectedPosition;
+    const clamped = Math.max(0, Math.min(len - 1, selectedPosition));
+    setCaret(clamped);
+    const el = containerRef.current?.querySelector<HTMLElement>(`[data-pos="${clamped}"]`);
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selectedPosition, len]);
 
   const emitSelect = useCallback(
     (pos: number | null) => {

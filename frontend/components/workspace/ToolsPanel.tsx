@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import { useEvoStore } from "@/lib/store";
+import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
 import {
   scanOffTargets,
   optimizeCodons,
@@ -99,7 +100,7 @@ export default function ToolsPanel() {
 
   const doExportFasta = () => run(async () => {
     const header = `evo_candidate_${active?.id ?? 0}`;
-    const text = await exportFasta([{ header, sequence: rawSequence }]);
+    const text = await exportFasta([{ id: header, sequence: rawSequence }]);
     downloadText(`${header}.fasta`, text);
   });
 
@@ -131,7 +132,10 @@ export default function ToolsPanel() {
 
   return (
     <div className="p-5">
-      <Label>Research tools</Label>
+      <div className="flex items-center justify-between mb-2">
+        <Label>Research tools</Label>
+        <EditingCandidateChrome variant="subline" />
+      </div>
       <div className="flex gap-1 mb-3 flex-wrap">
         {TABS.map((t) => (
           <button

@@ -1,43 +1,102 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useEvoStore } from "@/lib/store";
-import { ArrowRight, ArrowUpRight, ArrowDownRight, Minus, Box } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  Box,
+  ArrowLeftRight,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
+import { diffCandidates, type DiffHunk, type DiffPosition } from "@/lib/seqDiff";
+import type { AnalysisResult } from "@/types";
 
 const ProteinViewer = dynamic(() => import("@/components/structure/ProteinViewer"), { ssr: false });
 
 const BC: Record<string, string> = { A: "var(--base-a)", T: "var(--base-t)", C: "var(--base-c)", G: "var(--base-g)" };
+const BASES_PER_LINE = 60;
+const BASES_PER_BLOCK = 10;
+
+interface CandidateLike {
+  id: number;
+  sequence: string;
+  scores: { functional: number; tissue: number; offTarget: number; novelty: number };
+  overall: number;
+  perPositionScores?: Array<{ position: number; score: number }>;
+}
+
+/**
+ * Resolve the best HONEST per-candidate PDB. Priority:
+ *  1. The active candidate's live-folded structure (activePdb).
+ *  2. A predicted protein whose region length uniquely matches this candidate.
+ * Anything ambiguous or absent returns null — we never show another candidate's
+ * fold under the wrong label, and we never fabricate a structure.
+ */
+function pdbForCandidate(
+  cand: CandidateLike,
+  analysisResult: AnalysisResult | null,
+  activeCandidateId: number | null,
+  activePdb: string | null,
+): string | null {
+  if (cand.id === activeCandidateId && activePdb) return activePdb;
+  const proteins = (analysisResult?.predictedProteins ?? []).filter((p) => p.pdbData);
+  const matches = proteins.filter((p) => p.regionEnd === cand.sequence.length);
+  const unique = Array.from(new Set(matches.map((m) => m.pdbData)));
+  if (unique.length === 1 && unique[0]) return unique[0];
+  return null;
+}
 
 export default function CompareView() {
   const candidates = useEvoStore((s) => s.candidates);
-  const rawSequence = useEvoStore((s) => s.rawSequence);
   const regions = useEvoStore((s) => s.regions);
   const setViewMode = useEvoStore((s) => s.setViewMode);
-
+  const setActiveCandidateId = useEvoStore((s) => s.setActiveCandidateId);
+  const analysisResult = useEvoStore((s) => s.analysisResult);
   const activePdb = useEvoStore((s) => s.activePdb);
-  const originalPdb = useEvoStore((s) => s.originalPdb);
+  const activeCandidateId = useEvoStore((s) => s.activeCandidateId);
   const theme = useEvoStore((s) => s.theme);
 
-  const candA = candidates[0];
-  const candB = candidates[1];
+  const compareLeftId = useEvoStore((s) => s.compareLeftId);
+  const compareRightId = useEvoStore((s) => s.compareRightId);
+  const setCompareLeftId = useEvoStore((s) => s.setCompareLeftId);
+  const setCompareRightId = useEvoStore((s) => s.setCompareRightId);
 
-  // Real sequence diff between top two candidates
-  const diffs = useMemo(() => {
-    const seqA = candA?.sequence ?? rawSequence;
-    const seqB = candB?.sequence;
-    if (!seqA || !seqB || seqB.length === 0) return [];
-    const len = Math.min(seqA.length, seqB.length);
-    const result: Array<{ position: number; baseA: string; baseB: string; delta: number }> = [];
-    for (let i = 0; i < len; i++) {
-      if (seqA[i] !== seqB[i]) {
-        result.push({ position: i, baseA: seqA[i], baseB: seqB[i], delta: 0 });
-      }
-    }
-    return result.slice(0, 24);
-  }, [candA?.sequence, candB?.sequence, rawSequence]);
+  // Effective selection with sensible fallbacks (top two ranked candidates).
+  const leftId = compareLeftId ?? candidates[0]?.id ?? null;
+  const rightId =
+    compareRightId ?? candidates.find((c) => c.id !== leftId)?.id ?? null;
 
-  if (!candA || !candB) {
+  const candA = candidates.find((c) => c.id === leftId) ?? candidates[0];
+  const candB = candidates.find((c) => c.id === rightId) ?? candidates[1];
+
+  const rankOf = (id: number) => candidates.findIndex((c) => c.id === id) + 1;
+
+  const diff = useMemo(() => {
+    if (!candA || !candB) return null;
+    return diffCandidates(
+      candA.sequence,
+      candB.sequence,
+      candA.perPositionScores,
+      candB.perPositionScores,
+    );
+  }, [candA, candB]);
+
+  const [hunkIndex, setHunkIndex] = useState(0);
+  const hunkRefs = useRef<Record<number, HTMLDivElement | null>>({});
+
+  const gotoHunk = (next: number) => {
+    if (!diff || diff.hunks.length === 0) return;
+    const clamped = Math.max(0, Math.min(diff.hunks.length - 1, next));
+    setHunkIndex(clamped);
+    hunkRefs.current[clamped]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  if (candidates.length < 2) {
     return (
       <div className="flex-1 flex items-center justify-center" style={{ background: "var(--surface-base)" }}>
         <p className="text-sm" style={{ color: "var(--text-muted)" }}>Need at least 2 candidates to compare.</p>
@@ -45,255 +104,429 @@ export default function CompareView() {
     );
   }
 
-  // Get a short region of sequence for the split-pane view
-  const seqStart = diffs.length > 0 ? Math.max(0, diffs[0].position - 10) : 0;
-  const seqEnd = Math.min((candA?.sequence ?? rawSequence).length, seqStart + 60);
-  const seqSliceA = (candA?.sequence ?? rawSequence).slice(seqStart, seqEnd);
-  const seqSliceB = (candB?.sequence ?? "").slice(seqStart, seqEnd);
-  const diffPositionSet = new Set(diffs.map((d) => d.position));
+  if (!candA || !candB) {
+    return (
+      <div className="flex-1 flex items-center justify-center" style={{ background: "var(--surface-base)" }}>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Select two candidates to compare.</p>
+      </div>
+    );
+  }
+
+  const sameCandidate = candA.id === candB.id;
+
+  const regionAt = (pos: number) => regions.find((r) => pos >= r.start && pos < r.end);
+
+  const pdbA = pdbForCandidate(candA, analysisResult, activeCandidateId, activePdb);
+  const pdbB = pdbForCandidate(candB, analysisResult, activeCandidateId, activePdb);
+
+  // ── Score delta table rows ──
+  type Row = { label: string; a: number; b: number; lowerBetter?: boolean; pct?: boolean };
+  const metricRows: Row[] = [
+    { label: "Functional", a: candA.scores.functional, b: candB.scores.functional, pct: true },
+    { label: "Tissue", a: candA.scores.tissue, b: candB.scores.tissue, pct: true },
+    { label: "Off-target", a: candA.scores.offTarget, b: candB.scores.offTarget, lowerBetter: true, pct: true },
+    { label: "Novelty", a: candA.scores.novelty, b: candB.scores.novelty, pct: true },
+    { label: "Overall", a: candA.overall, b: candB.overall },
+  ];
+
+  const winnerOf = (r: Row): "A" | "B" | "tie" => {
+    const eps = r.pct ? 0.005 : 0.05;
+    const diffVal = r.a - r.b;
+    if (Math.abs(diffVal) < eps) return "tie";
+    const aWins = r.lowerBetter ? r.a < r.b : r.a > r.b;
+    return aWins ? "A" : "B";
+  };
+
+  const cardBg = "var(--surface-raised)";
+  const nameA = `Candidate_${candA.id.toString().padStart(3, "0")}`;
+  const nameB = `Candidate_${candB.id.toString().padStart(3, "0")}`;
 
   return (
     <div className="flex-1 overflow-auto" style={{ background: "var(--surface-base)" }}>
       <div className="max-w-6xl mx-auto px-8 py-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-start justify-between mb-5 gap-4">
           <div>
             <h2 className="text-xl font-semibold tracking-tight mb-1">Candidate Comparison</h2>
             <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-              {diffs.length} position{diffs.length !== 1 ? "s" : ""} differ between candidates.
-              Each letter (A, T, C, G) is a DNA base — highlighted positions show where the two candidates diverge.
-              Positive score deltas mean the change improves that metric.
+              A git-style diff between two design variants. Highlighted bases show where the
+              sequences diverge; the table below scores each metric head-to-head.
             </p>
           </div>
-          <button onClick={() => setViewMode("ide")}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02]"
+          <button onClick={() => { setActiveCandidateId(candA.id); setViewMode("ide"); }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02] shrink-0"
             style={{ background: "var(--accent)", color: "var(--ink)" }}>
             Edit in Studio <ArrowRight size={14} />
           </button>
         </div>
 
-        {/* ── SPLIT-PANE SEQUENCE DIFF ── */}
-        <div className="rounded-xl overflow-hidden mb-6" style={{ background: "var(--surface-raised)" }}>
-          {/* Candidate headers */}
-          <div className="grid grid-cols-[1fr_80px_1fr]" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
-            <div className="px-5 py-3 flex items-center gap-3">
-              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>#1</span>
-              <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Candidate_{candA.id.toString().padStart(3, "0")}</span>
-              <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>Overall: {candA.overall.toFixed(1)}</span>
-            </div>
-            <div className="flex items-center justify-center" style={{ borderLeft: "1px solid var(--ghost-border)" }}>
-              <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--text-muted)" }}>Diff</span>
-            </div>
-            <div className="px-5 py-3 flex items-center gap-3">
-              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(107,159,212,0.1)", color: "var(--base-c)" }}>#2</span>
-              <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Candidate_{candB.id.toString().padStart(3, "0")}</span>
-              <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>Overall: {candB.overall.toFixed(1)}</span>
-            </div>
-          </div>
-
-          {/* Sequence comparison: colored bases side by side */}
-          <div className="grid grid-cols-[1fr_80px_1fr]">
-            {/* Left sequence (Candidate A) */}
-            <div className="px-5 py-4 font-mono text-[13px] leading-6 overflow-x-auto">
-              <div className="flex gap-1">
-                <span className="text-[10px] w-8 text-right shrink-0 tabular-nums select-none" style={{ color: "var(--text-faint)" }}>{seqStart}</span>
-                <div className="flex flex-wrap">
-                  {seqSliceA.split("").map((base, i) => {
-                    const pos = seqStart + i;
-                    const isDiff = diffPositionSet.has(pos);
-                    return (
-                      <span key={i} className="inline-block w-[1ch] text-center"
-                        style={{
-                          color: BC[base] ?? "var(--text-muted)",
-                          background: isDiff ? "rgba(212,122,122,0.15)" : "transparent",
-                          borderRadius: isDiff ? "2px" : "0",
-                        }}>
-                        {base}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Center: diff markers */}
-            <div className="py-4 flex flex-col items-center gap-0.5"
-              style={{ background: "var(--surface-base)" }}>
-              {diffs.filter(d => d.position >= seqStart && d.position < seqEnd).map((d) => (
-                <div key={d.position} className="text-[9px] font-mono leading-tight text-center" style={{ color: "var(--text-muted)" }}>
-                  {d.position}
-                </div>
-              ))}
-            </div>
-
-            {/* Right sequence (Candidate B - with mutations applied) */}
-            <div className="px-5 py-4 font-mono text-[13px] leading-6 overflow-x-auto">
-              <div className="flex gap-1">
-                <span className="text-[10px] w-8 text-right shrink-0 tabular-nums select-none" style={{ color: "var(--text-faint)" }}>{seqStart}</span>
-                <div className="flex flex-wrap">
-                  {seqSliceB.split("").map((base, i) => {
-                    const pos = seqStart + i;
-                    const isDiff = diffPositionSet.has(pos);
-                    return (
-                      <span key={i} className="inline-block w-[1ch] text-center"
-                        style={{
-                          color: BC[base] ?? "var(--text-muted)",
-                          background: isDiff ? "color-mix(in oklch, var(--accent), transparent 85%)" : "transparent",
-                          borderRadius: isDiff ? "2px" : "0",
-                        }}>
-                        {base}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Annotation track comparison */}
-          <div className="grid grid-cols-[1fr_80px_1fr]" style={{ borderTop: "1px solid var(--ghost-border)" }}>
-            <div className="px-5 py-2">
-              <div className="flex gap-px h-2 rounded overflow-hidden">
-                {regions.slice(0, 4).map((r, i) => (
-                  <div key={i} className="flex-1" style={{
-                    background: r.type === "exon" ? "rgba(124,107,196,0.4)" : r.type === "orf" ? "rgba(91,181,162,0.3)" : "rgba(60,60,60,0.3)",
-                  }} />
-                ))}
-              </div>
-            </div>
-            <div style={{ borderLeft: "1px solid var(--ghost-border)" }} />
-            <div className="px-5 py-2">
-              <div className="flex gap-px h-2 rounded overflow-hidden">
-                {regions.slice(0, 4).map((r, i) => (
-                  <div key={i} className="flex-1" style={{
-                    background: r.type === "exon" ? "rgba(124,107,196,0.4)" : r.type === "orf" ? "rgba(91,181,162,0.3)" : "rgba(60,60,60,0.3)",
-                  }} />
-                ))}
-              </div>
-            </div>
-          </div>
+        {/* ── CANDIDATE PICKERS ── */}
+        <div className="rounded-xl p-4 mb-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3" style={{ background: cardBg }}>
+          <CandidatePicker
+            label="A"
+            value={candA.id}
+            candidates={candidates}
+            onChange={(id) => setCompareLeftId(id)}
+            accent="var(--accent)"
+          />
+          <button
+            onClick={() => { setCompareLeftId(candB.id); setCompareRightId(candA.id); }}
+            title="Swap A and B"
+            className="p-2 rounded-full transition-colors hover:bg-black/[0.05]"
+            style={{ color: "var(--text-secondary)", border: "1px solid var(--ghost-border)" }}>
+            <ArrowLeftRight size={15} />
+          </button>
+          <CandidatePicker
+            label="B"
+            value={candB.id}
+            candidates={candidates}
+            onChange={(id) => setCompareRightId(id)}
+            accent="var(--base-c)"
+          />
         </div>
 
-        {/* ── SCORE COMPARISON ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          {/* Score deltas */}
-          <div className="rounded-xl p-5" style={{ background: "var(--surface-raised)" }}>
-            <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>Score comparison</span>
-            <p className="text-[11px] mb-4" style={{ color: "var(--text-faint)" }}>How likely the sequence works (functional), targets the right tissue, avoids side effects (off-target), and is original (novelty).</p>
-            <div className="space-y-3">
-              {[
-                { label: "Functional", a: candA.scores.functional, b: candB.scores.functional, color: "var(--accent)" },
-                { label: "Tissue", a: candA.scores.tissue, b: candB.scores.tissue, color: "var(--base-c)" },
-                { label: "Off-target", a: candA.scores.offTarget, b: candB.scores.offTarget, color: "var(--base-t)" },
-                { label: "Novelty", a: candA.scores.novelty, b: candB.scores.novelty, color: "var(--base-g)" },
-              ].map((m) => {
-                const delta = m.a - m.b;
-                return (
-                  <div key={m.label} className="flex items-center gap-3">
-                    <span className="text-xs w-20 shrink-0" style={{ color: "var(--text-secondary)" }}>{m.label}</span>
-                    <div className="flex-1 flex items-center gap-2">
-                      <span className="text-xs font-mono w-10" style={{ color: m.color }}>{(m.a * 100).toFixed(0)}%</span>
-                      <div className="flex-1 h-1 rounded-full relative overflow-hidden" style={{ background: "var(--ghost-border)" }}>
-                        <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${m.a * 100}%`, background: m.color, opacity: 0.5 }} />
-                        <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${m.b * 100}%`, background: m.color, opacity: 0.25, borderRight: `1px solid ${m.color}` }} />
-                      </div>
-                      <span className="text-xs font-mono w-10" style={{ color: "var(--text-muted)" }}>{(m.b * 100).toFixed(0)}%</span>
-                    </div>
-                    <div className="flex items-center gap-1 w-16 justify-end">
-                      {delta > 0.01 ? <ArrowUpRight size={12} style={{ color: "var(--accent)" }} /> :
-                       delta < -0.01 ? <ArrowDownRight size={12} style={{ color: "var(--base-t)" }} /> :
-                       <Minus size={12} style={{ color: "var(--text-muted)" }} />}
-                      <span className="text-[11px] font-mono" style={{ color: delta > 0.01 ? "var(--accent)" : delta < -0.01 ? "var(--base-t)" : "var(--text-muted)" }}>
-                        {delta > 0 ? "+" : ""}{(delta * 100).toFixed(1)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {/* Overall */}
-            <div className="mt-4 pt-4 flex items-center justify-between" style={{ borderTop: "1px solid var(--ghost-border)" }}>
-              <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Overall</span>
-              <div className="flex items-center gap-4">
-                <span className="text-xl font-bold font-mono" style={{ color: "var(--accent)" }}>{candA.overall.toFixed(1)}</span>
-                <span className="text-sm font-mono" style={{ color: "var(--text-muted)" }}>vs</span>
-                <span className="text-xl font-bold font-mono" style={{ color: "var(--base-c)" }}>{candB.overall.toFixed(1)}</span>
-              </div>
-            </div>
+        {sameCandidate && (
+          <div className="rounded-xl p-4 mb-6 text-[13px]" style={{ background: cardBg, color: "var(--text-muted)" }}>
+            A and B are the same candidate — pick two different variants to see a diff.
           </div>
+        )}
 
-          {/* Position-level diffs */}
-          <div className="rounded-xl p-5" style={{ background: "var(--surface-raised)" }}>
-            <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--text-muted)" }}>
-              Sequence differences ({diffs.length})
-            </span>
-            <div className="space-y-1 max-h-[280px] overflow-y-auto">
-              {diffs.map((d, i) => {
-                const region = regions.find(r => d.position >= r.start && d.position < r.end);
-                return (
-                  <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded transition-colors hover:bg-white/[0.04]">
-                    <span className="text-[11px] font-mono w-14" style={{ color: "var(--text-muted)" }}>pos {d.position}</span>
-                    <span className="text-sm font-mono font-semibold" style={{ color: BC[d.baseA] ?? "var(--text-muted)" }}>{d.baseA}</span>
-                    <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>&rarr;</span>
-                    <span className="text-sm font-mono font-semibold" style={{ color: BC[d.baseB] ?? "var(--text-muted)" }}>{d.baseB}</span>
-                    {region && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
-                        background: region.type === "exon" || region.type === "orf" ? "rgba(91,181,162,0.08)" : "var(--ghost-border)",
-                        color: region.type === "exon" || region.type === "orf" ? "var(--accent)" : "var(--text-muted)",
-                      }}>{region.type}</span>
-                    )}
-                    <span className="flex-1" />
-                    <span className="text-[11px] font-mono" style={{ color: d.delta > 0 ? "var(--accent)" : "var(--base-t)" }}>
-                      {d.delta > 0 ? "+" : ""}{d.delta.toFixed(2)}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* ── STRUCTURE COMPARISON: side by side ── */}
-        {(activePdb || originalPdb) && (
-          <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-raised)" }}>
-            <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
-              <Box size={14} style={{ color: "var(--accent)" }} />
+        {/* ── GIT-DIFF SEQUENCE VIEW ── */}
+        {!sameCandidate && diff && (
+          <div className="rounded-xl overflow-hidden mb-6" style={{ background: cardBg }}>
+            <div className="flex items-center gap-3 px-5 py-3 flex-wrap" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
               <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                3D Structure — Before & After
+                Sequence diff
               </span>
-              {originalPdb === activePdb && (
-                <span className="text-[10px] ml-auto" style={{ color: "var(--text-faint)" }}>
-                  No edits yet — both show the same structure
+              <span className="text-[12px] font-mono" style={{ color: "var(--text-secondary)" }}>
+                {diff.changes.length} change{diff.changes.length !== 1 ? "s" : ""} · {(diff.identity * 100).toFixed(2)}% identity
+              </span>
+              {diff.lengthA !== diff.lengthB && (
+                <span className="text-[11px] font-mono" style={{ color: "var(--base-t)" }}>
+                  length {diff.lengthA} → {diff.lengthB}
+                </span>
+              )}
+              <span className="flex-1" />
+              {diff.hunks.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-mono tabular-nums" style={{ color: "var(--text-muted)" }}>
+                    hunk {hunkIndex + 1}/{diff.hunks.length}
+                  </span>
+                  <button onClick={() => gotoHunk(hunkIndex - 1)} disabled={hunkIndex === 0}
+                    className="p-1 rounded transition-colors hover:bg-black/[0.05] disabled:opacity-30"
+                    style={{ border: "1px solid var(--ghost-border)" }} title="Previous hunk">
+                    <ChevronUp size={13} />
+                  </button>
+                  <button onClick={() => gotoHunk(hunkIndex + 1)} disabled={hunkIndex === diff.hunks.length - 1}
+                    className="p-1 rounded transition-colors hover:bg-black/[0.05] disabled:opacity-30"
+                    style={{ border: "1px solid var(--ghost-border)" }} title="Next hunk">
+                    <ChevronDown size={13} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Legend row */}
+            <div className="flex items-center gap-4 px-5 py-2 text-[11px] font-mono" style={{ borderBottom: "1px solid var(--ghost-border)", color: "var(--text-muted)" }}>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "color-mix(in oklch, var(--base-t), transparent 70%)" }} /> A ({rankOf(candA.id) > 0 ? `#${rankOf(candA.id)} · ` : ""}{nameA})
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: "color-mix(in oklch, var(--accent), transparent 70%)" }} /> B ({rankOf(candB.id) > 0 ? `#${rankOf(candB.id)} · ` : ""}{nameB})
+              </span>
+            </div>
+
+            {diff.hunks.length === 0 ? (
+              <div className="px-5 py-8 text-center text-[13px]" style={{ color: "var(--text-muted)" }}>
+                Sequences are identical over their common length.
+              </div>
+            ) : (
+              <div className="max-h-[520px] overflow-y-auto">
+                {diff.hunks.map((hunk, hi) => (
+                  <div
+                    key={hi}
+                    ref={(el) => { hunkRefs.current[hi] = el; }}
+                    style={{ borderBottom: hi < diff.hunks.length - 1 ? "1px solid var(--ghost-border)" : "none" }}
+                  >
+                    <HunkBlock
+                      hunk={hunk}
+                      seqA={candA.sequence}
+                      seqB={candB.sequence}
+                      hasScoreDeltas={diff.hasScoreDeltas}
+                      regionLabel={(pos) => regionAt(pos)?.type}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SCORE DELTA TABLE ── */}
+        <div className="rounded-xl p-5 mb-6" style={{ background: cardBg }}>
+          <span className="text-[11px] font-medium uppercase tracking-wider block mb-1" style={{ color: "var(--text-muted)" }}>Score comparison</span>
+          <p className="text-[11px] mb-4" style={{ color: "var(--text-faint)" }}>
+            Head-to-head metrics. Off-target is inverted — lower is better. These are demo heuristics, not clinical scores.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                  <th className="text-left font-medium pb-2">Metric</th>
+                  <th className="text-right font-medium pb-2 w-20">A</th>
+                  <th className="text-right font-medium pb-2 w-20">B</th>
+                  <th className="text-center font-medium pb-2 w-40">Δ (B − A)</th>
+                  <th className="text-right font-medium pb-2 w-24">Winner</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metricRows.map((r) => {
+                  const winner = winnerOf(r);
+                  const delta = r.b - r.a;
+                  const fmt = (v: number) => (r.pct ? `${(v * 100).toFixed(r.label === "Off-target" ? 1 : 0)}%` : v.toFixed(1));
+                  const deltaFmt = r.pct ? `${delta >= 0 ? "+" : ""}${(delta * 100).toFixed(1)}` : `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`;
+                  const isOverall = r.label === "Overall";
+                  return (
+                    <tr key={r.label} style={{ borderTop: isOverall ? "1px solid var(--ghost-border)" : "1px solid color-mix(in oklch, var(--ghost-border), transparent 55%)" }}>
+                      <td className={`py-2.5 ${isOverall ? "font-semibold" : ""}`} style={{ color: "var(--text-primary)" }}>
+                        {r.label}
+                        {r.lowerBetter && <span className="text-[10px] ml-1.5" style={{ color: "var(--text-faint)" }}>(lower better)</span>}
+                      </td>
+                      <td className="text-right font-mono tabular-nums" style={{ color: winner === "A" ? "var(--accent)" : "var(--text-secondary)", fontWeight: winner === "A" ? 600 : 400 }}>{fmt(r.a)}</td>
+                      <td className="text-right font-mono tabular-nums" style={{ color: winner === "B" ? "var(--base-c)" : "var(--text-secondary)", fontWeight: winner === "B" ? 600 : 400 }}>{fmt(r.b)}</td>
+                      <td className="py-2.5">
+                        <DeltaCell delta={delta} lowerBetter={r.lowerBetter} pct={r.pct} label={deltaFmt} />
+                      </td>
+                      <td className="text-right">
+                        {winner === "tie" ? (
+                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>tie</span>
+                        ) : (
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                            style={{
+                              background: winner === "A" ? "color-mix(in oklch, var(--accent), transparent 88%)" : "color-mix(in oklch, var(--base-c), transparent 88%)",
+                              color: winner === "A" ? "var(--accent)" : "var(--base-c)",
+                            }}>
+                            {winner}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── STRUCTURE COMPARISON: candidate A vs candidate B ── */}
+        <div className="rounded-xl overflow-hidden" style={{ background: cardBg }}>
+          <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+            <Box size={14} style={{ color: "var(--accent)" }} />
+            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              3D Structure — Candidate A vs Candidate B
+            </span>
+          </div>
+          <div className="grid grid-cols-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+            <div className="px-4 py-2 text-center" style={{ borderRight: "1px solid var(--ghost-border)" }}>
+              <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--accent)" }}>A · {nameA}</span>
+            </div>
+            <div className="px-4 py-2 text-center">
+              <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--base-c)" }}>B · {nameB}</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2">
+            <StructurePane pdb={pdbA} theme={theme} bordered />
+            <StructurePane pdb={pdbB} theme={theme} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Candidate picker dropdown
+// ---------------------------------------------------------------------------
+function CandidatePicker({
+  label, value, candidates, onChange, accent,
+}: {
+  label: string;
+  value: number;
+  candidates: CandidateLike[];
+  onChange: (id: number) => void;
+  accent: string;
+}) {
+  return (
+    <label className="flex items-center gap-3">
+      <span className="text-xs font-mono font-semibold px-2 py-1 rounded-full shrink-0"
+        style={{ background: `color-mix(in oklch, ${accent}, transparent 88%)`, color: accent }}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="flex-1 min-w-0 text-[13px] rounded-lg px-3 py-2 font-mono cursor-pointer transition-colors"
+        style={{ background: "var(--surface-base)", color: "var(--text-primary)", border: "1px solid var(--ghost-border)" }}
+      >
+        {candidates.map((c, i) => (
+          <option key={c.id} value={c.id}>
+            #{i + 1} · Candidate_{c.id.toString().padStart(3, "0")} · {c.overall.toFixed(1)} · {c.sequence.length} bp
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Centered delta bar cell (MutationDiff-style)
+// ---------------------------------------------------------------------------
+function DeltaCell({
+  delta, lowerBetter, pct, label,
+}: {
+  delta: number;
+  lowerBetter?: boolean;
+  pct?: boolean;
+  label: string;
+}) {
+  // "Good" direction: positive delta is an improvement unless lowerBetter.
+  const improved = lowerBetter ? delta < 0 : delta > 0;
+  const eps = pct ? 0.005 : 0.05;
+  const neutral = Math.abs(delta) < eps;
+  const color = neutral ? "var(--text-muted)" : improved ? "var(--accent)" : "var(--base-t)";
+  const maxAbs = pct ? 0.5 : 30; // scaling reference for the bar
+  const frac = Math.min(Math.abs(delta) / maxAbs, 1);
+  const barPercent = frac * 50;
+  const isNegative = delta < 0;
+
+  return (
+    <div className="flex items-center gap-2 justify-center">
+      <div className="relative h-1.5 rounded-full overflow-hidden flex-1 max-w-[110px]" style={{ background: "var(--ghost-border)" }}>
+        <div className="absolute left-1/2 top-0 bottom-0 w-px" style={{ background: "var(--text-faint)" }} />
+        <div className="absolute top-0 bottom-0 rounded-full"
+          style={{
+            background: color,
+            opacity: neutral ? 0.4 : 0.85,
+            left: isNegative ? `${50 - barPercent}%` : "50%",
+            width: `${barPercent}%`,
+          }} />
+      </div>
+      <span className="inline-flex items-center gap-0.5 w-14 justify-end font-mono text-[11px]" style={{ color }}>
+        {neutral ? <Minus size={11} /> : improved ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// One git-diff hunk: sequence lines (A over B) + per-change annotation strip
+// ---------------------------------------------------------------------------
+function HunkBlock({
+  hunk, seqA, seqB, hasScoreDeltas, regionLabel,
+}: {
+  hunk: DiffHunk;
+  seqA: string;
+  seqB: string;
+  hasScoreDeltas: boolean;
+  regionLabel: (pos: number) => string | undefined;
+}) {
+  const diffSet = useMemo(() => new Set(hunk.changes.map((c) => c.position)), [hunk.changes]);
+
+  // Break the hunk window into 60bp lines aligned to absolute boundaries.
+  const lineStart = Math.floor(hunk.start / BASES_PER_LINE) * BASES_PER_LINE;
+  const lines: number[] = [];
+  for (let p = lineStart; p < hunk.end; p += BASES_PER_LINE) lines.push(p);
+
+  const renderRow = (seq: string, from: number, sideAccent: string) => {
+    const to = Math.min(from + BASES_PER_LINE, hunk.end);
+    const cells = [];
+    for (let pos = from; pos < to; pos++) {
+      const inWindow = pos >= hunk.start;
+      const base = pos < seq.length ? seq[pos] : "·";
+      const isDiff = diffSet.has(pos);
+      cells.push(
+        <span key={pos} className="inline-block w-[1ch] text-center"
+          style={{
+            marginLeft: pos > from && pos % BASES_PER_BLOCK === 0 ? "6px" : "0",
+            color: inWindow ? (BC[base] ?? "var(--text-faint)") : "var(--text-faint)",
+            opacity: inWindow ? 1 : 0.3,
+            background: isDiff ? sideAccent : "transparent",
+            borderRadius: isDiff ? "2px" : "0",
+          }}>
+          {base}
+        </span>,
+      );
+    }
+    return cells;
+  };
+
+  return (
+    <div className="px-5 py-3">
+      {/* Hunk header */}
+      <div className="text-[11px] font-mono mb-2" style={{ color: "var(--text-faint)" }}>
+        @@ pos {hunk.start}–{hunk.end} · {hunk.changes.length} change{hunk.changes.length !== 1 ? "s" : ""} @@
+      </div>
+
+      {/* Sequence lines */}
+      <div className="font-mono text-[13px] leading-5 overflow-x-auto space-y-2">
+        {lines.map((from) => (
+          <div key={from} className="flex flex-col gap-0.5">
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] w-4 text-right shrink-0 tabular-nums select-none pt-0.5" style={{ color: "var(--text-faint)" }}>A</span>
+              <span className="text-[10px] w-12 text-right shrink-0 tabular-nums select-none pt-0.5" style={{ color: "var(--text-faint)" }}>{from}</span>
+              <div className="flex flex-nowrap">{renderRow(seqA, from, "color-mix(in oklch, var(--base-t), transparent 65%)")}</div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] w-4 text-right shrink-0 tabular-nums select-none pt-0.5" style={{ color: "var(--text-faint)" }}>B</span>
+              <span className="text-[10px] w-12 text-right shrink-0 tabular-nums select-none pt-0.5" style={{ color: "var(--text-faint)" }}>{from}</span>
+              <div className="flex flex-nowrap">{renderRow(seqB, from, "color-mix(in oklch, var(--accent), transparent 65%)")}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-change annotations */}
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+        {hunk.changes.map((c: DiffPosition) => {
+          const region = regionLabel(c.position);
+          return (
+            <div key={c.position} className="inline-flex items-center gap-1.5 text-[11px] font-mono">
+              <span style={{ color: "var(--text-muted)" }}>{c.position}</span>
+              <span className="font-semibold" style={{ color: BC[c.ref] ?? "var(--text-muted)" }}>{c.ref}</span>
+              <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>→</span>
+              <span className="font-semibold" style={{ color: BC[c.alt] ?? "var(--text-muted)" }}>{c.alt}</span>
+              {region && (
+                <span className="text-[9px] px-1 py-0.5 rounded" style={{ background: "var(--ghost-border)", color: "var(--text-muted)" }}>{region}</span>
+              )}
+              {/* Only show a real per-position score delta — never a fake 0. */}
+              {hasScoreDeltas && c.scoreDelta !== undefined && (
+                <span style={{ color: c.scoreDelta > 0 ? "var(--accent)" : c.scoreDelta < 0 ? "var(--base-t)" : "var(--text-muted)" }}>
+                  ΔLL {c.scoreDelta > 0 ? "+" : ""}{c.scoreDelta.toFixed(2)}
                 </span>
               )}
             </div>
-            <div className="grid grid-cols-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
-              <div className="px-4 py-2 text-center" style={{ borderRight: "1px solid var(--ghost-border)" }}>
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Original</span>
-              </div>
-              <div className="px-4 py-2 text-center">
-                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: originalPdb !== activePdb ? "var(--accent)" : "var(--text-muted)" }}>
-                  {originalPdb !== activePdb ? "After Edits" : "Current"}
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2">
-              <div className="h-[320px]" style={{ background: theme === "dark" ? "var(--surface-void)" : "var(--surface-base)", borderRight: "1px solid var(--ghost-border)" }}>
-                <ProteinViewer
-                  pdbData={originalPdb || undefined}
-                  theme={theme}
-                />
-              </div>
-              <div className="h-[320px]" style={{ background: theme === "dark" ? "var(--surface-void)" : "var(--surface-base)" }}>
-                <ProteinViewer
-                  pdbData={activePdb || undefined}
-                  theme={theme}
-                />
-              </div>
-            </div>
-          </div>
-        )}
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Structure pane — real fold or honest empty state
+// ---------------------------------------------------------------------------
+function StructurePane({ pdb, theme, bordered }: { pdb: string | null; theme: "dark" | "light"; bordered?: boolean }) {
+  const bg = theme === "dark" ? "var(--surface-void)" : "var(--surface-base)";
+  return (
+    <div className="h-[320px] flex items-center justify-center" style={{ background: bg, borderRight: bordered ? "1px solid var(--ghost-border)" : undefined }}>
+      {pdb ? (
+        <ProteinViewer pdbData={pdb} theme={theme} />
+      ) : (
+        <div className="text-center px-4">
+          <Box size={20} className="mx-auto mb-2" style={{ color: "var(--text-faint)" }} />
+          <p className="text-[12px]" style={{ color: "var(--text-muted)" }}>No predicted structure for this candidate.</p>
+          <p className="text-[10px] mt-1" style={{ color: "var(--text-faint)" }}>Fold it from the Structure view to compare here.</p>
+        </div>
+      )}
     </div>
   );
 }

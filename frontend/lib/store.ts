@@ -53,6 +53,15 @@ interface RetrievalStatus {
   result?: Record<string, unknown> | null;
 }
 
+/** Provenance for a sequence imported from a FASTA/GenBank file. */
+interface ImportSource {
+  format: "fasta" | "genbank";
+  id: string;
+  organism?: string;
+  definition?: string;
+  featureCount?: number;
+}
+
 interface EvoState {
   viewMode: ViewMode;
   pipelineStatus: PipelineStatus;
@@ -69,12 +78,16 @@ interface EvoState {
   selectedRegionIndex: number | null;
   activePdb: string | null;
   originalPdb: string | null;
-  /** Provenance: esmfold | mock | unavailable | null */
+  /** Provenance: esmfold | mock | unavailable | user_pdb | null.
+   * "user_pdb" = a structure file the user uploaded — NOT a model prediction. */
   structureModel: string | null;
   highlightResidues: number[];
 
   mutationEffect: MutationEffect | null;
   mutationLoading: boolean;
+  /** True while the protein structure refolds in the background after an edit.
+   *  Independent of mutationLoading (which only covers fast scoring). */
+  structureRefolding: boolean;
 
   editHistory: EditEntry[];
   chatMessages: ChatMessage[];
@@ -82,8 +95,13 @@ interface EvoState {
   chatDraft: string | null;
   /** Prefill the home composer when restoring a recent session. */
   composerPrefill: { mode: "design" | "paste"; value: string } | null;
+  /** Metadata for a sequence brought in via FASTA/GenBank import (if any). */
+  importSource: ImportSource | null;
   candidates: Candidate[];
   activeCandidateId: number | null;
+  /** Candidate comparison: which two candidates are pinned in CompareView. */
+  compareLeftId: number | null;
+  compareRightId: number | null;
 
   // Streaming pipeline state
   sessionId: string | null;
@@ -122,6 +140,7 @@ interface EvoState {
   setHighlightResidues: (residues: number[]) => void;
   setMutationEffect: (effect: MutationEffect | null) => void;
   setMutationLoading: (loading: boolean) => void;
+  setStructureRefolding: (refolding: boolean) => void;
   setPipelineStatus: (status: PipelineStatus) => void;
   setPipelineStage: (stage: string) => void;
   setError: (error: string | null) => void;
@@ -131,8 +150,11 @@ interface EvoState {
   setChatOpen: (open: boolean) => void;
   setChatDraft: (draft: string | null) => void;
   setComposerPrefill: (prefill: { mode: "design" | "paste"; value: string } | null) => void;
+  setImportSource: (source: ImportSource | null) => void;
   setCandidates: (candidates: Candidate[]) => void;
   setActiveCandidateId: (id: number | null) => void;
+  setCompareLeftId: (id: number | null) => void;
+  setCompareRightId: (id: number | null) => void;
   setSessionId: (id: string | null) => void;
   appendGeneratingToken: (token: string) => void;
   appendExplanation: (text: string) => void;
@@ -169,13 +191,17 @@ const initialState = {
   highlightResidues: [] as number[],
   mutationEffect: null as MutationEffect | null,
   mutationLoading: false,
+  structureRefolding: false,
   editHistory: [] as EditEntry[],
   chatMessages: [] as ChatMessage[],
   chatOpen: false,
   chatDraft: null as string | null,
   composerPrefill: null as { mode: "design" | "paste"; value: string } | null,
+  importSource: null as ImportSource | null,
   candidates: [] as Candidate[],
   activeCandidateId: null as number | null,
+  compareLeftId: null as number | null,
+  compareRightId: null as number | null,
   sessionId: null as string | null,
   generatingSequence: "",
   explanation: "",
@@ -259,11 +285,12 @@ export const useEvoStore = create<EvoState>((set, get) => ({
 
     const activeCandidateId = state.activeCandidateId ?? candidates[0]?.id ?? null;
 
+    // A fresh run arrives from the pipeline/input screens. Anything else
+    // (Rescore from Sequence/Edit) is an in-place update of the same session.
+    const freshRun = state.viewMode === "pipeline" || state.viewMode === "input";
+
     // Only leave the pipeline/input screens — never yank Sequence/Edit → Structure.
-    const nextView =
-      state.viewMode === "pipeline" || state.viewMode === "input"
-        ? "analyze"
-        : state.viewMode;
+    const nextView = freshRun ? "analyze" : state.viewMode;
 
     set({
       analysisResult: result,
@@ -275,6 +302,8 @@ export const useEvoStore = create<EvoState>((set, get) => ({
       candidates,
       activeCandidateId,
       error: null,
+      // Stale compare pins from a previous run must not carry into a new one.
+      ...(freshRun ? { compareLeftId: null, compareRightId: null } : {}),
     });
   },
 
@@ -293,6 +322,7 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   setHighlightResidues: (residues) => set({ highlightResidues: residues }),
   setMutationEffect: (effect) => set({ mutationEffect: effect }),
   setMutationLoading: (loading) => set({ mutationLoading: loading }),
+  setStructureRefolding: (refolding) => set({ structureRefolding: refolding }),
   setPipelineStatus: (status) => set({ pipelineStatus: status }),
   setPipelineStage: (stage) => set({ pipelineStage: stage }),
   setError: (error) => set({ error, pipelineStatus: "error" }),
@@ -302,7 +332,10 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   setChatOpen: (open) => set({ chatOpen: open }),
   setChatDraft: (draft) => set({ chatDraft: draft }),
   setComposerPrefill: (prefill) => set({ composerPrefill: prefill }),
+  setImportSource: (source) => set({ importSource: source }),
   setCandidates: (candidates) => set({ candidates }),
+  setCompareLeftId: (id) => set({ compareLeftId: id }),
+  setCompareRightId: (id) => set({ compareRightId: id }),
   setActiveCandidateId: (id) => {
     const state = get();
     const candidate = state.candidates.find((c) => c.id === id);

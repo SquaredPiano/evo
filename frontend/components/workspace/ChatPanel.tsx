@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useEvoStore } from "@/lib/store";
 import { X, Send, Sparkles, Check, Loader2, AlertCircle } from "lucide-react";
 import { buildEvidenceLinks } from "@/lib/evidence";
+import { getCandidateDisplay } from "@/lib/candidateDisplay";
 
 const SCREEN_PROMPTS: Record<string, string[]> = {
   analyze: [
@@ -484,6 +485,11 @@ export default function ChatPanel() {
     }
   };
 
+  // Helio edits the active candidate — say which one, honestly.
+  const helioDisplay = getCandidateDisplay(candidates, activeCandidateId);
+  const helioSubtitle = helioDisplay.hasCandidate ? helioDisplay.label : "Agent · tools · explain";
+  const helioSubtitleTitle = helioDisplay.hasCandidate ? helioDisplay.subtitle : "Agent · tools · explain";
+
   return (
     <div className="w-full sm:w-[380px] shrink-0 flex flex-col h-full"
       style={{ background: "var(--surface-raised)", borderLeft: "1px solid var(--ghost-border)" }}
@@ -499,7 +505,9 @@ export default function ChatPanel() {
           </span>
           <div className="leading-tight">
             <span className="text-sm font-bold block" style={{ color: "var(--text-primary)" }}>Helio</span>
-            <span className="label-caps" style={{ fontSize: "8px" }}>Agent · tools · explain</span>
+            <span className="label-caps" style={{ fontSize: "8px" }} title={helioSubtitleTitle}>
+              {helioSubtitle}
+            </span>
           </div>
           {iterations > 1 && (
             <span className="chip-honey" style={{ fontSize: "9px" }}>

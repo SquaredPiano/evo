@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MutationEffect, Nucleotide } from "@/types";
 import { useEvoStore } from "@/lib/store";
+import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
 
 interface MutationPanelProps {
   sequence: string;
@@ -40,6 +41,7 @@ export default function MutationPanel({
   const [position, setPosition] = useState("");
   const [alternate, setAlternate] = useState<Nucleotide | null>(null);
   const selectedPosition = useEvoStore((s) => s.selectedPosition);
+  const structureRefolding = useEvoStore((s) => s.structureRefolding);
 
   // Auto-fill position when user clicks a base in the sequence
   useEffect(() => {
@@ -72,6 +74,7 @@ export default function MutationPanel({
   return (
     <div className="flex flex-col gap-5">
       {/* Header */}
+      <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">
           Mutation
@@ -84,6 +87,8 @@ export default function MutationPanel({
             </span>
           </span>
         )}
+      </div>
+        <EditingCandidateChrome variant="subline" />
       </div>
 
       {/* Position input */}
@@ -169,12 +174,31 @@ export default function MutationPanel({
               animate={{ rotate: 360 }}
               transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
             />
-            Mutating & re-folding...
+            Re-scoring...
           </span>
         ) : (
           "Run simulation"
         )}
       </motion.button>
+
+      {/* Structure refold runs in the background — scores already landed above. */}
+      <AnimatePresence>
+        {structureRefolding && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex items-center justify-center gap-2 text-[11px] text-[var(--text-faint)]"
+          >
+            <motion.span
+              className="block w-2.5 h-2.5 rounded-full border-2 border-[var(--text-faint)] border-t-transparent spinner-keep"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+            />
+            Re-folding structure...
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Result */}
       <AnimatePresence mode="wait">
