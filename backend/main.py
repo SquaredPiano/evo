@@ -113,6 +113,14 @@ async def _lifespan(app: FastAPI) -> _AsyncIterator[None]:
     # Durable persistence is optional — a failure here is logged and the app
     # continues Redis-only (see MongoStore.connect). Never fatal.
     await mongo_store.connect()
+    # Fire-and-forget: pre-warm the literature index for known demo genes so a
+    # live demo doesn't pay first-query PubMed+embedding latency. Scheduled
+    # here (inside the lifespan, where a loop is guaranteed to be running)
+    # rather than at bare module level, which would raise "no running event
+    # loop" at import time (e.g. under pytest). Must not block startup —
+    # ensure_indexed's own failures are already non-raising, so nothing here
+    # can delay or fail the `yield` below.
+    asyncio.create_task(_prewarm_literature_index())
     yield
     # Shutdown
     await session_store.close()
@@ -144,6 +152,23 @@ literature_index = LiteratureIndex(embedder=embedder, mongo_store=mongo_store)
 # feeds semantically-retrieved papers into /api/region-evidence alongside
 # ClinVar + regulatory evidence.
 literature_rag_provider = LiteratureRagProvider(literature_index)
+
+# Demo genes to pre-warm the literature index for at startup (see _lifespan).
+# On-demand ensure_indexed() already covers any gene a user actually queries —
+# this list only exists to avoid paying first-query ingestion latency live
+# during a demo. NOTE: confirm/adjust this list with the team before
+# presenting; it's a placeholder default, not a confirmed demo lineup.
+_LITERATURE_PREWARM_GENES = ["BRCA1", "TP53", "CFTR"]
+
+
+async def _prewarm_literature_index() -> None:
+    for gene in _LITERATURE_PREWARM_GENES:
+        try:
+            await literature_index.ensure_indexed(gene)
+        except Exception:
+            logger.warning("Literature pre-warm failed for gene=%s", gene, exc_info=True)
+
+
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 MAX_SESSION_CONTEXT_ENTRIES = 512
 
@@ -238,6 +263,7 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
             on_pipeline_complete=lambda candidates, completed, failed: _persist_run_completion(
                 run_id, session_id, candidates, completed, failed
             ),
+            literature_index=literature_index,
         )
     )
     return DesignAcceptedResponse(

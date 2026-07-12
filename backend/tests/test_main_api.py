@@ -472,3 +472,31 @@ def test_edit_base_returns_423_when_candidate_locked(monkeypatch: pytest.MonkeyP
     )
     assert res.status_code == 423
     assert res.json()["detail"] == "candidate is busy; retry shortly"
+
+
+def test_literature_prewarm_does_not_block_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The demo-gene pre-warm task is fire-and-forget: even if it takes a long
+    time (real PubMed + embedding calls for several genes), entering the app's
+    lifespan must not wait for it. Mongo's own connect() is stubbed out here
+    so the only variable in the timing is the pre-warm task itself — real
+    Mongo/TLS latency is covered separately and would make this flaky."""
+    import asyncio
+    import time
+
+    async def instant_connect() -> bool:
+        return False
+
+    async def slow_prewarm() -> None:
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(main.mongo_store, "connect", instant_connect)
+    monkeypatch.setattr(main, "_prewarm_literature_index", slow_prewarm)
+
+    started = time.perf_counter()
+    with TestClient(app) as client:
+        res = client.get("/api/health")
+        assert res.status_code == 200
+    elapsed = time.perf_counter() - started
+    # Well under the 5s the slow pre-warm would add if it were (wrongly)
+    # awaited instead of scheduled as a background task.
+    assert elapsed < 2.0

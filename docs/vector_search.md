@@ -16,7 +16,8 @@ works with zero configuration and no external services, just at lower quality.
 | `services/embeddings.py` | Text → vector. `LocalHashEmbedder` (deterministic, offline) and `ApiEmbedder` (OpenAI-compatible). `create_embedder(settings)` picks per the hybrid policy. `cosine_similarity`. |
 | `services/literature_index.py` | `LiteratureIndex` (index + search) and `LiteratureRagProvider` (region_evidence adapter). |
 | `services/mongo_store.py` | Durable storage + Atlas `$vectorSearch` (`save_literature_docs`, `vector_search_literature`, `list_literature_docs`). |
-| `main.py` | `POST /api/literature/index`, `POST /api/literature/search`. |
+| `main.py` | `POST /api/literature/index`, `POST /api/literature/search`, and the startup pre-warm task (see below). |
+| `scripts/ingest_literature.py` | One-off manual ingestion CLI for a gene list — optional now that `ensure_indexed` covers ingestion on demand. |
 
 ## Two degradation axes
 
@@ -87,6 +88,80 @@ evidence = await attach_literature_evidence(
 )
 ```
 
+## Chat retrieval integration
+
+The design-generation pipeline's retrieval stage
+(`pipeline/orchestrator.py::_emit_retrieval`, called from
+`run_generation_pipeline`) previously populated its `"pubmed"` retrieval
+bucket only from `services.pubmed.search_literature()` — a plain keyword
+search. It now also merges in relevance-filtered `LiteratureIndex.search()`
+hits, deduplicated by pmid against whatever the keyword search already found,
+into that same `articles` list. This is the list the frontend's
+`lib/evidence.ts` already turns into `evidence_links` for chat, and
+`services/agent/graph.py`'s `RESPONDER_PROMPT` already knows how to cite —
+so semantically-retrieved, real, post-2025 papers now reach chat citations
+with no frontend or agent-prompt changes.
+
+Before merging, it calls `ensure_indexed(spec.target_gene, ...)` first (same
+as `LiteratureRagProvider.fetch()` does for the region-evidence path), so any
+gene the user designs around gets backfilled on first use, not just
+pre-warmed ones.
+
+Relevance filtering (`_filter_relevant_literature_hits` in orchestrator.py):
+an absolute floor (top hit must score ≥ 0.55) gates whether anything is cited
+at all — this catches the case a purely relative cutoff can't, where every
+hit in a batch is uniformly weak (an off-topic query still returns *a* best
+hit, just a mediocre one). Hits that clear the floor are then kept if they
+score within 70% of the top hit. Both numbers are a first pass, calibrated
+against this index's real observed local-hash-embedder scores (~0.62–0.67 for
+an on-topic BRCA1 query, ~0.49 for an off-topic one) — re-check them if
+`EMBEDDING_API_KEY` switches the index to a different embedder, since cosine
+scores from different embedders aren't on the same scale.
+
+`run_followup_pipeline` (the edit/follow-up path) has no retrieval step at
+all and so isn't part of this — only the initial design-generation retrieval
+feeds chat's evidence links.
+
+## On-demand ingestion (any gene, not just pre-indexed ones)
+
+Previously, literature only existed in the index for genes someone had
+manually run `POST /api/literature/index` (or an ingestion script) against —
+ask about any other gene and the honest-empty-result path fired forever, not
+because nothing was findable, but because nothing had been indexed yet.
+
+`LiteratureIndex.ensure_indexed(gene, therapeutic_context=None, design_type=None)`
+closes that gap: it checks whether any documents already exist for `gene`
+(Mongo when connected and ready, else the in-process cache) and, if none are
+found, backfills via `index_from_pubmed` before returning. Never raises — a
+failed backfill just means the subsequent `search()` call returns its own
+honest empty result, same as any other retrieval failure in this codebase.
+
+`LiteratureRagProvider.fetch()` calls `ensure_indexed` automatically before
+every `search()`, so any gene a user asks about through the region-evidence
+path gets indexed on first use — no manual step required. `POST
+/api/literature/index` and `scripts/ingest_literature.py` still work for
+pre-populating specific genes ahead of time; they're just no longer the
+*only* way literature gets in.
+
+One consequence worth knowing: Atlas Search indexes new writes near-real-time,
+not instantly, so a document upserted moments ago (e.g. by `ensure_indexed`,
+in the very same request) can briefly be invisible to `$vectorSearch`.
+`search()` treats an **empty** Atlas result as inconclusive and falls through
+to the Mongo-hydration cosine path (a plain query, not a search index, so it
+sees the write immediately) rather than returning empty outright — only a
+**non-empty** Atlas result is trusted directly, to keep the common case cheap.
+
+### Startup pre-warm
+
+`backend/main.py` fires a non-blocking background task at app startup (inside
+`_lifespan`, via `asyncio.create_task`, so it never delays the app becoming
+ready) that calls `ensure_indexed` for a short list of demo genes
+(`_LITERATURE_PREWARM_GENES`, currently `["BRCA1", "TP53", "CFTR"]` — a
+placeholder default; confirm/adjust with the team before a live demo). This
+exists purely to avoid paying first-query PubMed+embedding latency live during
+a demo — `ensure_indexed` already covers the general "any gene" case on its
+own.
+
 ## Provisioning the Atlas vector index
 
 Enabling `$vectorSearch` needs a vector index named `VECTOR_INDEX_NAME`
@@ -123,3 +198,19 @@ dimension, normalisation), cosine similarity, the hybrid factory, in-memory
 index + search (ranking, gene filter, idempotent re-index, empty index), the
 RAG adapter, and the API endpoints — all with MongoDB disabled, exercising the
 zero-dependency fallback path.
+
+`backend/tests/test_literature_index.py` covers `ensure_indexed` (backfills
+when nothing exists, skips when a gene is already indexed via Mongo or the
+in-process cache, never raises on a PubMed failure) and the Atlas-empty-falls-
+through-to-hydration behavior, using a `_FakeMongo` test double — no real
+network or Atlas required. `backend/tests/test_main_api.py`'s
+`test_literature_prewarm_does_not_block_startup` asserts the startup pre-warm
+task is genuinely non-blocking (a deliberately slow stub must not delay app
+startup past a tight wall-clock bound).
+
+`backend/tests/test_orchestrator.py` covers the chat-retrieval merge: the
+relevance filter's floor/relative-cutoff logic in isolation, real merge +
+pmid-dedup behavior against a fake `LiteratureIndex` double (asserting the
+actual call arguments, not just that a call happened), weak matches being
+excluded outright, the `result.pubmed is None` fallback path, and that
+behavior is unchanged when no `literature_index` is passed at all.
