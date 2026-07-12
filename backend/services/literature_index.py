@@ -90,6 +90,21 @@ class LiteratureIndex:
         # In-process cache: doc_id -> document (includes embedding). Doubles as
         # the source for in-memory cosine search when Atlas isn't available.
         self._mem: dict[str, dict[str, Any]] = {}
+        # Per-gene locks so concurrent ensure_indexed calls for the same
+        # never-before-seen gene (e.g. the startup pre-warm racing a live user
+        # query for the same gene) don't trigger duplicate PubMed fetches and
+        # embedding compute.
+        self._indexing_locks: dict[str, asyncio.Lock] = {}
+
+    def _mongo_ready(self) -> bool:
+        return self._mongo is not None and getattr(self._mongo, "ready", False)
+
+    def _lock_for_gene(self, gene: str) -> asyncio.Lock:
+        lock = self._indexing_locks.get(gene)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._indexing_locks[gene] = lock
+        return lock
 
     @property
     def embedder_name(self) -> str:
@@ -150,6 +165,54 @@ class LiteratureIndex:
 
         return IndexResult(indexed=len(docs), persisted=persisted, backend=self._embedder.name)
 
+    async def ensure_indexed(
+        self,
+        gene: str | None,
+        therapeutic_context: str | None = None,
+        design_type: str | None = None,
+    ) -> None:
+        """Backfill the index for ``gene`` on first use, if nothing exists yet.
+
+        Checks whether any documents are already indexed for ``gene`` — Mongo
+        when connected and ready, else the in-process cache — and, if none
+        are found, fetches + indexes real PubMed articles via
+        :meth:`index_from_pubmed`. This is what makes "any gene" work instead
+        of only genes someone has manually run the ingestion script against.
+
+        Never raises: mirrors this module's own "no results, not an error"
+        degradation — an ingestion failure here just means the caller's
+        subsequent :meth:`search` returns its own honest empty result, same as
+        a PubMed outage would.
+
+        Concurrent calls for the SAME gene (e.g. the startup pre-warm racing a
+        live user query) serialize on a per-gene lock rather than each
+        independently deciding "not indexed yet" and duplicating the PubMed
+        fetch + embedding work — the second caller re-checks after the first
+        finishes and finds it already done.
+        """
+        gene = (gene or "").strip()
+        if not gene:
+            return
+        async with self._lock_for_gene(gene):
+            try:
+                if self._mongo_ready():
+                    existing = await self._mongo.list_literature_docs(gene=gene, limit=1)
+                    already_indexed = bool(existing)
+                else:
+                    gene_norm = gene.upper()
+                    already_indexed = any(
+                        (doc.get("gene") or "").upper() == gene_norm for doc in self._mem.values()
+                    )
+                if already_indexed:
+                    return
+                await self.index_from_pubmed(
+                    gene=gene,
+                    therapeutic_context=therapeutic_context,
+                    design_type=design_type,
+                )
+            except Exception:
+                logger.warning("ensure_indexed backfill failed for gene=%s", gene, exc_info=True)
+
     async def index_from_pubmed(
         self,
         *,
@@ -203,12 +266,25 @@ class LiteratureIndex:
 
         query_vector = (await self._embedder.embed_texts([query]))[0]
 
-        # 1) Atlas vector search (returns None to signal "fall back").
-        if self._mongo is not None and getattr(self._mongo, "ready", False):
+        # 1) Atlas vector search (returns None to signal "fall back"). A
+        # non-empty result is trusted outright. An EMPTY result is also
+        # allowed to fall through to step 2 rather than returned immediately:
+        # Atlas Search indexes new documents near-real-time, not
+        # instantaneously, so a document upserted moments ago (e.g. by
+        # ensure_indexed's on-demand backfill) can be genuinely stored yet
+        # still invisible to $vectorSearch for a few seconds. Step 2 checks
+        # the in-process cache first — which already has the write
+        # synchronously in the SAME process that just indexed it — and only
+        # falls back further to a plain (immediately-consistent) Mongo query
+        # for the cross-process/multi-worker case. The cost of this fallthrough
+        # (an extra bounded, gene-indexed Mongo query) is paid on every
+        # genuinely-empty Atlas result too, not just stale ones — accepted as
+        # a reasonable tradeoff for not silently missing fresh writes.
+        if self._mongo_ready():
             atlas_hits = await self._mongo.vector_search_literature(
                 query_vector, k=k, gene=gene
             )
-            if atlas_hits is not None:
+            if atlas_hits:
                 return SearchResult(
                     hits=[self._to_hit(doc, doc.get("score", 0.0)) for doc in atlas_hits],
                     backend="atlas",
@@ -217,7 +293,7 @@ class LiteratureIndex:
         # 2) In-memory cosine fallback. Prefer the in-process cache; if it is
         #    empty but a durable store exists, hydrate from it.
         pool = list(self._mem.values())
-        if not pool and self._mongo is not None and getattr(self._mongo, "ready", False):
+        if not pool and self._mongo_ready():
             pool = await self._mongo.list_literature_docs(gene=gene, limit=2000)
 
         scored: list[tuple[float, dict[str, Any]]] = []
@@ -292,6 +368,9 @@ class LiteratureRagProvider:
         text = (query.label or query.gene or "").strip()
         if not text:
             return []
+        # Backfill on first use so any gene works, not just ones someone has
+        # already run the ingestion script/pre-warm against.
+        await self._index.ensure_indexed(query.gene)
         result = await self._index.search(text, k=self._k, gene=query.gene)
         if not result.hits:
             return []
