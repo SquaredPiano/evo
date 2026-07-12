@@ -129,6 +129,15 @@ function AnalyzePageInner() {
   const regions = useEvoStore((s) => s.regions);
   const scores = useEvoStore((s) => s.scores);
   const analysisResult = useEvoStore((s) => s.analysisResult);
+  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
+  // Gene symbol from NCBI retrieval — scopes ClinVar region-evidence in AnnotationTrack.
+  const activeGene = (() => {
+    const ncbi = retrievalStatuses.find((r) => r.source === "ncbi")?.result as
+      | Record<string, unknown>
+      | undefined;
+    const sym = ncbi?.symbol ?? ncbi?.gene;
+    return typeof sym === "string" && sym && sym !== "Gene" ? sym : null;
+  })();
   const selectedPosition = useEvoStore((s) => s.selectedPosition);
   const activePdb = useEvoStore((s) => s.activePdb);
   const highlightResidues = useEvoStore((s) => s.highlightResidues);
@@ -540,7 +549,7 @@ function AnalyzePageInner() {
               <div className="px-8 py-6 max-w-6xl mx-auto">
                 {/* Annotation track full-width */}
                 <motion.div className="mb-6" {...scaleIn}>
-                  <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
+                  <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} gene={activeGene} />
                   <AnnotationLegend regions={regions} />
                 </motion.div>
 
@@ -990,7 +999,7 @@ function AnalyzePageInner() {
                 {/* Editable workspace */}
                 <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                   <div className="px-5 py-2 shrink-0" style={{ background: "var(--surface-raised)" }}>
-                    <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
+                    <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} gene={activeGene} />
                   </div>
                   <div className="flex-1 overflow-auto px-5 py-3">
                     <SequenceEditor
