@@ -46,12 +46,12 @@ export default function RegionEvidenceCard({ region, evidence }: RegionEvidenceC
     <div
       style={{
         backgroundColor: "var(--surface-raised)",
-        border: "1px solid rgba(62, 73, 70, 0.15)",
-        borderRadius: "6px",
-        padding: "10px 12px",
-        minWidth: "260px",
+        border: "1px solid var(--ghost-border)",
+        borderRadius: "12px",
+        padding: "12px 14px",
+        minWidth: "268px",
         maxWidth: "360px",
-        boxShadow: "0 8px 28px rgba(0,0,0,0.28)",
+        boxShadow: "var(--shadow-elevated, 0 8px 28px rgba(0,0,0,0.28))",
         fontSize: "12px",
         color: "var(--text-primary)",
       }}
