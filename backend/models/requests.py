@@ -156,6 +156,21 @@ class VariantAnnotationRequest(BaseModel):
         return v
 
 
+class RegionEvidenceRequest(BaseModel):
+    """Assemble coordinate-bound evidence (ClinVar + regulatory) for a sequence."""
+    sequence: str = Field(..., description="Candidate DNA sequence; evidence coords are in its frame")
+    gene: str | None = Field(None, description="Optional gene symbol for ClinVar context")
+    region_start: int = Field(0, ge=0)
+    region_end: int | None = None
+    max_variants: int = Field(25, ge=1, le=100)
+    include_clinvar: bool = Field(True, description="Set False to skip the ClinVar network fetch")
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
 class CalibrationRequest(BaseModel):
     gene: str = Field(..., min_length=1, description="Gene symbol (e.g. BRCA1)")
     sequence: str = Field(..., description="CDS-aligned reference sequence to score variants against")

@@ -18,6 +18,7 @@ from pipeline.retrieval import RetrievalResult, retrieve_context
 from services.evo2 import Evo2MockService, Evo2Service
 from services.mock_pdb import build_mock_pdb_from_dna
 from services.regulatory_viz import build_regulatory_map
+from services.region_evidence import assemble_region_evidence
 from services.structure import predict_structure
 from config import settings, StructureMode
 from ws.events import (
@@ -41,6 +42,8 @@ from ws.events import (
     PipelineManifestEvent,
     PipelineCompleteData,
     PipelineCompleteEvent,
+    RegionEvidenceReadyData,
+    RegionEvidenceReadyEvent,
     RegulatoryMapReadyData,
     RegulatoryMapReadyEvent,
     RetrievalProgressData,
@@ -302,6 +305,24 @@ async def _emit_structure(
                 data=RegulatoryMapReadyData(
                     candidate_id=candidate_id,
                     regulatory_map=regulatory_map,
+                )
+            ).to_json(),
+        )
+        # Coordinate-bound evidence for hover-a-region. Regulatory-derived only
+        # here (local, no network); ClinVar/literature enrichment is fetched on
+        # demand via POST /api/region-evidence. Reuse the map we just built.
+        region_evidence = await assemble_region_evidence(
+            sequence=sequence,
+            gene=None,
+            include_clinvar=False,
+            regulatory_map=regulatory_map,
+        )
+        await manager.send_event(
+            session_id,
+            RegionEvidenceReadyEvent(
+                data=RegionEvidenceReadyData(
+                    candidate_id=candidate_id,
+                    items=[e.to_dict() for e in region_evidence],
                 )
             ).to_json(),
         )

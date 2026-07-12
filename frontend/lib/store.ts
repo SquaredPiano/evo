@@ -4,9 +4,11 @@ import type {
   MutationEffect,
   LikelihoodScore,
   SequenceRegion,
+  RegionEvidence,
   Base,
 } from "@/types";
 import { parseSequence } from "@/lib/sequenceUtils";
+import { fetchRegionEvidence } from "@/lib/api";
 
 type PipelineStatus = "idle" | "input" | "analyzing" | "complete" | "error";
 
@@ -175,6 +177,16 @@ interface EvoState {
   savedSnapshot: { sequence: string; editHistory: EditEntry[]; pdb?: string | null } | null;
   saveVersion: () => void;
   revertVersion: () => void;
+
+  // --- Region → evidence binding (additive; hover-a-region → supporting research) ---
+  // Coordinate-bound evidence for the current sequence. `regionEvidenceKey` is the
+  // sequence the evidence was fetched for (dedup guard). Populated via the
+  // /api/region-evidence endpoint; the pipeline also emits `region_evidence_ready`.
+  regionEvidence: RegionEvidence[];
+  regionEvidenceKey: string | null;
+  setRegionEvidence: (items: RegionEvidence[], key?: string | null) => void;
+  loadRegionEvidence: (sequence: string, gene?: string | null) => Promise<void>;
+
   reset: () => void;
 }
 
@@ -220,6 +232,8 @@ const initialState = {
   theme: "light" as "dark" | "light",
   savedSnapshot: null as { sequence: string; editHistory: EditEntry[]; pdb?: string | null } | null,
   user: null as { id: string; name: string; email: string } | null,
+  regionEvidence: [] as RegionEvidence[],
+  regionEvidenceKey: null as string | null,
 };
 
 export const useEvoStore = create<EvoState>((set, get) => ({
@@ -409,5 +423,36 @@ export const useEvoStore = create<EvoState>((set, get) => ({
       });
     }
   },
+  // --- Region → evidence binding (additive) ---
+  setRegionEvidence: (items, key = null) =>
+    set({ regionEvidence: items, regionEvidenceKey: key }),
+
+  // Fetch coordinate-bound evidence for a sequence, deduped by sequence so the
+  // two AnnotationTrack instances don't double-fetch. Silently no-ops on error
+  // (evidence is additive context; never blocks the main flow).
+  loadRegionEvidence: async (sequence, gene) => {
+    const cleaned = (sequence ?? "").trim();
+    if (!cleaned) {
+      set({ regionEvidence: [], regionEvidenceKey: null });
+      return;
+    }
+    const key = `${cleaned.length}:${gene ?? ""}:${cleaned.slice(0, 32)}`;
+    if (get().regionEvidenceKey === key) return; // already loaded / in flight
+    set({ regionEvidenceKey: key });
+    try {
+      const res = await fetchRegionEvidence({
+        sequence: cleaned,
+        gene: gene ?? undefined,
+        includeClinvar: Boolean(gene),
+      });
+      // Guard against races: only apply if this is still the latest request.
+      if (get().regionEvidenceKey === key) {
+        set({ regionEvidence: res.items });
+      }
+    } catch {
+      if (get().regionEvidenceKey === key) set({ regionEvidence: [] });
+    }
+  },
+
   reset: () => set(initialState),
 }));

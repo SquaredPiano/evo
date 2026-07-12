@@ -190,6 +190,26 @@ class RegulatoryMapReadyEvent(BaseModel):
         return self.model_dump(mode="json")
 
 
+class RegionEvidenceReadyData(BaseModel):
+    """Coordinate-bound evidence for a candidate's sequence.
+
+    `items` are RegionEvidence dicts (see services.region_evidence.RegionEvidence).
+    Emitted beside `regulatory_map_ready`; carries the LOCAL regulatory-derived
+    evidence only (no network in the hot path). ClinVar / literature enrichment
+    is fetched on demand via POST /api/region-evidence.
+    """
+    candidate_id: int
+    items: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RegionEvidenceReadyEvent(BaseModel):
+    event: Literal["region_evidence_ready"] = "region_evidence_ready"
+    data: RegionEvidenceReadyData
+
+    def to_json(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class PipelineCompleteData(BaseModel):
     requested_candidates: int
     completed_candidates: int

@@ -454,6 +454,41 @@ export async function annotateVariants(payload: {
   return res.json();
 }
 
+import type { RegionEvidence } from "@/types";
+
+/** POST /api/region-evidence - Assemble coordinate-bound evidence for a sequence.
+ *  Binds coordinates → ClinVar variants (gene context) + regulatory motifs.
+ *  A future RAG populates source="literature" items server-side; the UI is unchanged. */
+export async function fetchRegionEvidence(payload: {
+  sequence: string;
+  gene?: string;
+  regionStart?: number;
+  regionEnd?: number;
+  maxVariants?: number;
+  includeClinvar?: boolean;
+}): Promise<{
+  gene: string | null;
+  region_start: number;
+  region_end: number;
+  items: RegionEvidence[];
+  count: number;
+}> {
+  const res = await fetch(`${API_BASE}/api/region-evidence`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sequence: payload.sequence,
+      gene: payload.gene ?? null,
+      region_start: payload.regionStart ?? 0,
+      region_end: payload.regionEnd,
+      max_variants: payload.maxVariants ?? 25,
+      include_clinvar: payload.includeClinvar ?? true,
+    }),
+  });
+  if (!res.ok) throw new Error(`Region evidence failed: ${res.status}`);
+  return res.json();
+}
+
 export interface OffTargetHit {
   region_name: string;
   similarity_score: number;
