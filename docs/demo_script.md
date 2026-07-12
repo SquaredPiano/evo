@@ -78,23 +78,53 @@ The design half of the lab - ( · ) from weeks, to **seconds**.
 
 ---
 
-## SYNC / RECORDING APPENDIX (lean)
+## SCREEN RECORDING GUIDE (step by step)
 
-**Rule:** audio is the fixed 2:00 master. Video is elastic - record each action generously with Cursorful, then speed-up or jump-cut it in iMovie to fill its window. Burn in captions (many judges watch muted). One smooth honey-accent zoom per beat; keep zooms slow.
+**The core idea:** do NOT record the screen live against the audio. Record each clip separately, as long as you need. Then in iMovie you drop each clip under its audio window and speed it up or trim it. The audio is the fixed 2:00 clock; the video bends to fit.
 
-| Beat | Window | On-screen | Fit the video to the audio |
-|---|---|---|---|
-| Hook | 0:00-0:11 | Clean home; type the BDNF prompt; hit generate | 1x. Slow zoom into the composer as you type. |
-| Generate | 0:11-0:33 | DNA streams base-by-base; confidence stripe fills | Real stream is 20-40s → **speed 2-3x** so it visibly fills the window; drop back to 1x for the last ~3s. |
-| Fold | 0:33-0:49 | ESMFold 3D scene; slow orbit; hover a residue | Fold can take 30-90s → **jump-cut**: show it start, hard cut to the finished fold, then 1x orbit. |
-| Regenerate | 0:49-1:09 | Select region → regenerate → diff → refold | **Speed 2x** through the wait; land at 1x on the result card + real per-base confidence strip (labeled "real"). |
-| Helio + paper | 1:09-1:38 | "Explain this region" card → hover → **open a real paper** | 1x on the card; 1.5x on the hover; the opened paper is the proof - **hold it ~1.5s at 1x.** |
-| Science | 1:38-1:53 | Montage: JASPAR / CRISPR CFD / Tm / RNA → Compare | **1.5x**, ~3s per tab, smooth zoom to each computed number; end on Compare at 1x. |
-| Close | 1:53-2:00 | Proteus wordmark / clean hero frame | 1x. Let it breathe; fade music tail. |
+### The generation-is-slow fix (read this first)
+Generation and folding take a while. You never show them in real time. Pick ONE:
+- **Speed-up (easiest):** record the whole thing once (let generation run 30-60s), then in iMovie set that clip to 400-600% speed so it collapses into ~10-15s. The bases visibly flying by looks better than real time anyway.
+- **Snippet + jump-cut:** record only the first ~6-8s of streaming (bases appearing), then hard-cut straight to the finished result screen. You do not owe the viewer the full wait.
+Use the same trick for the ESMFold fold: show it start, jump-cut to the finished 3D.
 
-**Two must-do prep steps:**
-1. **Pre-warm the literature gene** so papers appear instantly on camera (BRCA1 / TP53 / CFTR are pre-loaded; for any other gene run the ingest once beforehand). The paper must open with zero lag - that beat is the whole demo.
-2. **Demo the confidence on GENERATED / regenerated sequence** - that's where the per-base probabilities are genuinely real. Don't show it on pasted, un-regenerated sequence.
+### Do this BEFORE you hit record (prep)
+1. **Light mode on**, browser full-screen, clean (no bookmarks bar / notifications). Same window size for every clip.
+2. **Pre-warm the papers for your gene.** The script says BDNF, but only BRCA1 / TP53 / CFTR are pre-loaded. Either (a) change the prompt in your recording to one of those, or (b) run this once in the backend first so BDNF papers are instant on camera:
+   `python -m scripts.ingest_literature BDNF`
+   The paper MUST open with zero lag - that beat is the whole demo.
+3. **Do one full practice run** end-to-end so you know the flow and have a good candidate. Note: papers only appear on a region you have REGENERATED, so your regenerate step (Shot 4) must come before the explain-and-open-paper step (Shot 5) - which is the natural order below.
+4. Have the guide sequence be a GENERATED one (not pasted) - that is where the per-base confidence is genuinely real.
+
+### Record these clips, in this order
+Record each generously (a few extra seconds of headroom each side). One slow, smooth zoom per clip.
+
+**SHOT 1 - Home + prompt** (fills audio 0:00-0:11)
+Screen: the Proteus home / composer (the design input). Action: type the goal, e.g. *"Design a neuron-specific promoter for BDNF"*, then click Generate. Record ~12s. Slow-zoom into the composer as you type.
+
+**SHOT 2 - Generation streaming** (fills 0:11-0:33)
+Screen: the pipeline running - DNA streaming base by base, the per-base confidence stripe filling in, retrieval chips ticking. Action: none, just let it run. Record the WHOLE thing (30-60s is fine). In iMovie: speed it 4-6x to fit the window; keep the last ~3s at 1x as it completes and lands on the overview. (Or use the snippet + jump-cut trick.)
+
+**SHOT 3 - The 3D structure** (fills 0:33-0:49)
+Screen: after it completes, open the Structure view (sidebar). Action: slowly drag to orbit the folded protein; hover one residue so its side chain + label pop. Record ~20s. If it is still folding, capture the "Folding with ESMFold" state for ~2s then jump-cut to the finished fold.
+
+**SHOT 4 - Regenerate a region** (fills 0:49-1:09)
+Screen: the Sequence view (the DNA with the colored region bars / annotation track). Action: click a region bar to select it (this opens Helio and pre-fills it), then click "Regenerate selected region" in Helio. Watch the result card + the diff, and the structure refold. Record the action + wait + result. In iMovie: speed 2x through the wait, land at 1x on the result card showing the real per-base confidence strip (labeled "real").
+
+**SHOT 5 - Helio explains + OPEN A REAL PAPER** (fills 1:09-1:38) - the money shot, record it twice
+Screen: same region, now regenerated. Action: in Helio click "Explain this region" - the plain-English card appears. Then hover that region on the track so the evidence card with paper links shows. Click a paper link - a real study opens in a new browser tab. HOLD on the open paper ~1.5-2s. Record at 1x; do not rush the click. This one clip is what convinces the judge, so do a couple takes and keep the best.
+
+**SHOT 6 - The science, fast** (fills 1:38-1:53)
+Screen: the Tools panel tabs (in the Sequence view rail). Action: click through 3-4 tabs, ~3s each, zooming to the number: CRISPR (the specificity / CFD score), Tm, Structure (RNA) (the MFE), the regulatory / motif map. Then open the Compare view (two structures side by side). Record ~20s. In iMovie: 1.5x through the tabs, end on Compare at 1x.
+
+**SHOT 7 - Close** (fills 1:53-2:00)
+Screen: the Proteus wordmark - either the landing page hero or the app header. Record ~8s, static or a very slow push-in. Let it breathe; fade the music tail.
+
+### Then assemble (iMovie)
+1. Lay the locked voiceover across the timeline. Add the music bed low underneath.
+2. Drop each Shot under its window, in order. Apply the speed / jump-cut from each shot so the action fills its window (Shot 2 and 4 are the ones you speed up).
+3. Add subtle UI click SFX on each action; burn in captions from THE SCRIPT above (many judges watch muted).
+4. Watch it once end to end. If a beat runs long, trim the video (never the audio).
 
 **Honesty guardrails (never say):**
 - Not "Helix" (old name) - it's **Proteus**.
