@@ -38,6 +38,7 @@ import StoryMode from "@/components/analysis/StoryMode";
 import SequenceScrubber from "@/components/sequence/SequenceScrubber";
 import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
 import DisclosureSection from "@/components/ui/DisclosureSection";
+import InlineStructureCard from "@/components/analysis/InlineStructureCard";
 
 import { ScienceTooltip, ScienceInfo } from "@/components/ui/ScienceTooltip";
 import TutorialOverlay, { isTutorialCompleted } from "@/components/ui/TutorialOverlay";
@@ -238,6 +239,11 @@ function AnalyzePageInner() {
   const { startDesign } = useDesignPipeline();
   const { simulate } = useMutationSim();
 
+  // Honest fold lifecycle for the inline Overview viewer: "folding" while
+  // ESMFold runs, "unavailable" when there is genuinely no structure (short or
+  // non-coding design, or the fold call returned nothing). Never faked.
+  const [foldState, setFoldState] = useState<"idle" | "folding" | "unavailable">("idle");
+
   useEffect(() => {
     if (analysisResult?.predictedProteins?.[0]?.pdbData && !activePdb) {
       setActivePdb(analysisResult.predictedProteins[0].pdbData);
@@ -246,19 +252,25 @@ function AnalyzePageInner() {
     // Analyze may return ORF metadata without PDB — fold via /api/structure (ESMFold).
     if (analysisResult && !activePdb && rawSequence && rawSequence.length >= 30) {
       let cancelled = false;
+      setFoldState("folding");
       (async () => {
         try {
           const { fetchStructure } = await import("@/lib/api");
           const pdb = await fetchStructure(0, rawSequence.length, rawSequence);
-          if (!cancelled && pdb) setActivePdb(pdb);
+          if (cancelled) return;
+          if (pdb) setActivePdb(pdb);
+          else setFoldState("unavailable");
         } catch {
-          /* structure optional until user opens Structure tab */
+          // structure optional until user opens Structure tab
+          if (!cancelled) setFoldState("unavailable");
         }
       })();
       return () => {
         cancelled = true;
       };
     }
+    // Too short / non-coding to fold, and nothing cached yet.
+    if (analysisResult && !activePdb) setFoldState("unavailable");
   }, [analysisResult, activePdb, setActivePdb, rawSequence]);
 
   const handleSequenceSubmit = useCallback((seq: string) => { analyze(seq); }, [analyze]);
@@ -332,6 +344,19 @@ function AnalyzePageInner() {
     if (selectedPosition === null) return;
     const residue = Math.floor(selectedPosition / 3) + 1;
     setHighlightResidues([residue]);
+  }, [selectedPosition, setHighlightResidues]);
+
+  // Overview: hovering a region row previews it in the single inline viewer by
+  // driving highlightResidues (cheap, no extra viewer is ever spawned).
+  const highlightRegionResidues = useCallback((r: { start: number; end: number }) => {
+    const first = Math.floor(r.start / 3) + 1;
+    const last = Math.floor(r.end / 3) + 1;
+    const residues: number[] = [];
+    for (let i = first; i <= last && residues.length < 200; i++) residues.push(i);
+    setHighlightResidues(residues);
+  }, [setHighlightResidues]);
+  const clearRegionHighlight = useCallback(() => {
+    setHighlightResidues(selectedPosition !== null ? [Math.floor(selectedPosition / 3) + 1] : []);
   }, [selectedPosition, setHighlightResidues]);
 
   // Mobile sidebar collapse
@@ -511,20 +536,20 @@ function AnalyzePageInner() {
               {...fadeSlide}>
 
               {/* ── Run-report header ─────────────────────────────────── */}
-              <div className="px-8 pt-8 pb-6" style={{ background: "var(--surface-raised)" }}>
+              <div className="px-8 pt-10 pb-8" style={{ background: "var(--surface-raised)", borderBottom: "1px solid var(--ghost-border)" }}>
                 <div className="max-w-6xl mx-auto">
                   <div className="flex items-start justify-between gap-6">
                     <motion.div {...staggerItem} className="min-w-0">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--accent)" }}>
+                      <div className="flex items-center gap-2.5 mb-3">
+                        <span className="label-caps" style={{ color: "var(--accent-bright)", opacity: 1 }}>
                           Design report
                         </span>
-                        <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>·</span>
+                        <span className="h-3 w-px" style={{ background: "var(--ghost-border)" }} />
                         <span className="text-[10px] font-mono" style={{ color: "var(--text-faint)" }}>
                           {rawSequence.length} bp · {scores.length} scores
                         </span>
                       </div>
-                      <h2 className="text-2xl font-semibold tracking-tight mb-2">
+                      <h2 className="font-display text-[clamp(1.9rem,3.4vw,2.75rem)] leading-[1.05] tracking-tight mb-3">
                         {codingRegions.length > 0
                           ? `Candidate with ${codingRegions.length} coding region${codingRegions.length !== 1 ? "s" : ""}`
                           : "Generated candidate"}
@@ -535,11 +560,11 @@ function AnalyzePageInner() {
                         </p>
                       )}
                       {/* Engine provenance chips */}
-                      <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                      <div className="flex flex-wrap items-center gap-1.5 mt-4">
                         {engineChips.map((chip) => (
                           <span key={chip.label}
                             className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full"
-                            style={{ background: "var(--surface-elevated)", color: "var(--text-secondary)" }}>
+                            style={{ background: "var(--surface-raised)", color: "var(--text-secondary)", border: "1px solid var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}>
                             <Cpu size={11} style={{ color: "var(--accent)" }} />
                             <span style={{ color: "var(--text-faint)" }}>{chip.label}</span>
                             {chip.term ? (
@@ -556,13 +581,13 @@ function AnalyzePageInner() {
                         <motion.button onClick={() => setViewMode("structure")}
                           whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all"
-                          style={{ background: "var(--surface-elevated)", color: "var(--text-primary)" }}>
+                          style={{ background: "var(--surface-raised)", color: "var(--text-primary)", border: "1px solid var(--ghost-border)", boxShadow: "var(--shadow-soft)" }}>
                           <Box size={15} /> View Structure
                         </motion.button>
                         <motion.button onClick={() => setViewMode("explorer")}
                           whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all"
-                          style={{ background: "var(--accent)", color: "var(--ink)" }}>
+                          style={{ background: "var(--accent)", color: "var(--ink)", boxShadow: "0 10px 24px -8px rgba(245,158,11,0.4)" }}>
                           Open Explorer <ArrowRight size={15} />
                         </motion.button>
                       </div>
@@ -582,54 +607,40 @@ function AnalyzePageInner() {
                   )}
 
                   {/* Scannable summary strip */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mt-7">
                     {summaryTiles.map(({ label, value, color, term }) => (
-                      <div key={label} className="rounded-xl px-4 py-3" style={{ background: "var(--surface-elevated)" }}>
-                        <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>
+                      <div key={label} className="card-elevated px-4 py-3.5">
+                        <div className="text-[10px] uppercase tracking-wider mb-1.5" style={{ color: "var(--text-muted)" }}>
                           <ScienceTooltip term={term}>{label}</ScienceTooltip>
                         </div>
-                        <div className="text-xl font-semibold font-mono" style={{ color }}>{value}</div>
+                        <div className="text-[22px] font-semibold font-mono leading-none" style={{ color }}>{value}</div>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
 
-              <div className="px-8 py-6 max-w-6xl mx-auto">
+              <div className="px-8 py-8 max-w-6xl mx-auto">
                 {/* Annotation track full-width */}
-                <motion.div className="mb-6" {...scaleIn}>
+                <motion.div className="mb-8" {...scaleIn}>
+                  <p className="label-caps mb-3">Sequence map</p>
                   <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} gene={activeGene} />
                   <AnnotationLegend regions={regions} />
                 </motion.div>
 
-                {/* Three-column: structure preview + regions + insights */}
-                <motion.div className="grid grid-cols-1 lg:grid-cols-4 gap-6" variants={staggerContainer} initial="initial" animate="animate">
-                  {/* Left: Structure preview card */}
+                {/* Three-column: live structure + regions + insights */}
+                <motion.div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start" variants={staggerContainer} initial="initial" animate="animate">
+                  {/* Left: Live inline 3D structure (the one Overview viewer) */}
                   <motion.div className="lg:col-span-1" variants={staggerItem}>
-                    <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)" }}>
-                      <div className="p-4 pb-2">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Box size={14} style={{ color: "var(--accent)" }} />
-                          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--accent)" }}>
-                            <ScienceTooltip term="protein-structure">Protein Structure</ScienceTooltip>
-                          </span>
-                        </div>
-                      </div>
-                      <div className="h-[220px] cursor-pointer flex items-center justify-center" onClick={() => setViewMode("structure")}
-                        style={{ background: "var(--surface-base)" }}>
-                        <div className="text-center">
-                          <Box size={40} style={{ color: "var(--accent)", margin: "0 auto 8px", opacity: 0.5 }} />
-                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Click to view 3D structure</span>
-                        </div>
-                      </div>
-                      <div className="p-3">
-                        <button onClick={() => setViewMode("structure")}
-                          className="w-full text-xs font-medium flex items-center justify-center gap-1 py-2.5 rounded-full transition-colors hover:bg-white/[0.04]"
-                          style={{ color: "var(--accent)" }}>
-                          Explore in 3D <ArrowRight size={12} />
-                        </button>
-                      </div>
-                    </div>
+                    <InlineStructureCard
+                      pdbData={activePdb}
+                      structureModel={structureModel}
+                      highlightResidues={highlightResidues}
+                      folding={!activePdb && foldState === "folding"}
+                      onExplore={() => setViewMode("structure")}
+                      onResidueClick={handleResidueClick}
+                      onResidueHover={handleResidueHover}
+                    />
                   </motion.div>
 
                   {/* Middle 2/4: Region list */}
@@ -638,7 +649,7 @@ function AnalyzePageInner() {
                       <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Identified regions</h3>
                       <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>{regions.length} total</span>
                     </div>
-                    <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)" }}>
+                    <div className="card-elevated overflow-hidden">
                       {/* Simple by default: Region · Type · Inspect. Position,
                           length and score are tucked behind a per-row Details toggle. */}
                       <div className="flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider"
@@ -655,10 +666,13 @@ function AnalyzePageInner() {
                           initial={{ opacity: 0, x: -12 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 + i * 0.04, ...springTransition }}
-                          style={{ borderBottom: i < Math.min(regions.length, 10) - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                          onMouseEnter={() => highlightRegionResidues(r)}
+                          onMouseLeave={clearRegionHighlight}
+                          className="transition-colors hover:bg-[color-mix(in_oklch,var(--accent),transparent_96%)]"
+                          style={{ borderBottom: i < Math.min(regions.length, 10) - 1 ? "1px solid var(--ghost-border)" : "none" }}>
                           <div className="w-full flex items-center gap-4 px-5 py-3">
                             <button onClick={inspect}
-                              className="text-[13px] font-medium flex-1 text-left truncate transition-colors hover:text-white"
+                              className="text-[13px] font-medium flex-1 text-left truncate transition-colors hover:opacity-70"
                               style={{ color: "var(--text-primary)" }}>
                               {r.label ?? `${r.type} ${i + 1}`}
                             </button>
@@ -691,7 +705,7 @@ function AnalyzePageInner() {
                                   <span style={{ color: "var(--text-muted)" }}>Position <span style={{ color: "var(--text-secondary)" }}>{r.start}-{r.end}</span></span>
                                   <span style={{ color: "var(--text-muted)" }}><ScienceTooltip term="base-pair">Length</ScienceTooltip> <span style={{ color: "var(--text-secondary)" }}>{r.end - r.start} bp</span></span>
                                   <span style={{ color: "var(--text-muted)" }}><ScienceTooltip term="log-likelihood">Score</ScienceTooltip> <span style={{ color: r.score && Math.abs(r.score) < 2 ? "var(--accent)" : "var(--base-t)" }}>{r.score?.toFixed(1) ?? "-"}</span></span>
-                                  <button onClick={inspect} className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium transition-colors hover:text-white" style={{ color: "var(--accent)" }}>
+                                  <button onClick={inspect} className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium transition-colors hover:opacity-70" style={{ color: "var(--accent)" }}>
                                     Inspect region <ArrowRight size={12} />
                                   </button>
                                 </div>
@@ -707,7 +721,7 @@ function AnalyzePageInner() {
                   {/* Right 1/4: Insights */}
                   <motion.div className="space-y-4" variants={staggerItem}>
                     {topRegion && (
-                      <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
+                      <div className="card-elevated p-5">
                         <div className="flex items-center gap-2 mb-3">
                           <Target size={14} style={{ color: "var(--accent)" }} />
                           <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--accent)" }}>Top region</span>
@@ -715,14 +729,14 @@ function AnalyzePageInner() {
                         <div className="text-base font-semibold mb-1">{topRegion.label ?? topRegion.type}</div>
                         <div className="text-xs font-mono mb-3" style={{ color: "var(--text-secondary)" }}>{topRegion.start}-{topRegion.end} ({topRegion.end - topRegion.start} bp)</div>
                         <button onClick={() => { setSelectedPosition(topRegion.start); setViewMode("explorer"); }}
-                          className="text-xs font-medium flex items-center gap-1 transition-colors hover:text-white"
+                          className="text-xs font-medium flex items-center gap-1 transition-colors hover:opacity-70"
                           style={{ color: "var(--accent)" }}>
                           Inspect this region <ArrowRight size={12} />
                         </button>
                       </div>
                     )}
 
-                    <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
+                    <div className="card-flat p-5">
                       <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Engines</span>
                       <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                         DNA generated by <ScienceTooltip term="evo2">Evo 2</ScienceTooltip>. Per-position <ScienceTooltip term="per-position-score">scores</ScienceTooltip> show how gene-like each base looks: {scoresAreHeuristic ? "composition and motif signals along the sequence" : "real Evo 2 log-likelihoods from a forward pass"}. Structure by <ScienceTooltip term="esmfold">ESMFold</ScienceTooltip>.
@@ -737,7 +751,7 @@ function AnalyzePageInner() {
                 </motion.div>
 
                 {/* ── Related work & evidence (collapsed by default) ───── */}
-                <motion.div className="mt-8 pt-2 rounded-xl overflow-hidden" style={{ borderTop: "1px solid var(--ghost-border)", background: "var(--surface-elevated)" }} {...scaleIn}>
+                <motion.div className="card-flat mt-8 overflow-hidden" {...scaleIn}>
                   <DisclosureSection
                     label="Evidence & sources"
                     hint={<span>related work</span>}
