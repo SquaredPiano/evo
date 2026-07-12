@@ -38,13 +38,18 @@ def score_functional(
     """Functional plausibility: is this sequence biologically viable?
 
     Combines:
-    - Mean log-likelihood from Evo2 (primary signal)
+    - Mean of the forward per-position signal. This is a true Evo2 per-position
+      log-likelihood only under EVO2_MODE=local; under nim_api it is the
+      deterministic composition/motif signal (see Evo2NIMService.forward), since
+      the hosted endpoint has no per-position forward pass.
     - GC content penalty (extreme GC is bad)
     - ORF presence bonus (coding potential)
     - Motif presence (regulatory elements)
+
+    This is a composition/motif plausibility heuristic, not a clinical assay.
     """
-    # Sigmoid-normalize the mean log-likelihood to [0, 1]
-    # Calibrated so -0.3 (typical Evo2 mean LL) maps to ~0.85
+    # Sigmoid-normalize the mean forward signal to [0, 1]
+    # Calibrated so -0.3 maps to ~0.85
     raw_ll = forward.sequence_score
     ll_score = _sigmoid(raw_ll, center=-0.5, steepness=4.0)
 

@@ -10,10 +10,12 @@ Directionality: the Evo2 paper reports that deleterious variants receive a
 *lower* (more negative) log-likelihood than the reference. So the pathogenicity
 score we rank on is ``-delta_likelihood`` — higher means "looks more broken".
 
-Honesty note baked into the output: the hosted NIM endpoint and the mock engine
-do not expose real per-sequence log-likelihoods, so an AUROC near 0.5 with those
-engines is the truthful result, not a bug. A real signal requires the local
-Evo2 checkpoint (``EVO2_MODE=local``).
+Honesty note baked into the output: the hosted NIM endpoint has no per-position
+forward pass, so under ``nim_api`` (and the offline dev engine) the scores here
+come from a deterministic composition/motif signal rather than a true Evo2
+per-sequence log-likelihood. An AUROC near 0.5 with those engines is therefore
+the truthful result, not a bug. A real Evo2 discrimination signal requires the
+local Evo2 checkpoint (``EVO2_MODE=local``).
 """
 
 from __future__ import annotations
@@ -205,8 +207,9 @@ def _build_note(engine_mode: str, auroc: float | None, n_p: int, n_b: int) -> st
         return ("Need both pathogenic and benign variants aligned to the sequence "
                 "to compute AUROC. Provide a CDS-aligned reference sequence.")
     if engine_mode in {"mock", "nim_api"}:
-        return (f"AUROC measured with the '{engine_mode}' engine, which does not expose "
-                "real per-sequence log-likelihoods — an AUROC near 0.5 is expected and "
-                "honest. Run EVO2_MODE=local for a real signal.")
+        return (f"AUROC measured with the '{engine_mode}' engine, whose scores derive from a "
+                "deterministic composition/motif signal rather than a true Evo2 per-sequence "
+                "log-likelihood, so an AUROC near 0.5 is expected and honest. Run "
+                "EVO2_MODE=local for a real Evo2 discrimination signal.")
     return (f"AUROC measured with the '{engine_mode}' engine over {n_p} pathogenic and "
             f"{n_b} benign ClinVar SNVs aligned to the sequence.")

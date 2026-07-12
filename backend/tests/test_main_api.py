@@ -265,8 +265,9 @@ def test_agent_chat_transform_all_ts_persists_sequence() -> None:
     transformed_sequence = body["candidate_update"]["sequence"]
     assert transformed_sequence
     assert set(transformed_sequence) == {"T"}
-    assert isinstance(body["candidate_update"]["pdb_data"], str)
-    assert body["candidate_update"]["pdb_data"].startswith("HEADER")
+    # Structure is real ESMFold or an honest null — never a fabricated mock fold.
+    pdb_data = body["candidate_update"]["pdb_data"]
+    assert pdb_data is None or pdb_data.startswith("HEADER")
 
     # Verify transformed sequence persisted in session store.
     verify = client.post(

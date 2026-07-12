@@ -235,14 +235,14 @@ class TestStructureEndpoint:
         assert 0.0 <= body["confidence"] <= 1.0
 
     def test_different_sequences_produce_different_folds(self, client: TestClient):
-        """Different DNA sequences → different proteins → different PDB output."""
-        seq2 = (
-            "ATGCGTGATCGTAAACTGCAGAAAGCGGCGTTTCGTACCCTGGCGAGC"
-            "CTGATCAAAGAAGGTCTGGAAACCCCGCTGGACTGCGGTGACCGTATC"
-            "GAAGATCTGATCAAACGTAACCCGGATGCGATTCTGGCGATCGAAAAC"
-            "TACTTCAACCAGACCAGCGAGTTCACCCGTCTGATCGGCACCAAAGCGG"
-            "GTGCGTTTGGCCCGA"
-        )
+        """Different foldable proteins → different REAL ESMFold output.
+
+        There is no synthetic fallback: a region that cannot be folded returns
+        503 (fail closed), never a fabricated structure. seq2 keeps the ATG start
+        then switches to a run of Ala (GCG) codons — no premature stops — so it is
+        a distinct, foldable protein of comparable length to LONG_SEQ.
+        """
+        seq2 = self.LONG_SEQ[:63] + "GCG" * 40
         r0 = client.post("/api/structure", json={
             "sequence": self.LONG_SEQ, "candidate_id": 0,
             "region_start": 0, "region_end": len(self.LONG_SEQ),
@@ -251,7 +251,12 @@ class TestStructureEndpoint:
             "sequence": seq2, "candidate_id": 0,
             "region_start": 0, "region_end": len(seq2),
         })
-        # Different input sequences should produce different folds
+        # Fail closed if ESMFold is unavailable; never assert on a mock fold.
+        for r in (r0, r1):
+            assert r.status_code in (200, 503)
+            if r.status_code == 503:
+                pytest.skip("ESMFold unavailable; no synthetic structure fallback exists")
+        # Different input sequences should produce different real folds
         assert r0.json()["pdb_data"] != r1.json()["pdb_data"]
 
 

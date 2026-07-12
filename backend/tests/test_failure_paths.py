@@ -46,19 +46,11 @@ def test_structure_fails_closed_when_esmfold_unavailable(monkeypatch: pytest.Mon
     assert "mock" not in res.json()["detail"].lower() or "No mock" in res.json()["detail"]
 
 
-def test_structure_uses_mock_only_when_mode_is_mock(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = TestClient(app)
-    monkeypatch.setattr(main.settings, "structure_mode", main.StructureMode.MOCK)
-
-    res = client.post(
-        "/api/structure",
-        json={"sequence": "ATGGATTTATCTGCTCTTCGCGTTGAAGAAG", "region_start": 0, "region_end": 12},
-    )
-    assert res.status_code == 200
-    body = res.json()
-    assert body["model"] == "mock"
-    assert 0.7 <= body["confidence"] <= 0.95
-    assert body["pdb_data"].startswith("HEADER")
+def test_no_mock_structure_mode_exists() -> None:
+    """Mock structure generation is fully removed: there is no MOCK StructureMode,
+    so no code path can ever serve a synthetic PDB under any configuration."""
+    assert not hasattr(main.StructureMode, "MOCK")
+    assert {m.value for m in main.StructureMode} == {"alphafold_api", "colabfold", "esmfold"}
 
 
 def test_health_defaults_when_service_payload_missing_fields(monkeypatch: pytest.MonkeyPatch) -> None:

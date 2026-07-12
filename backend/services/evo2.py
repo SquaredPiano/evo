@@ -45,12 +45,13 @@ class GenerationResult:
     Fields:
       generated:     the newly generated bases (the suffix beyond ``seed``).
       sampled_probs: per-generated-token probability from Evo2 (REAL model
-                     confidence) when the engine is ``nim``; ``None`` for mock,
-                     mock_fallback, and local (we never fabricate probabilities).
+                     confidence) when the engine is ``nim``; ``None`` for mock and
+                     local (we never fabricate probabilities). Under nim_api a
+                     failed call RAISES rather than degrading, so a mock
+                     suffix is never returned as a NIM result.
       engine:        actual engine that produced these bases — one of
-                     "nim" | "mock_fallback" | "local" | "mock". ``mock_fallback``
-                     means a NIM call was attempted and failed, so this is mock
-                     output presented honestly as such (NOT real NIM).
+                     "nim" | "local" | "mock". Under nim_api a failed NIM call
+                     raises; it does not silently fall back to mock.
       elapsed_ms:    wall-clock (or engine-reported) latency for the call.
       seed:          the conditioning prefix that was passed in.
       n_tokens:      number of tokens requested.
@@ -170,11 +171,12 @@ def _deterministic_seed(sequence: str) -> int:
 
 
 def _mock_logits(sequence: str) -> list[float]:
-    """Generate per-position log-likelihoods that respect sequence composition.
+    """Seeded-random per-position values for the OFFLINE mock engine only.
 
-    Higher scores for positions within known motifs, slight GC bias, and
-    random noise drawn from a stable seed so the same sequence always
-    produces the same output.
+    This deliberately injects RNG noise so ``EVO2_MODE=mock`` behaves like a
+    stochastic model for local development and tests. It is NOT used by any real
+    engine path (nim/local): a real engine must never serve fabricated random
+    numbers. For the NIM engine's per-position array, see ``_composition_logits``.
     """
     rng = np.random.default_rng(_deterministic_seed(sequence))
     seq = sequence.upper()
@@ -195,6 +197,53 @@ def _mock_logits(sequence: str) -> list[float]:
             start = idx + 1
 
     # Slight boost for G/C (higher stability)
+    for i, base in enumerate(seq):
+        if base in ("G", "C"):
+            logits[i] += 0.02
+
+    return logits
+
+
+def _composition_logits(sequence: str) -> list[float]:
+    """Deterministic per-position composition signal (NOT an Evo2 log-likelihood).
+
+    This is a transparent, reproducible function of the ACTUAL sequence — no RNG.
+    Each position's value is the log-odds of its base given the previous base
+    under a fixed dinucleotide model (``_TRANSITION``), relative to a uniform
+    0.25 baseline, plus known-motif boosts and a slight GC-stability term.
+
+    Provenance, stated plainly: this is a composition/motif heuristic used where a
+    per-position array is required for a pasted / non-generated sequence. The
+    hosted NIM endpoint exposes no per-position forward pass, so real Evo2
+    confidence is available ONLY as the per-generated-base ``sampled_probs``
+    captured during generation. Callers must not present this array as an Evo2
+    likelihood.
+    """
+    seq = sequence.upper()
+    n = len(seq)
+    if n == 0:
+        return []
+
+    logits: list[float] = []
+    prev: str | None = None
+    for base in seq:
+        if prev is not None and prev in _TRANSITION and base in _TRANSITION[prev]:
+            p = _TRANSITION[prev][base]
+        else:
+            p = 0.25  # first base / non-ACGT: uniform prior
+        logits.append(math.log(max(p, 1e-6) / 0.25))
+        prev = base
+
+    for motif, boost in _MOTIFS.items():
+        start = 0
+        while True:
+            idx = seq.find(motif, start)
+            if idx == -1:
+                break
+            for j in range(idx, min(idx + len(motif), n)):
+                logits[j] += boost
+            start = idx + 1
+
     for i, base in enumerate(seq):
         if base in ("G", "C"):
             logits[i] += 0.02
@@ -442,11 +491,15 @@ class Evo2NIMService(Evo2Service):
         return "429" in msg or "too many requests" in msg or "rate limit" in msg
 
     async def forward(self, sequence: str) -> ForwardResult:
-        # NIM's generate endpoint does not return per-position log-likelihoods.
-        # It only returns sampled_probs for generated tokens.  Use mock logits
-        # for per-position data — they're biologically calibrated and the right
-        # length.  NIM is used for generation, not scoring.
-        logits = _mock_logits(sequence)
+        # The hosted NIM endpoint exposes generation only — no per-position
+        # forward pass — so there is NO real per-position Evo2 log-likelihood for
+        # an arbitrary pasted sequence. Real Evo2 confidence is available only as
+        # the per-generated-base sampled_probs captured during generation
+        # (see generate_detailed). For scorers that need a per-position array over
+        # a non-generated sequence we return a DETERMINISTIC composition/motif
+        # signal derived from the actual sequence — honestly not an Evo2 LL, and
+        # never seeded-random fabrication.
+        logits = _composition_logits(sequence)
         return ForwardResult(
             logits=logits,
             sequence_score=float(np.mean(logits)) if logits else 0.0,
@@ -482,25 +535,22 @@ class Evo2NIMService(Evo2Service):
     async def generate(
         self, seed: str, n_tokens: int, temperature: float = 1.0
     ) -> AsyncGenerator[str, None]:
-        try:
-            clamped_temp = max(0.01, min(float(temperature), 1.0))
-            data = await self._post({
-                "sequence": seed,
-                "num_tokens": n_tokens,
-                "top_k": 4,
-                "enable_sampled_probs": True,
-                "temperature": clamped_temp,
-            })
-            generated = _extract_generated_sequence(data)
-            suffix = generated[len(seed):] if generated.startswith(seed) else generated
-        except Exception:
-            # Any NIM API failure (422, 429, 5xx, timeout) falls back to mock.
-            # Never let an API error crash the pipeline.
-            suffix = await self._fallback_generate(seed, n_tokens, temperature)
+        # FAIL-LOUD: a NIM API failure (422, 429, 5xx, timeout) RAISES. We never
+        # degrade to fabricated tokens under nim_api — a hard failure must surface
+        # to the caller as an error, not silently stream fake sequence.
+        clamped_temp = max(0.01, min(float(temperature), 1.0))
+        data = await self._post({
+            "sequence": seed,
+            "num_tokens": n_tokens,
+            "top_k": 4,
+            "enable_sampled_probs": True,
+            "temperature": clamped_temp,
+        })
+        generated = _extract_generated_sequence(data)
+        suffix = generated[len(seed):] if generated.startswith(seed) else generated
 
-        # NIM (and mock fallback) return the full suffix in one shot — yield base-by-base
-        # so the WebSocket client can stream into the IDE. Previously the success path
-        # computed `suffix` and never yielded, so Docker/NIM runs looked like a hung stream.
+        # NIM returns the full suffix in one shot — yield base-by-base so the
+        # WebSocket client can stream into the IDE.
         for base in (suffix or "").upper():
             if base not in ("A", "T", "C", "G", "N"):
                 continue
@@ -514,53 +564,40 @@ class Evo2NIMService(Evo2Service):
 
         On success, returns ``engine="nim"`` plus the REAL per-generated-token
         ``sampled_probs`` from the Evo2-40B model — genuine model confidence,
-        distinct from the heuristic 4D scores. On ANY error (422/429/5xx/timeout)
-        this reports ``engine="mock_fallback"`` and ``sampled_probs=None`` so the
-        caller can never present degraded mock output as real NIM.
+        distinct from the heuristic 4D scores. FAIL-LOUD: on ANY error
+        (422/429/5xx/timeout) this RAISES rather than degrading to fabricated
+        output, so the caller can never present mock sequence as real NIM.
 
         Conditioning is prefix-only (autoregressive): generated bases see the
         ``seed`` prefix but not any downstream suffix.
         """
         started = time.perf_counter()
-        try:
-            clamped_temp = max(0.01, min(float(temperature), 1.0))
-            data = await self._post({
-                "sequence": seed,
-                "num_tokens": n_tokens,
-                "top_k": 4,
-                "enable_sampled_probs": True,
-                "temperature": clamped_temp,
-            })
-            generated = _extract_generated_sequence(data)
-            suffix = generated[len(seed):] if generated.startswith(seed) else generated
-            suffix = "".join(b for b in suffix.upper() if b in ("A", "T", "C", "G", "N"))
-            probs = _extract_sampled_probs(data)
-            # Keep probs aligned to the returned bases; if lengths disagree, trim
-            # to the common prefix so per-base confidence never misaligns.
-            if probs is not None and len(probs) != len(suffix):
-                common = min(len(probs), len(suffix))
-                probs = probs[:common] if common > 0 else None
-            elapsed_ms = _nim_elapsed_ms(data, started)
-            return GenerationResult(
-                generated=suffix,
-                sampled_probs=probs,
-                engine="nim",
-                elapsed_ms=elapsed_ms,
-                seed=seed,
-                n_tokens=n_tokens,
-            )
-        except Exception:
-            # HONESTY: any NIM failure degrades to mock, reported as mock_fallback.
-            suffix = await self._fallback_generate(seed, n_tokens, temperature)
-            elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
-            return GenerationResult(
-                generated=suffix,
-                sampled_probs=None,
-                engine="mock_fallback",
-                elapsed_ms=elapsed_ms,
-                seed=seed,
-                n_tokens=n_tokens,
-            )
+        clamped_temp = max(0.01, min(float(temperature), 1.0))
+        data = await self._post({
+            "sequence": seed,
+            "num_tokens": n_tokens,
+            "top_k": 4,
+            "enable_sampled_probs": True,
+            "temperature": clamped_temp,
+        })
+        generated = _extract_generated_sequence(data)
+        suffix = generated[len(seed):] if generated.startswith(seed) else generated
+        suffix = "".join(b for b in suffix.upper() if b in ("A", "T", "C", "G", "N"))
+        probs = _extract_sampled_probs(data)
+        # Keep probs aligned to the returned bases; if lengths disagree, trim
+        # to the common prefix so per-base confidence never misaligns.
+        if probs is not None and len(probs) != len(suffix):
+            common = min(len(probs), len(suffix))
+            probs = probs[:common] if common > 0 else None
+        elapsed_ms = _nim_elapsed_ms(data, started)
+        return GenerationResult(
+            generated=suffix,
+            sampled_probs=probs,
+            engine="nim",
+            elapsed_ms=elapsed_ms,
+            seed=seed,
+            n_tokens=n_tokens,
+        )
 
     async def health(self) -> dict[str, object]:
         try:
@@ -575,7 +612,7 @@ class Evo2NIMService(Evo2Service):
                 "model": "evo2-40b-nim",
                 "gpu_available": True,
                 "inference_mode": "nim_api",
-                "scoring_note": "NIM generate API used for token generation; per-position logits use calibrated heuristic until a forward endpoint is available.",
+                "scoring_note": "Real Evo2-40B generation returns per-generated-base sampled_probs (genuine model confidence). The hosted endpoint has no per-position forward pass, so per-position arrays over pasted sequences are a deterministic composition/motif signal, not an Evo2 log-likelihood.",
             }
         except Exception as e:
             if self._is_retryable_nim_error(e):
@@ -593,13 +630,6 @@ class Evo2NIMService(Evo2Service):
                 "inference_mode": "nim_api",
                 "error": str(e),
             }
-
-    async def _fallback_generate(self, seed: str, n_tokens: int, temperature: float) -> str:
-        mock = Evo2MockService()
-        out: list[str] = []
-        async for token in mock.generate(seed=seed, n_tokens=n_tokens, temperature=temperature):
-            out.append(token)
-        return "".join(out)
 
 
 # ---------------------------------------------------------------------------

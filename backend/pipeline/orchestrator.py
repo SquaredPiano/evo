@@ -15,16 +15,14 @@ from pipeline.evo2_score import score_candidate
 from pipeline.intent_parser import parse_intent
 from pipeline.explanation import generate_explanation
 from pipeline.retrieval import RetrievalResult, retrieve_context
-from services.evo2 import Evo2MockService, Evo2Service
+from services.evo2 import Evo2Service
 from services.regeneration import (
     parse_generation_constraints,
     regenerate_region,
 )
-from services.mock_pdb import build_mock_pdb_from_dna
 from services.regulatory_viz import build_regulatory_map
 from services.region_evidence import assemble_region_evidence
 from services.structure import predict_structure
-from config import settings, StructureMode
 from ws.events import (
     CandidateSeedData,
     CandidateSeedEvent,
@@ -89,7 +87,6 @@ class PipelineProfile:
     scoring_timeout: float
     structure_timeout: float
     explanation_timeout: float
-    use_structure_fallback: bool
 
 
 @dataclass
@@ -173,24 +170,16 @@ class StageTracker:
 # ---------------------------------------------------------------------------
 
 
-async def _score_with_fallback(
+async def _score_real(
     service: Evo2Service,
-    fallback_service: Evo2Service,
     sequence: str,
     target_tissues: list[str] | None,
     timeout: float,
-    *,
-    allow_demo_fallback: bool = False,
 ) -> tuple[CandidateScores, list[LikelihoodScore]]:
-    """Score a candidate; only use mock fallback when demo_fallback is allowed."""
-    try:
-        async with asyncio.timeout(timeout):
-            return await score_candidate(service, sequence, target_tissues=target_tissues)
-    except Exception:
-        if not allow_demo_fallback:
-            raise
-        logger.warning("Primary scoring failed, falling back to mock", exc_info=True)
-        return await score_candidate(fallback_service, sequence, target_tissues=target_tissues)
+    """Score a candidate with the real engine. FAIL-LOUD: a scoring failure or
+    timeout propagates to the caller — there is no mock fallback."""
+    async with asyncio.timeout(timeout):
+        return await score_candidate(service, sequence, target_tissues=target_tissues)
 
 
 def _downsample_scores(
@@ -240,12 +229,12 @@ async def _resolve_structure(
     sequence: str,
     candidate_id: int,
     timeout: float,
-    use_fallback: bool,
 ) -> tuple[str | None, float | None, str | None, str]:
     """Predict structure, returning (pdb_data, confidence, error_reason, model).
 
-    Never silently presents mock geometry as ESMFold. Mock is only used when
-    ``use_fallback`` is True (demo_fallback truth mode).
+    Real ESMFold only. On failure (timeout, API down, or ORF too short) this
+    returns ``pdb_data=None`` with an honest error reason — never a fabricated
+    fold. The caller fails the candidate closed.
     """
     pdb_data: str | None = None
     confidence: float | None = None
@@ -254,30 +243,17 @@ async def _resolve_structure(
 
     try:
         async with asyncio.timeout(timeout):
-            if settings.structure_mode == StructureMode.ESMFOLD:
-                result = await predict_structure(sequence)
-                if result is not None:
-                    pdb_data = result.pdb_data
-                    confidence = result.confidence
-                    model = "esmfold"
-                else:
-                    error = "esmfold_unavailable_or_orf_too_short"
-            elif settings.structure_mode == StructureMode.MOCK:
-                pdb_data, confidence = build_mock_pdb_from_dna(
-                    sequence, candidate_id=candidate_id
-                )
-                model = "mock"
+            result = await predict_structure(sequence)
+            if result is not None:
+                pdb_data = result.pdb_data
+                confidence = result.confidence
+                model = "esmfold"
+            else:
+                error = "esmfold_unavailable_or_orf_too_short"
     except TimeoutError:
         error = "structure_timeout"
     except Exception as exc:
         error = f"structure_error:{exc}"
-
-    if pdb_data is None and use_fallback:
-        pdb_data, confidence = build_mock_pdb_from_dna(
-            sequence, candidate_id=candidate_id
-        )
-        model = "mock"
-        error = None
 
     return pdb_data, confidence, error, model
 
@@ -355,7 +331,6 @@ def _profile(
     truth_mode: str,
     target_length: int | None = None,
 ) -> PipelineProfile:
-    use_structure_fallback = truth_mode != "real_only"
     # Scale timeouts for long sequences: base timeout * max(1, length / baseline)
     length_scale = max(1.0, (target_length or 0) / 10_000) if target_length else 1.0
     if run_profile == "live":
@@ -368,7 +343,6 @@ def _profile(
             scoring_timeout=30.0 * length_scale,
             structure_timeout=90.0,
             explanation_timeout=25.0,
-            use_structure_fallback=use_structure_fallback,
         )
     return PipelineProfile(
         run_profile="demo",
@@ -379,7 +353,6 @@ def _profile(
         scoring_timeout=max(8.0, 8.0 * length_scale),
         structure_timeout=20.0,
         explanation_timeout=10.0,
-        use_structure_fallback=use_structure_fallback,
     )
 
 
@@ -406,7 +379,6 @@ async def run_generation_pipeline(
 ) -> None:
     candidate_count = max(1, min(int(n_candidates), 10))
     profile = _profile(run_profile, truth_mode, target_length=target_length)
-    fallback_service = Evo2MockService()
     tracker = StageTracker(manager, session_id)
     runtime: dict[int, CandidateRuntime] = {cid: CandidateRuntime(id=cid) for cid in range(candidate_count)}
     runtime_lock = asyncio.Lock()
@@ -455,7 +427,6 @@ async def run_generation_pipeline(
         spec,
         tracker=tracker,
         timeout_seconds=profile.retrieval_timeout,
-        allow_demo_fallback=profile.truth_mode == "demo_fallback",
     )
     await tracker.set("retrieval", "done", 1.0)
 
@@ -585,20 +556,11 @@ async def run_generation_pipeline(
                                 ).to_json(),
                             )
             except Exception as gen_exc:
-                # Keep any partial progress; only hard-fail if nothing beyond the seed.
+                # FAIL-LOUD: no fabricated tokens. Keep any REAL partial progress
+                # already streamed from the engine; if nothing beyond the seed was
+                # produced, fail the candidate honestly.
                 partial = generated if len(generated) > len(varied_seed) else ""
-                if profile.truth_mode == "demo_fallback":
-                    generated = await _fill_with_demo_tokens(
-                        manager=manager,
-                        session_id=session_id,
-                        candidate_id=candidate_id,
-                        generated=generated,
-                        seed_length=len(varied_seed),
-                        n_tokens=tokens_to_generate,
-                        temperature=temperature,
-                        fallback_service=fallback_service,
-                    )
-                elif partial:
+                if partial:
                     logger.warning(
                         "Generation timed out/errored for candidate %s after %s bp; keeping partial",
                         candidate_id,
@@ -629,13 +591,11 @@ async def run_generation_pipeline(
             # --- Score ---
             target_tissues = spec.tissue_specificity.high_expression if spec.tissue_specificity else None
             try:
-                scores, per_position = await _score_with_fallback(
+                scores, per_position = await _score_real(
                     service,
-                    fallback_service,
                     generated,
                     target_tissues,
                     profile.scoring_timeout,
-                    allow_demo_fallback=profile.truth_mode == "demo_fallback",
                 )
             except Exception as score_exc:
                 candidate = await _mark_failed(
@@ -655,7 +615,7 @@ async def run_generation_pipeline(
 
             # --- Structure ---
             pdb_data, confidence, structure_error, structure_model = await _resolve_structure(
-                generated, candidate_id, profile.structure_timeout, profile.use_structure_fallback,
+                generated, candidate_id, profile.structure_timeout,
             )
 
             if pdb_data is None:
@@ -705,32 +665,8 @@ async def run_generation_pipeline(
     structured = [candidate for candidate in runtime.values() if candidate.status == "structured" and candidate.scores]
     if structured:
         top_candidate = max(structured, key=lambda c: float((c.scores or {}).get("combined", 0.0)))
-        if (
-            settings.structure_mode == StructureMode.ESMFOLD
-            and top_candidate.pdb_data
-            and _looks_like_mock_pdb(top_candidate.pdb_data)
-        ):
-            try:
-                high_fidelity = await asyncio.wait_for(
-                    predict_structure(top_candidate.sequence),
-                    timeout=max(45.0, profile.structure_timeout * 2.5),
-                )
-                if high_fidelity is not None:
-                    top_candidate.pdb_data = high_fidelity.pdb_data
-                    top_candidate.confidence = high_fidelity.confidence
-                    runtime[top_candidate.id] = top_candidate
-                    await manager.send_event(
-                        session_id,
-                        StructureReadyEvent(
-                            data=StructureReadyData(
-                                candidate_id=top_candidate.id,
-                                pdb_data=high_fidelity.pdb_data,
-                                confidence=high_fidelity.confidence,
-                            )
-                        ).to_json(),
-                    )
-            except Exception:
-                logger.warning("High-fidelity structure prediction failed for candidate %s", top_candidate.id, exc_info=True)
+        # Every structured candidate already carries a real ESMFold structure
+        # (structure fails closed otherwise), so there is nothing to re-fold here.
         if first_explained_candidate_id != top_candidate.id:
             await tracker.set("explanation", "active", 0.7)
             try:
@@ -803,7 +739,6 @@ async def run_followup_pipeline(
     on_spec_ready: SpecUpdateCallback | None = None,
 ) -> list[str]:
     profile = _profile(run_profile, truth_mode)
-    fallback_service = Evo2MockService()
     tracker = StageTracker(manager, session_id)
     await tracker.emit_initial()
     await tracker.set("intent", "active", 0.1)
@@ -834,13 +769,11 @@ async def run_followup_pipeline(
     # --- Score ---
     await tracker.set("scoring", "active", 0.2)
     target_tissues = spec.tissue_specificity.high_expression if spec.tissue_specificity else None
-    scores, per_position = await _score_with_fallback(
+    scores, per_position = await _score_real(
         service,
-        fallback_service,
         base,
         target_tissues,
         profile.scoring_timeout,
-        allow_demo_fallback=profile.truth_mode == "demo_fallback",
     )
     await _emit_scored(manager, session_id, candidate_id, scores, per_position)
     await tracker.set("scoring", "done", 1.0)
@@ -848,7 +781,7 @@ async def run_followup_pipeline(
     # --- Structure ---
     await tracker.set("structure", "active", 0.2)
     pdb_data, confidence, structure_error, structure_model = await _resolve_structure(
-        base, candidate_id, profile.structure_timeout, profile.use_structure_fallback,
+        base, candidate_id, profile.structure_timeout,
     )
 
     if pdb_data is None:
@@ -970,7 +903,6 @@ async def _emit_retrieval(
     spec: DesignSpec,
     tracker: StageTracker | None = None,
     timeout_seconds: float = 5.0,
-    allow_demo_fallback: bool = False,
 ) -> RetrievalResult | None:
     import dataclasses
 
@@ -1004,12 +936,10 @@ async def _emit_retrieval(
                 result_dict["role"] = "seed_context" if result_dict.get("reference_sequence") else "metadata_only"
             status = "complete"
         else:
-            if allow_demo_fallback:
-                result_dict = _build_retrieval_fallback(source_name, spec)
-                status = "complete"
-            else:
-                result_dict = {}
-                status = "failed"
+            # FAIL-LOUD: a missing source is reported as failed, never backfilled
+            # with fabricated demo records.
+            result_dict = {}
+            status = "failed"
 
         await manager.send_event(
             session_id,
@@ -1022,57 +952,6 @@ async def _emit_retrieval(
         if tracker is not None:
             await tracker.set("retrieval", "active", completed / len(sources))
     return result
-
-
-def _build_retrieval_fallback(source_name: str, spec: DesignSpec) -> dict[str, object]:
-    gene = spec.target_gene or "GENE"
-    if source_name == "ncbi":
-        return {
-            "gene": gene,
-            "organism": spec.organism,
-            "chromosome": "demo_chr",
-            "start": 0,
-            "end": 420,
-            "strand": "+",
-            "summary": f"Demo fallback genomic context synthesized for {gene}.",
-            "reference_accession": "NEUTRAL_SCAFFOLD",
-            "reference_sequence": (DEFAULT_SEED * 8)[:420],
-            "sequence_kind": "neutral_scaffold",
-            "fallback": True,
-            "note": "Demo fallback — not a real gene CDS. Live NCBI was unavailable.",
-        }
-    if source_name == "pubmed":
-        return {
-            "query": f"{gene} {spec.therapeutic_context or spec.design_type}",
-            "count": 2,
-            "papers": [
-                {
-                    "pmid": "DEMO-PMID-1",
-                    "title": f"{gene} regulatory control in neural tissue (demo fallback)",
-                    "year": 2024,
-                    "journal": "Evo Demo Journal",
-                    "authors": ["Fallback, A.", "Demo, B."],
-                    "abstract": "Synthetic fallback context used when live literature retrieval is unavailable.",
-                },
-                {
-                    "pmid": "DEMO-PMID-2",
-                    "title": f"Sequence design constraints for {spec.design_type} (demo fallback)",
-                    "year": 2023,
-                    "journal": "Evo Methods",
-                    "authors": ["Demo, C."],
-                    "abstract": "Fallback evidence to preserve end-to-end demo continuity.",
-                },
-            ],
-            "fallback": True,
-        }
-    return {
-        "gene": gene,
-        "variants": [],
-        "pathogenic_count": 0,
-        "benign_count": 0,
-        "summary": f"No live ClinVar records available for {gene}; using safe empty fallback.",
-        "fallback": True,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -1219,34 +1098,6 @@ async def _generate_constrained_stream(
         "constraint_report": result.constraint_report,
     }
     return generated, provenance
-
-
-async def _fill_with_demo_tokens(
-    *,
-    manager: WebSocketManager,
-    session_id: str,
-    candidate_id: int,
-    generated: str,
-    seed_length: int,
-    n_tokens: int,
-    temperature: float,
-    fallback_service: Evo2MockService,
-) -> str:
-    emitted = max(0, len(generated) - seed_length)
-    remaining = max(0, n_tokens - emitted)
-    if remaining == 0:
-        return generated
-
-    async for token in fallback_service.generate(generated, n_tokens=remaining, temperature=temperature):
-        position = len(generated)
-        generated += token
-        await manager.send_event(
-            session_id,
-            GenerationTokenEvent(
-                data=GenerationTokenData(candidate_id=candidate_id, token=token, position=position)
-            ).to_json(),
-        )
-    return generated
 
 
 def _simple_mutate(sequence: str, position: int, new_base: str) -> str:
@@ -1443,11 +1294,6 @@ def _longest_orf_bp(sequence: str) -> int:
         if start_pos is not None:
             best = max(best, len(seq) - start_pos)
     return best
-
-
-def _looks_like_mock_pdb(pdb_data: str) -> bool:
-    header = "\n".join(pdb_data.splitlines()[:4]).lower()
-    return "synthetic fallback" in header or "evo demo structure" in header
 
 
 def create_session_id() -> str:

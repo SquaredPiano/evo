@@ -15,7 +15,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from services.evo2 import Evo2MockService, _mock_logits, _deterministic_seed, _TRANSITION, _MOTIFS
+from services.evo2 import (
+    Evo2MockService,
+    _mock_logits,
+    _composition_logits,
+    _deterministic_seed,
+    _TRANSITION,
+    _MOTIFS,
+)
 from services.sequence_formats import (
     parse_fasta, parse_genbank, export_fasta, export_genbank,
 )
@@ -518,11 +525,12 @@ class TestAPIContracts:
             assert s["position"] == i
             assert isinstance(s["score"], float)
 
-    def test_analyze_scores_match_mock_logits(self, client):
-        """API scores must exactly match what _mock_logits produces."""
+    def test_analyze_scores_match_composition_logits(self, client):
+        """Under nim_api the per-position array is the deterministic composition
+        signal (Evo2NIMService.forward), so API scores must match it exactly."""
         res = client.post("/api/analyze", json={"sequence": BRCA1})
         body = res.json()
-        expected_logits = _mock_logits(BRCA1)
+        expected_logits = _composition_logits(BRCA1)
         for s, expected in zip(body["scores"], expected_logits):
             assert s["score"] == round(expected, 6)
 
@@ -538,11 +546,12 @@ class TestAPIContracts:
         assert body["position"] == 0
         assert body["reference_base"] == "A"
         assert body["alternate_base"] == "G"
-        # Delta = score(mutated) - score(original)
-        ref_logits = _mock_logits(BRCA1)
+        # Delta = score(mutated) - score(original), computed from the same
+        # deterministic composition signal the nim_api engine uses.
+        ref_logits = _composition_logits(BRCA1)
         ref_score = float(np.mean(ref_logits))
         mutated = "G" + BRCA1[1:]
-        alt_logits = _mock_logits(mutated)
+        alt_logits = _composition_logits(mutated)
         alt_score = float(np.mean(alt_logits))
         expected_delta = round(alt_score - ref_score, 6)
         assert body["delta_likelihood"] == expected_delta
@@ -774,15 +783,15 @@ class TestEdgeCases:
         })
         assert r2.status_code == 422
 
-    def test_structure_valid_region(self, client):
+    def test_structure_too_short_region_fails_closed(self, client):
+        """FAIL-LOUD: the BRCA1 fragment is only 16 residues (< ESMFold's 40-residue
+        floor). With mock structure removed, this fails closed with 503 and never
+        returns a fabricated fold."""
         res = client.post("/api/structure", json={
             "sequence": BRCA1, "region_start": 0, "region_end": len(BRCA1),
         })
-        assert res.status_code == 200
-        body = res.json()
-        assert body["model"] in {"mock", "esmfold"}
-        assert isinstance(body["pdb_data"], str)
-        assert body["pdb_data"].startswith("HEADER")
+        assert res.status_code == 503
+        assert "mock" not in res.json()["detail"].lower() or "No mock" in res.json()["detail"]
 
     def test_edit_base_on_nonexistent_session(self, client):
         res = client.post("/api/edit/base", json={

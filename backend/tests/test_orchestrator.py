@@ -4,7 +4,6 @@ import pytest
 
 import pipeline.orchestrator as orchestrator
 from pipeline.orchestrator import run_followup_pipeline, run_generation_pipeline
-from config import StructureMode
 from services.evo2 import Evo2MockService
 from ws.manager import WebSocketManager
 
@@ -18,6 +17,31 @@ class _FakeWebSocket:
 
     async def send_json(self, payload: dict[str, object]) -> None:
         self.sent.append(payload)
+
+
+_STUB_PDB = (
+    "HEADER    ESMFOLD TEST STUB\n"
+    "ATOM      1  N   ALA A   1       0.000   0.000   0.000  1.00 90.00           N\n"
+    "ATOM      2  CA  ALA A   1       1.458   0.000   0.000  1.00 90.00           C\n"
+    "ATOM      3  C   ALA A   1       2.009   1.420   0.000  1.00 90.00           C\n"
+    "ATOM      4  O   ALA A   1       3.222   1.601   0.000  1.00 90.00           O\n"
+    "END\n"
+)
+
+
+@pytest.fixture(autouse=True)
+def _stub_esmfold(monkeypatch: pytest.MonkeyPatch):
+    """Stub the ESMFold network call at its boundary so pipeline event-flow tests
+    are deterministic and offline. This returns a REAL StructurePrediction shape
+    (as a successful ESMFold call would); it is not a mock PDB fallback inside the
+    pipeline. Tests that exercise structure-unavailable behavior re-patch
+    ``predict_structure`` in their body, which overrides this fixture."""
+    from services.structure import StructurePrediction
+
+    async def _ok(*_args, **_kwargs) -> StructurePrediction:
+        return StructurePrediction(pdb_data=_STUB_PDB, protein_sequence="A", confidence=0.9)
+
+    monkeypatch.setattr(orchestrator, "predict_structure", _ok)
 
 
 @pytest.mark.asyncio
@@ -48,9 +72,11 @@ async def test_generation_pipeline_emits_key_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_demo_profile_retrieval_uses_fallback_payloads_when_sources_fail(
+async def test_demo_profile_retrieval_reports_failure_without_fabricating(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Even under the demo profile, failed sources are reported as failed — no
+    fabricated demo payloads are ever backfilled (real_only is now the behavior)."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
     await manager.connect(ws, "session-retrieval-fallback")
@@ -72,8 +98,8 @@ async def test_demo_profile_retrieval_uses_fallback_payloads_when_sources_fail(
 
     retrieval_events = [event for event in ws.sent if event["event"] == "retrieval_progress"]
     assert len(retrieval_events) == 3
-    assert all(event["data"]["status"] == "complete" for event in retrieval_events)
-    assert all(event["data"]["result"].get("fallback") is True for event in retrieval_events)
+    assert all(event["data"]["status"] == "failed" for event in retrieval_events)
+    assert all(event["data"]["result"] == {} for event in retrieval_events)
 
 
 @pytest.mark.asyncio
@@ -201,9 +227,11 @@ async def test_followup_pipeline_uses_provided_base_sequence() -> None:
 
 
 @pytest.mark.asyncio
-async def test_followup_pipeline_recovers_when_structure_prediction_raises(
+async def test_followup_pipeline_fails_closed_when_structure_prediction_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """FAIL-LOUD: when ESMFold raises there is no synthetic fold; the candidate
+    fails honestly with a null structure."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
     await manager.connect(ws, "session-follow-structure-fail")
@@ -211,7 +239,6 @@ async def test_followup_pipeline_recovers_when_structure_prediction_raises(
     async def _boom(*_args, **_kwargs):
         raise RuntimeError("esmfold unavailable")
 
-    monkeypatch.setattr(orchestrator.settings, "structure_mode", StructureMode.ESMFOLD)
     monkeypatch.setattr(orchestrator, "predict_structure", _boom)
 
     await run_followup_pipeline(
@@ -226,9 +253,9 @@ async def test_followup_pipeline_recovers_when_structure_prediction_raises(
 
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
-    assert complete["data"]["failed_candidates"] == 0
-    assert complete["data"]["candidates"][0]["status"] == "structured"
-    assert complete["data"]["candidates"][0]["pdb_data"]
+    assert complete["data"]["failed_candidates"] == 1
+    assert complete["data"]["candidates"][0]["status"] == "failed"
+    assert complete["data"]["candidates"][0]["pdb_data"] is None
 
 
 @pytest.mark.asyncio
@@ -306,9 +333,11 @@ async def test_stage_status_never_regresses() -> None:
 
 
 @pytest.mark.asyncio
-async def test_demo_profile_uses_structure_fallback_when_structure_unavailable(
+async def test_demo_profile_fails_closed_when_structure_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """FAIL-LOUD: demo profile no longer backfills a mock structure. When ESMFold
+    returns nothing, the candidate fails honestly with a null structure."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
     await manager.connect(ws, "session-demo-fallback")
@@ -316,7 +345,6 @@ async def test_demo_profile_uses_structure_fallback_when_structure_unavailable(
     async def _no_structure(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(orchestrator.settings, "structure_mode", StructureMode.ESMFOLD)
     monkeypatch.setattr(orchestrator, "predict_structure", _no_structure)
 
     await run_generation_pipeline(
@@ -330,15 +358,16 @@ async def test_demo_profile_uses_structure_fallback_when_structure_unavailable(
 
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
-    assert complete["data"]["failed_candidates"] == 0
-    assert complete["data"]["candidates"][0]["status"] == "structured"
-    assert complete["data"]["candidates"][0]["pdb_data"]
+    assert complete["data"]["failed_candidates"] == 1
+    assert complete["data"]["candidates"][0]["status"] == "failed"
+    assert complete["data"]["candidates"][0]["pdb_data"] is None
 
 
 @pytest.mark.asyncio
-async def test_live_profile_uses_structure_fallback_when_structure_unavailable(
+async def test_live_profile_fails_closed_when_structure_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """FAIL-LOUD: live profile also fails closed with no synthetic structure."""
     manager = WebSocketManager()
     ws = _FakeWebSocket()
     await manager.connect(ws, "session-live-fail")
@@ -346,7 +375,6 @@ async def test_live_profile_uses_structure_fallback_when_structure_unavailable(
     async def _no_structure(*_args, **_kwargs):
         return None
 
-    monkeypatch.setattr(orchestrator.settings, "structure_mode", StructureMode.ESMFOLD)
     monkeypatch.setattr(orchestrator, "predict_structure", _no_structure)
 
     await run_generation_pipeline(
@@ -360,8 +388,8 @@ async def test_live_profile_uses_structure_fallback_when_structure_unavailable(
 
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
-    assert complete["data"]["failed_candidates"] == 0
-    assert complete["data"]["candidates"][0]["status"] == "structured"
+    assert complete["data"]["failed_candidates"] == 1
+    assert complete["data"]["candidates"][0]["status"] == "failed"
 
 
 @pytest.mark.asyncio
@@ -421,8 +449,9 @@ async def test_ten_candidates_all_complete_in_demo_mode() -> None:
 
 
 @pytest.mark.asyncio
-async def test_demo_profile_recovers_when_generation_service_raises() -> None:
-    """Even if upstream generation fails (e.g., NIM 422), demo mode must still complete all candidates."""
+async def test_demo_profile_fails_closed_when_generation_service_raises() -> None:
+    """FAIL-LOUD: when generation raises before producing any real bases, the
+    candidate fails honestly — no fabricated demo tokens are streamed."""
 
     class _FailingGenerateService(Evo2MockService):
         async def generate(self, seed: str, n_tokens: int, temperature: float = 1.0):
@@ -446,24 +475,9 @@ async def test_demo_profile_recovers_when_generation_service_raises() -> None:
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
     assert complete["data"]["requested_candidates"] == 10
-    assert complete["data"]["failed_candidates"] == 0
+    assert complete["data"]["failed_candidates"] == 10
+    assert all(c["status"] == "failed" for c in complete["data"]["candidates"])
     assert len(complete["data"]["candidates"]) == 10
-
-
-def test_mock_pdb_has_backbone_atoms_for_cartoon_rendering() -> None:
-    """Mock PDB must have N, CA, C, O atoms per residue so 3dmol cartoon works."""
-    from services.mock_pdb import build_mock_pdb_from_dna
-
-    pdb, _confidence = build_mock_pdb_from_dna("ATGGCTGATTCAGATCTTGCTACCAAAGCAGCTGCAATGGCTGATCTTGCTACCAAAGCATAA")
-    lines = [line for line in pdb.split("\n") if line.startswith("ATOM")]
-    assert len(lines) >= 60, f"Need at least 15 residues × 4 atoms; got {len(lines)} ATOM lines"
-
-    atom_names = {line[12:16].strip() for line in lines}
-    for required in ("N", "CA", "C", "O"):
-        assert required in atom_names, f"Missing backbone atom {required}"
-
-    residue_nums = {int(line[22:26]) for line in lines}
-    assert len(residue_nums) >= 15, f"Need at least 15 residues; got {len(residue_nums)}"
 
 
 @pytest.mark.asyncio

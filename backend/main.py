@@ -59,7 +59,6 @@ from pipeline.orchestrator import (
     run_generation_pipeline,
 )
 from services.evo2 import create_evo2_service
-from services.mock_pdb import build_mock_pdb_from_dna
 from services.regulatory_viz import build_regulatory_map
 from services.agentic_copilot import AgenticCopilot
 from services.session_store import (
@@ -405,25 +404,30 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
                     sequence=update.sequence,
                     candidate_id=update.candidate_id,
                 )
+                # Honest null: when ESMFold cannot fold the region there is no
+                # structure. Do not persist an empty string as if it were a fold.
+                if not pdb_data or structure_model == "unavailable":
+                    pdb_data, confidence, structure_model = None, None, None
                 update.pdb_data = pdb_data
                 update.confidence = confidence
                 update.structure_model = structure_model
-                await ws_manager.send_event(
-                    request.session_id,
-                    StructureReadyEvent(
-                        data=StructureReadyData(
-                            candidate_id=update.candidate_id,
-                            pdb_data=pdb_data,
-                            confidence=confidence,
-                        )
-                    ).to_json(),
-                )
-                await ws_manager.send_event(
-                    request.session_id,
-                    CandidateStatusEvent(
-                        data=CandidateStatusData(candidate_id=update.candidate_id, status="structured")
-                    ).to_json(),
-                )
+                if pdb_data is not None:
+                    await ws_manager.send_event(
+                        request.session_id,
+                        StructureReadyEvent(
+                            data=StructureReadyData(
+                                candidate_id=update.candidate_id,
+                                pdb_data=pdb_data,
+                                confidence=confidence,
+                            )
+                        ).to_json(),
+                    )
+                    await ws_manager.send_event(
+                        request.session_id,
+                        CandidateStatusEvent(
+                            data=CandidateStatusData(candidate_id=update.candidate_id, status="structured")
+                        ).to_json(),
+                    )
             except Exception:
                 logger.warning("Structure prediction failed for candidate %s", update.candidate_id, exc_info=True)
         if not _design_uses_protein_structure(design_type) and regulatory_map is None:
@@ -1048,14 +1052,16 @@ async def pipeline_ws(websocket: WebSocket, session_id: str) -> None:
 
 
 async def _predict_structure_snapshot(*, sequence: str, candidate_id: int) -> tuple[str, float, str]:
-    """Return (pdb, confidence, model). Never disguises mock as ESMFold."""
-    if settings.structure_mode == StructureMode.ESMFOLD:
-        result = await predict_structure(sequence)
-        if result is not None:
-            return result.pdb_data, result.confidence, "esmfold"
-        return "", 0.0, "unavailable"
-    pdb, confidence = build_mock_pdb_from_dna(sequence, candidate_id=candidate_id)
-    return pdb, confidence, "mock"
+    """Return (pdb, confidence, model). Real ESMFold or an honest "unavailable".
+
+    There is no synthetic-PDB fallback: when ESMFold cannot fold the region we
+    report ``unavailable`` and the caller fails closed rather than serving a
+    fabricated structure.
+    """
+    result = await predict_structure(sequence)
+    if result is not None:
+        return result.pdb_data, result.confidence, "esmfold"
+    return "", 0.0, "unavailable"
 
 
 async def _set_session_design_type(session_id: str, design_type: str) -> None:

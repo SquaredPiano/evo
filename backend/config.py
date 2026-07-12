@@ -24,7 +24,6 @@ class StructureMode(str, Enum):
     ALPHAFOLD_API = "alphafold_api"
     COLABFOLD = "colabfold"
     ESMFOLD = "esmfold"
-    MOCK = "mock"
 
 
 class SessionStoreMode(str, Enum):
@@ -41,7 +40,7 @@ class Settings(BaseSettings):
     evo2_model_path: str = "arcinstitute/evo2_7b"
 
     # Structure prediction
-    structure_mode: StructureMode = StructureMode.MOCK
+    structure_mode: StructureMode = StructureMode.ESMFOLD
     alphafold_api_key: str = ""
 
     # NCBI E-utilities
