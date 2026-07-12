@@ -288,3 +288,37 @@ class LiteratureSearchRequest(BaseModel):
     query: str = Field(..., min_length=1, description="Natural-language query")
     k: int = Field(5, ge=1, le=50, description="Number of results to return")
     gene: str | None = Field(None, description="Optional gene filter")
+
+
+class TmRequest(BaseModel):
+    """Melting-temperature request for a DNA oligo/duplex."""
+    sequence: str = Field(..., description="DNA sequence (A/C/G/T; N allowed but falls back to Wallace)")
+    na_molar: float = Field(0.05, gt=0, le=2.0, description="Monovalent cation [Na+] in mol/L")
+    oligo_molar: float = Field(
+        0.25e-6, gt=0, le=1e-2, description="Total oligo strand concentration in mol/L"
+    )
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
+VALID_AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTVWY")
+
+
+class ProteinParamsRequest(BaseModel):
+    """Protein physicochemical-parameter request."""
+    sequence: str = Field(..., min_length=1, description="Protein sequence (one-letter amino acids)")
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        seq = "".join(v.upper().split())
+        if not seq:
+            raise ValueError("Protein sequence must not be empty")
+        # Strip a trailing stop codon marker if present; keep only known residues check.
+        seq = seq.replace("*", "")
+        if not any(a in VALID_AMINO_ACIDS for a in seq):
+            raise ValueError("Sequence contains no standard amino acids")
+        return seq

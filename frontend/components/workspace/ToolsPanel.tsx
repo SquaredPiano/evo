@@ -15,6 +15,8 @@ import {
   optimizeCodons,
   annotateVariants,
   runCalibration,
+  computeTm,
+  computeProteinParams,
   exportFasta,
   exportGenbank,
   downloadText,
@@ -22,6 +24,8 @@ import {
   type CodonOptimizationResult,
   type VariantAnnotation,
   type CalibrationReport,
+  type TmResult,
+  type ProteinParamsResult,
 } from "@/lib/api";
 import {
   clinvarVariationUrl,
@@ -31,7 +35,31 @@ import {
 } from "@/lib/evidence";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
-type Tab = "offtarget" | "codon" | "variants" | "validate" | "export";
+type Tab = "tm" | "offtarget" | "codon" | "protein" | "variants" | "validate" | "export";
+
+// Standard genetic code (frame-0) for a convenience translation of the current
+// DNA into the protein whose parameters we report. Pure, deterministic.
+const CODON_TABLE: Record<string, string> = {
+  TTT: "F", TTC: "F", TTA: "L", TTG: "L", CTT: "L", CTC: "L", CTA: "L", CTG: "L",
+  ATT: "I", ATC: "I", ATA: "I", ATG: "M", GTT: "V", GTC: "V", GTA: "V", GTG: "V",
+  TCT: "S", TCC: "S", TCA: "S", TCG: "S", CCT: "P", CCC: "P", CCA: "P", CCG: "P",
+  ACT: "T", ACC: "T", ACA: "T", ACG: "T", GCT: "A", GCC: "A", GCA: "A", GCG: "A",
+  TAT: "Y", TAC: "Y", TAA: "*", TAG: "*", CAT: "H", CAC: "H", CAA: "Q", CAG: "Q",
+  AAT: "N", AAC: "N", AAA: "K", AAG: "K", GAT: "D", GAC: "D", GAA: "E", GAG: "E",
+  TGT: "C", TGC: "C", TGA: "*", TGG: "W", CGT: "R", CGC: "R", CGA: "R", CGG: "R",
+  AGT: "S", AGC: "S", AGA: "R", AGG: "R", GGT: "G", GGC: "G", GGA: "G", GGG: "G",
+};
+
+function translateFrame0(dna: string): string {
+  const seq = dna.toUpperCase().replace(/[^ACGT]/g, "");
+  let protein = "";
+  for (let i = 0; i + 3 <= seq.length; i += 3) {
+    const aa = CODON_TABLE[seq.slice(i, i + 3)];
+    if (!aa || aa === "*") break;
+    protein += aa;
+  }
+  return protein;
+}
 
 const ORGANISMS = [
   { id: "homo_sapiens", label: "Human" },
@@ -61,9 +89,13 @@ export default function ToolsPanel() {
   const candidates = useProteusStore((s) => s.candidates);
   const activeCandidateId = useProteusStore((s) => s.activeCandidateId);
 
-  const [tab, setTab] = useState<Tab>("offtarget");
+  const [tab, setTab] = useState<Tab>("tm");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const [tm, setTm] = useState<TmResult | null>(null);
+  const [proteinSeq, setProteinSeq] = useState("");
+  const [protein, setProtein] = useState<ProteinParamsResult | null>(null);
 
   const [offtarget, setOfftarget] = useState<{ repeat_fraction: number; gc_balance_risk: string; hits: OffTargetHit[] } | null>(null);
   const [organism, setOrganism] = useState("homo_sapiens");
@@ -86,6 +118,16 @@ export default function ToolsPanel() {
       setBusy(false);
     }
   };
+
+  const runTm = () => run(async () => {
+    setTm(await computeTm(rawSequence));
+  });
+
+  const runProtein = () => run(async () => {
+    const seq = (proteinSeq.trim() || translateFrame0(rawSequence)).toUpperCase();
+    if (!seq) throw new Error("No protein sequence (paste one or provide a coding DNA).");
+    setProtein(await computeProteinParams(seq));
+  });
 
   const runOfftarget = () => run(async () => {
     const res = await scanOffTargets(rawSequence, 12);
@@ -128,8 +170,10 @@ export default function ToolsPanel() {
   });
 
   const TABS: { id: Tab; label: string }[] = [
+    { id: "tm", label: "Tm" },
     { id: "offtarget", label: "Off-target" },
     { id: "codon", label: "Codon opt" },
+    { id: "protein", label: "Protein" },
     { id: "variants", label: "Variants" },
     { id: "validate", label: "Validate" },
     { id: "export", label: "Export" },
@@ -160,6 +204,66 @@ export default function ToolsPanel() {
       </div>
 
       {err && <div className="text-[11px] mb-2" style={{ color: "var(--base-t)" }}>{err}</div>}
+
+      {tab === "tm" && (
+        <div className="space-y-2">
+          <button onClick={runTm} disabled={busy || !rawSequence} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
+            {busy ? "Computing…" : "Compute Tm"}
+          </button>
+          {tm && (
+            <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
+              <div className="flex justify-between">
+                <span>Tm (nearest-neighbor)</span>
+                <span className="font-mono" style={{ color: "var(--accent)" }}>
+                  {tm.tm_nn_celsius == null ? "n/a" : `${tm.tm_nn_celsius.toFixed(1)} °C`}
+                </span>
+              </div>
+              <div className="flex justify-between"><span>Tm (Wallace 2+4)</span><span className="font-mono">{tm.tm_wallace_celsius.toFixed(1)} °C</span></div>
+              <div className="flex justify-between"><span>Length / GC</span><span className="font-mono">{tm.length} nt · {(tm.gc_fraction * 100).toFixed(0)}%</span></div>
+              {tm.delta_h_kcal != null && tm.delta_s_cal != null && (
+                <div className="flex justify-between"><span>ΔH / ΔS</span><span className="font-mono">{tm.delta_h_kcal.toFixed(1)} kcal · {tm.delta_s_cal.toFixed(1)} cal/K</span></div>
+              )}
+              <div className="pt-1 leading-relaxed" style={{ color: "var(--text-faint)" }}>{tm.note}</div>
+            </div>
+          )}
+          <div className="text-[10px]" style={{ color: "var(--text-faint)" }}>
+            Nearest-neighbor Tm (SantaLucia 1998) at 50 mM Na+, 0.25 µM oligo, with a Wallace-rule cross-check.
+          </div>
+        </div>
+      )}
+
+      {tab === "protein" && (
+        <div className="space-y-2">
+          <textarea
+            value={proteinSeq}
+            onChange={(e) => setProteinSeq(e.target.value)}
+            placeholder="Protein sequence (one-letter). Leave blank to translate the current DNA in frame 0."
+            rows={3}
+            className="w-full text-[11px] px-3 py-2 rounded-xl bg-transparent font-mono resize-none"
+            style={{ border: "1px solid var(--ghost-border)", color: "var(--text-primary)" }}
+          />
+          <button onClick={runProtein} disabled={busy || (!proteinSeq.trim() && !rawSequence)} className={btn} style={{ background: "var(--accent)", color: "var(--ink)" }}>
+            {busy ? "Computing…" : "Compute protein params"}
+          </button>
+          {protein && (
+            <div className="text-[11px] space-y-1.5" style={{ color: "var(--text-secondary)" }}>
+              <div className="flex justify-between"><span>Length</span><span className="font-mono">{protein.length} aa</span></div>
+              <div className="flex justify-between"><span>Molecular weight</span><span className="font-mono">{(protein.molecular_weight / 1000).toFixed(2)} kDa</span></div>
+              <div className="flex justify-between"><span>Theoretical pI</span><span className="font-mono" style={{ color: "var(--accent)" }}>{protein.theoretical_pi.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span>GRAVY (Kyte-Doolittle)</span><span className="font-mono">{protein.gravy.toFixed(3)}</span></div>
+              <div className="flex justify-between"><span>Aromaticity</span><span className="font-mono">{(protein.aromaticity * 100).toFixed(1)}%</span></div>
+              <div className="flex justify-between"><span>Charged (+ / −)</span><span className="font-mono">{protein.positively_charged} / {protein.negatively_charged}</span></div>
+              {protein.unknown_residues > 0 && (
+                <div className="flex justify-between"><span>Non-standard residues</span><span className="font-mono">{protein.unknown_residues}</span></div>
+              )}
+              <div className="pt-1 leading-relaxed" style={{ color: "var(--text-faint)" }}>{protein.note}</div>
+            </div>
+          )}
+          <div className="text-[10px]" style={{ color: "var(--text-faint)" }}>
+            Deterministic ProtParam-style descriptors for the folded protein: MW, pI, GRAVY, aromaticity, composition.
+          </div>
+        </div>
+      )}
 
       {tab === "offtarget" && (
         <div className="space-y-2">
