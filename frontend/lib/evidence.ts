@@ -15,22 +15,51 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function pubmedUrl(pmid: string): string | null {
+/** True when an id/symbol is a demo placeholder that must NOT be linked out. */
+function isDemo(value: string): boolean {
+  return !value || value.trim().toUpperCase().startsWith("DEMO");
+}
+
+/** PubMed article page for a numeric PMID. */
+export function pubmedUrl(pmid: string): string | null {
   const id = pmid.trim();
-  if (!id || id.startsWith("DEMO-")) return null;
+  if (isDemo(id)) return null;
   return `https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(id)}/`;
 }
 
-function clinvarUrl(uid: string): string | null {
-  const id = uid.trim();
-  if (!id || id.startsWith("DEMO-")) return null;
+/** ClinVar variation record for a ClinVar UID / variation id. */
+export function clinvarVariationUrl(variantId: string): string | null {
+  const id = variantId.trim();
+  if (isDemo(id)) return null;
   return `https://www.ncbi.nlm.nih.gov/clinvar/variation/${encodeURIComponent(id)}/`;
 }
 
-function ncbiGeneUrl(geneId: string): string | null {
+/** NCBI Gene record for a numeric gene id. */
+export function ncbiGeneUrl(geneId: string): string | null {
   const id = geneId.trim();
-  if (!id || id.startsWith("DEMO")) return null;
+  if (isDemo(id)) return null;
   return `https://www.ncbi.nlm.nih.gov/gene/${encodeURIComponent(id)}`;
+}
+
+/** NCBI Gene symbol search — e.g. BRCA1[sym]. */
+export function ncbiGeneSearchUrl(gene: string): string | null {
+  const g = gene.trim();
+  if (isDemo(g)) return null;
+  return `https://www.ncbi.nlm.nih.gov/gene/?term=${encodeURIComponent(`${g}[sym]`)}`;
+}
+
+/** ClinVar search scoped to a gene — e.g. BRCA1[gene]. */
+export function clinvarGeneUrl(gene: string): string | null {
+  const g = gene.trim();
+  if (isDemo(g)) return null;
+  return `https://www.ncbi.nlm.nih.gov/clinvar/?term=${encodeURIComponent(`${g}[gene]`)}`;
+}
+
+/** PubMed literature search scoped to a gene in title/abstract. */
+export function pubmedGeneUrl(gene: string): string | null {
+  const g = gene.trim();
+  if (isDemo(g)) return null;
+  return `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(`${g}[Title/Abstract]`)}`;
 }
 
 export function buildEvidenceLinks(
@@ -91,7 +120,7 @@ export function buildEvidenceLinks(
       const uid = String(variant.uid ?? "");
       const title = String(variant.title ?? `ClinVar ${uid}`);
       const significance = String(variant.clinical_significance ?? "");
-      const url = clinvarUrl(uid);
+      const url = clinvarVariationUrl(uid);
       if (!url) continue;
       links.push({
         source: "clinvar",

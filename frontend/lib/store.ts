@@ -97,6 +97,11 @@ interface EvoState {
   /** Honest note about score provenance (heuristic vs real Evo2 LL). */
   scoringNote: string | null;
 
+  /** Story Mode: judge-facing plain-English glossary drawer. */
+  storyModeOpen: boolean;
+  setStoryModeOpen: (open: boolean) => void;
+  toggleStoryMode: () => void;
+
   // Connection
   wsStatus: "disconnected" | "connecting" | "connected";
   setWsStatus: (status: "disconnected" | "connecting" | "connected") => void;
@@ -184,6 +189,7 @@ const initialState = {
   completedStages: [] as string[],
   seedSource: null as string | null,
   scoringNote: null as string | null,
+  storyModeOpen: false,
   wsStatus: "disconnected" as "disconnected" | "connecting" | "connected",
   theme: "light" as "dark" | "light",
   savedSnapshot: null as { sequence: string; editHistory: EditEntry[]; pdb?: string | null } | null,
@@ -343,6 +349,8 @@ export const useEvoStore = create<EvoState>((set, get) => ({
   })),
   setSeedSource: (source) => set({ seedSource: source }),
   setScoringNote: (note) => set({ scoringNote: note }),
+  setStoryModeOpen: (open) => set({ storyModeOpen: open }),
+  toggleStoryMode: () => set((s) => ({ storyModeOpen: !s.storyModeOpen })),
   signIn: () => set({}),
   signOut: () => set({ user: null }),
   saveVersion: () => set((s) => ({

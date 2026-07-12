@@ -8,7 +8,7 @@ import Link from "next/link";
 import {
   Dna, FlaskConical, BarChart3, Search, Home, Sun, Moon, LogOut,
   ChevronRight, Pencil, ArrowRight, Sparkles, Target,
-  Box, Maximize2, Minimize2, HelpCircle, RotateCcw, Menu, X,
+  Box, Maximize2, Minimize2, HelpCircle, RotateCcw, Menu, X, BookOpen, Cpu,
 } from "lucide-react";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { useEvoStore } from "@/lib/store";
@@ -30,10 +30,11 @@ import ChatPanel from "@/components/workspace/ChatPanel";
 import PipelineStatus from "@/components/workspace/PipelineStatus";
 import CompareView from "@/components/workspace/CompareView";
 import MutationDiff from "@/components/mutation/MutationDiff";
+import RelatedWorkPanel from "@/components/workspace/RelatedWorkPanel";
+import StoryMode from "@/components/analysis/StoryMode";
 
 import { ScienceTooltip, ScienceInfo } from "@/components/ui/ScienceTooltip";
 import TutorialOverlay, { isTutorialCompleted } from "@/components/ui/TutorialOverlay";
-import { buildEvidenceLinks } from "@/lib/evidence";
 
 const ProteinViewer = dynamic(() => import("@/components/structure/ProteinViewer"), { ssr: false });
 
@@ -146,7 +147,8 @@ function AnalyzePageInner() {
   const seedSource = useEvoStore((s) => s.seedSource);
   const scoringNote = useEvoStore((s) => s.scoringNote);
   const structureModel = useEvoStore((s) => s.structureModel);
-  const retrievalStatuses = useEvoStore((s) => s.retrievalStatuses);
+  const explanation = useEvoStore((s) => s.explanation);
+  const toggleStoryMode = useEvoStore((s) => s.toggleStoryMode);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -411,40 +413,106 @@ function AnalyzePageInner() {
             const topRegion = regions.reduce((best, r) => (r.score && (!best.score || Math.abs(r.score) < Math.abs(best.score))) ? r : best, regions[0]);
             const codingRegions = regions.filter(r => r.type === "exon" || r.type === "orf");
             const avgScore = scores.length > 0 ? (scores.reduce((a, s) => a + Math.abs(s.score), 0) / scores.length) : 0;
+            const scoresAreHeuristic = Boolean(scoringNote);
+            const engineChips: { label: string; value: string; term?: string }[] = [
+              { label: "Generation", value: "Evo 2", term: "evo2" },
+              { label: "Scoring", value: scoresAreHeuristic ? "labeled heuristic" : "Evo 2 log-likelihood", term: "log-likelihood" },
+              ...(seedSource ? [{ label: "Seed", value: seedSource.replace(/_/g, " ") }] : []),
+              ...(analysisResult.predictedProteins.length > 0
+                ? [{ label: "Structure", value: structureModel ?? "ESMFold", term: "esmfold" }]
+                : []),
+            ];
+            const summaryTiles = [
+              { label: "Coding regions", value: String(codingRegions.length), color: "var(--accent)", term: "exon" },
+              { label: "Mean confidence", value: avgScore.toFixed(2), color: "var(--base-c)", term: "log-likelihood" },
+              { label: "Proteins predicted", value: String(analysisResult.predictedProteins.length), color: "var(--base-g)", term: "protein-structure" },
+              { label: "Sequence length", value: `${rawSequence.length} bp`, color: "var(--text-secondary)", term: "base-pair" },
+            ];
             return (
             <motion.div key="analyze" className="flex-1 overflow-auto"
               {...fadeSlide}>
 
-              {/* Summary strip */}
-              <div className="px-8 py-6" style={{ background: "var(--surface-raised)" }}>
-                <div className="max-w-6xl mx-auto flex items-center justify-between">
-                  <motion.div {...staggerItem}>
-                    <h2 className="text-xl font-semibold tracking-tight mb-1">Analysis Complete</h2>
-                    <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-                      <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> with {scores.length} per-position scores
-                      {seedSource ? <> · seed <span className="font-medium" style={{ color: "var(--ink)" }}>{seedSource.replace(/_/g, " ")}</span></> : null}.
-                      {regions.length > 0 && <> {codingRegions.length} <ScienceTooltip term="exon">coding region{codingRegions.length !== 1 ? "s" : ""}</ScienceTooltip> identified.</>}
-                      {analysisResult.predictedProteins.length > 0 && <> {analysisResult.predictedProteins.length} protein structure{analysisResult.predictedProteins.length !== 1 ? "s" : ""} predicted.</>}
+              {/* ── Run-report header ─────────────────────────────────── */}
+              <div className="px-8 pt-8 pb-6" style={{ background: "var(--surface-raised)" }}>
+                <div className="max-w-6xl mx-auto">
+                  <div className="flex items-start justify-between gap-6">
+                    <motion.div {...staggerItem} className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--accent)" }}>
+                          Design report
+                        </span>
+                        <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>·</span>
+                        <span className="text-[10px] font-mono" style={{ color: "var(--text-faint)" }}>
+                          {rawSequence.length} bp · {scores.length} scores
+                        </span>
+                      </div>
+                      <h2 className="text-2xl font-semibold tracking-tight mb-2">
+                        {codingRegions.length > 0
+                          ? `Candidate with ${codingRegions.length} coding region${codingRegions.length !== 1 ? "s" : ""}`
+                          : "Generated candidate"}
+                      </h2>
+                      {explanation && (
+                        <p className="text-[13px] max-w-2xl leading-relaxed line-clamp-3" style={{ color: "var(--text-secondary)" }}>
+                          {explanation.length > 320 ? `${explanation.slice(0, 317)}…` : explanation}
+                        </p>
+                      )}
+                      {/* Engine provenance chips */}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-3">
+                        {engineChips.map((chip) => (
+                          <span key={chip.label}
+                            className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full"
+                            style={{ background: "var(--surface-elevated)", color: "var(--text-secondary)" }}>
+                            <Cpu size={11} style={{ color: "var(--accent)" }} />
+                            <span style={{ color: "var(--text-faint)" }}>{chip.label}</span>
+                            {chip.term ? (
+                              <ScienceTooltip term={chip.term}><span className="font-medium" style={{ color: "var(--ink)" }}>{chip.value}</span></ScienceTooltip>
+                            ) : (
+                              <span className="font-medium" style={{ color: "var(--ink)" }}>{chip.value}</span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </motion.div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <div className="flex gap-2">
+                        <motion.button onClick={() => setViewMode("structure")}
+                          whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all"
+                          style={{ background: "var(--surface-elevated)", color: "var(--text-primary)" }}>
+                          <Box size={15} /> View Structure
+                        </motion.button>
+                        <motion.button onClick={() => setViewMode("explorer")}
+                          whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all"
+                          style={{ background: "var(--accent)", color: "var(--ink)" }}>
+                          Open Explorer <ArrowRight size={15} />
+                        </motion.button>
+                      </div>
+                      <button onClick={toggleStoryMode}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-medium transition-colors hover:underline"
+                        style={{ color: "var(--text-muted)" }}>
+                        <BookOpen size={12} /> How to read this (Story Mode)
+                      </button>
+                    </div>
+                  </div>
+
+                  {scoringNote && (
+                    <p className="text-[12px] mt-4 max-w-3xl leading-relaxed px-3 py-2 rounded-lg"
+                      style={{ color: "var(--text-muted)", background: "color-mix(in oklch, var(--base-t), transparent 94%)" }}>
+                      {scoringNote}
                     </p>
-                    {scoringNote && (
-                      <p className="text-[12px] mt-2 max-w-2xl leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                        {scoringNote}
-                      </p>
-                    )}
-                  </motion.div>
-                  <div className="flex gap-2">
-                    <motion.button onClick={() => setViewMode("structure")}
-                      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all"
-                      style={{ background: "var(--surface-elevated)", color: "var(--text-primary)" }}>
-                      <Box size={15} /> View Structure
-                    </motion.button>
-                    <motion.button onClick={() => setViewMode("explorer")}
-                      whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all"
-                      style={{ background: "var(--accent)", color: "var(--ink)" }}>
-                      Open Explorer <ArrowRight size={15} />
-                    </motion.button>
+                  )}
+
+                  {/* Scannable summary strip */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+                    {summaryTiles.map(({ label, value, color, term }) => (
+                      <div key={label} className="rounded-xl px-4 py-3" style={{ background: "var(--surface-elevated)" }}>
+                        <div className="text-[10px] uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>
+                          <ScienceTooltip term={term}>{label}</ScienceTooltip>
+                        </div>
+                        <div className="text-xl font-semibold font-mono" style={{ color }}>{value}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -550,71 +618,23 @@ function AnalyzePageInner() {
                     )}
 
                     <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
-                      <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Summary</span>
-                      <div className="mt-3 space-y-3">
-                        {[
-                          { label: "Coding regions", value: String(codingRegions.length), color: "var(--accent)", term: "exon" },
-                          { label: "Mean confidence", value: avgScore.toFixed(2), color: "var(--base-c)", term: "log-likelihood" },
-                          { label: "Proteins predicted", value: String(analysisResult.predictedProteins.length), color: "var(--base-g)", term: "protein-structure" },
-                          { label: "Sequence length", value: `${rawSequence.length} bp`, color: "var(--text-secondary)", term: "base-pair" },
-                        ].map(({ label, value, color, term }, i) => (
-                          <motion.div key={label} className="flex items-center justify-between"
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                            transition={{ delay: 0.3 + i * 0.08 }}>
-                            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                              <ScienceTooltip term={term}>{label}</ScienceTooltip>
-                            </span>
-                            <span className="text-sm font-semibold font-mono" style={{ color }}>{value}</span>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {(() => {
-                      const evidenceMap = Object.fromEntries(
-                        retrievalStatuses
-                          .filter((r) => r.status === "complete" && r.result)
-                          .map((r) => [r.source, r.result])
-                      );
-                      const links = buildEvidenceLinks(evidenceMap);
-                      if (links.length === 0) return null;
-                      return (
-                        <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
-                          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
-                            Source evidence
-                          </span>
-                          <p className="text-[11px] mb-3 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                            Live NCBI / PubMed / ClinVar records used as context for this run.
-                          </p>
-                          <ul className="space-y-2">
-                            {links.slice(0, 6).map((link) => (
-                              <li key={link.url}>
-                                <a
-                                  href={link.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-[12px] leading-snug block hover:underline"
-                                  style={{ color: "var(--honey-700)" }}
-                                >
-                                  <span className="uppercase text-[9px] font-bold tracking-wider mr-1.5" style={{ color: "var(--text-faint)" }}>
-                                    {link.source}
-                                  </span>
-                                  {link.label}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      );
-                    })()}
-
-                    <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
-                      <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Model</span>
+                      <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Engines</span>
                       <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-                        Scored by <ScienceTooltip term="evo2">Evo 2</ScienceTooltip> (40B parameters, 9T base pairs). Per-position <ScienceTooltip term="log-likelihood">log-likelihood</ScienceTooltip> indicates functional constraint.
+                        DNA generated by <ScienceTooltip term="evo2">Evo 2</ScienceTooltip>. Per-position <ScienceTooltip term="log-likelihood">log-likelihood</ScienceTooltip> scores how gene-like each base looks — {scoresAreHeuristic ? "labeled heuristics under the default engine, not a real forward pass" : "a real Evo 2 forward pass"}. Structure by <ScienceTooltip term="esmfold">ESMFold</ScienceTooltip>.
                       </p>
+                      <button onClick={toggleStoryMode}
+                        className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-medium transition-colors hover:underline"
+                        style={{ color: "var(--accent)" }}>
+                        <BookOpen size={12} /> Open Story Mode glossary
+                      </button>
                     </div>
                   </motion.div>
+                </motion.div>
+
+                {/* ── Related work & evidence (full width) ─────────────── */}
+                <motion.div className="mt-8 pt-6" style={{ borderTop: "1px solid var(--ghost-border)" }} {...scaleIn}>
+                  <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Related work &amp; evidence</h3>
+                  <RelatedWorkPanel />
                 </motion.div>
               </div>
             </motion.div>
@@ -990,6 +1010,14 @@ function AnalyzePageInner() {
                   {/* Research tools: off-target, codon opt, variants, export */}
                   <ToolsPanel />
                   <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
+                  {/* Related work: foundational + run-specific evidence */}
+                  <div className="p-5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
+                      Related work
+                    </span>
+                    <RelatedWorkPanel compact />
+                  </div>
+                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
                   {/* Live 3D structure preview */}
                   <div className="p-5">
                     <div className="flex items-center justify-between mb-2">
@@ -1050,6 +1078,9 @@ function AnalyzePageInner() {
       </div>
 
       {/* Helio opens from the header only — no duplicate floating button */}
+
+      {/* Story Mode: judge-facing plain-English glossary (opens from Overview) */}
+      <StoryMode />
     </div>
   );
 }

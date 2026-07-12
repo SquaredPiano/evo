@@ -22,6 +22,12 @@ import {
   type VariantAnnotation,
   type CalibrationReport,
 } from "@/lib/api";
+import {
+  clinvarVariationUrl,
+  ncbiGeneSearchUrl,
+  clinvarGeneUrl,
+  pubmedGeneUrl,
+} from "@/lib/evidence";
 
 type Tab = "offtarget" | "codon" | "variants" | "validate" | "export";
 
@@ -223,18 +229,62 @@ export default function ToolsPanel() {
             </button>
           </div>
           <div className="text-[10px]" style={{ color: "var(--text-faint)" }}>Live ClinVar pathogenic variants via NCBI.</div>
+          {gene.trim() && (() => {
+            const geneQuickLinks = [
+              { label: "NCBI Gene", url: ncbiGeneSearchUrl(gene) },
+              { label: "ClinVar", url: clinvarGeneUrl(gene) },
+              { label: "PubMed", url: pubmedGeneUrl(gene) },
+            ].filter((l): l is { label: string; url: string } => l.url != null);
+            if (geneQuickLinks.length === 0) return null;
+            return (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
+                  {gene.trim()} →
+                </span>
+                {geneQuickLinks.map((l) => (
+                  <a
+                    key={l.label}
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] px-2 py-0.5 rounded-full transition-colors hover:underline"
+                    style={{ color: "var(--honey-700)", background: "color-mix(in oklch, var(--accent), transparent 92%)" }}
+                  >
+                    {l.label}
+                  </a>
+                ))}
+              </div>
+            );
+          })()}
           {variants && (
             <div className="text-[11px] space-y-1.5 max-h-52 overflow-auto" style={{ color: "var(--text-secondary)" }}>
               {variants.length === 0 && <div style={{ color: "var(--text-muted)" }}>No mapped variants.</div>}
-              {variants.slice(0, 10).map((v, i) => (
-                <div key={i} className="py-0.5">
-                  <div className="flex justify-between">
-                    <span className="font-mono">{v.ref_base}{v.position}{v.alt_base}</span>
-                    <span style={{ color: "var(--base-t)" }}>{v.clinical_significance}</span>
+              {variants.slice(0, 10).map((v, i) => {
+                const href = clinvarVariationUrl(v.variant_id);
+                const hgvs = `${v.ref_base}${v.position}${v.alt_base}`;
+                return (
+                  <div key={i} className="py-0.5">
+                    <div className="flex justify-between gap-2">
+                      {href ? (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono hover:underline"
+                          style={{ color: "var(--honey-700)" }}
+                          title={`Open ClinVar variation ${v.variant_id}`}
+                        >
+                          {hgvs}
+                        </a>
+                      ) : (
+                        <span className="font-mono">{hgvs}</span>
+                      )}
+                      <span style={{ color: "var(--base-t)" }}>{v.clinical_significance}</span>
+                    </div>
+                    <div className="truncate" style={{ color: "var(--text-muted)" }} title={v.condition}>{v.condition || v.variant_title}</div>
                   </div>
-                  <div className="truncate" style={{ color: "var(--text-muted)" }} title={v.condition}>{v.condition || v.variant_title}</div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
