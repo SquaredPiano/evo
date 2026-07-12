@@ -7,8 +7,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import {
   Dna, FlaskConical, BarChart3, Search, Home, Sun, Moon, LogOut,
-  ChevronRight, Pencil, ArrowRight, Sparkles, Target,
+  ChevronDown, Pencil, ArrowRight, Sparkles, Target,
   Box, Maximize2, Minimize2, HelpCircle, RotateCcw, Menu, X, BookOpen, Cpu,
+  Wrench, History,
 } from "lucide-react";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { useEvoStore } from "@/lib/store";
@@ -36,6 +37,7 @@ import RelatedWorkPanel from "@/components/workspace/RelatedWorkPanel";
 import StoryMode from "@/components/analysis/StoryMode";
 import SequenceScrubber from "@/components/sequence/SequenceScrubber";
 import EditingCandidateChrome from "@/components/workspace/EditingCandidateChrome";
+import DisclosureSection from "@/components/ui/DisclosureSection";
 
 import { ScienceTooltip, ScienceInfo } from "@/components/ui/ScienceTooltip";
 import TutorialOverlay, { isTutorialCompleted } from "@/components/ui/TutorialOverlay";
@@ -110,6 +112,22 @@ function AnimatedScoreBar({ value, color, delay = 0 }: { value: number; color: s
         transition={{ duration: 0.8, delay, ease: [0.16, 1, 0.3, 1] }}
         style={{ background: color, opacity: 0.8 }}
       />
+    </div>
+  );
+}
+
+/* ─── "What am I looking at?" one-liner ──────────────────────────────── */
+// Quiet, plain-English framing strip. Sits under a view's toolbar so a
+// non-biologist always knows what the current screen is for.
+function ViewIntro({ text }: { text: string }) {
+  return (
+    <div
+      className="shrink-0 px-5 py-2"
+      style={{ background: "var(--surface-raised)", borderBottom: "1px solid var(--ghost-border)" }}
+    >
+      <p className="text-[11px] leading-snug max-w-3xl" style={{ color: "var(--text-muted)" }}>
+        {text}
+      </p>
     </div>
   );
 }
@@ -319,6 +337,11 @@ function AnalyzePageInner() {
   // Mobile sidebar collapse
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Sequence-view right rail: one compact tab open at a time (simple by default).
+  const [railTab, setRailTab] = useState<"edit" | "scores" | "tools" | "history">("edit");
+  // Overview regions table: which row has its Position/Length/Score revealed.
+  const [openRegionDetails, setOpenRegionDetails] = useState<number | null>(null);
+
   return (
     <div className="h-screen flex overflow-hidden" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
 
@@ -419,6 +442,13 @@ function AnalyzePageInner() {
                     </motion.button>
                   ))}
                 </div>
+                {/* Story Mode: plain-English glossary — reachable from every view */}
+                <button onClick={toggleStoryMode}
+                  aria-label="Open Story Mode glossary"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-[12px] font-medium transition-colors hover:bg-white/[0.06]"
+                  style={{ color: "var(--text-muted)" }}>
+                  <BookOpen size={13} /> <span className="hidden sm:inline">Story Mode</span>
+                </button>
                 <button onClick={toggleChat}
                   aria-label={chatOpen ? "Close Helio" : "Open Helio"}
                   aria-pressed={chatOpen}
@@ -609,41 +639,68 @@ function AnalyzePageInner() {
                       <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>{regions.length} total</span>
                     </div>
                     <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)" }}>
+                      {/* Simple by default: Region · Type · Inspect. Position,
+                          length and score are tucked behind a per-row Details toggle. */}
                       <div className="flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider"
                         style={{ color: "var(--text-muted)" }}>
-                        <span className="w-6">#</span>
                         <span className="flex-1">Region</span>
                         <span className="w-20 text-right">Type</span>
-                        <span className="w-24 text-right">Position</span>
-                        <span className="w-16 text-right"><ScienceTooltip term="base-pair">Length</ScienceTooltip></span>
-                        <span className="w-16 text-right"><ScienceTooltip term="log-likelihood">Score</ScienceTooltip></span>
-                        <span className="w-8" />
+                        <span className="w-24 text-right">Inspect</span>
                       </div>
-                      {regions.slice(0, 10).map((r, i) => (
-                        <motion.button key={i}
-                          onClick={() => { setSelectedPosition(r.start); setViewMode("explorer"); }}
+                      {regions.slice(0, 10).map((r, i) => {
+                        const detailsOpen = openRegionDetails === i;
+                        const inspect = () => { setSelectedPosition(r.start); setViewMode("explorer"); };
+                        return (
+                        <motion.div key={i}
                           initial={{ opacity: 0, x: -12 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 + i * 0.04, ...springTransition }}
-                          className="w-full flex items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-white/[0.04]"
                           style={{ borderBottom: i < Math.min(regions.length, 10) - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                          <span className="text-xs font-mono w-6" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
-                          <span className="text-[13px] font-medium flex-1" style={{ color: "var(--text-primary)" }}>{r.label ?? `${r.type} ${i + 1}`}</span>
-                          <span className="text-[11px] font-mono w-20 text-right px-1.5 py-0.5 rounded"
-                            style={{
-                              color: r.type === "exon" || r.type === "orf" ? "var(--accent)" : "var(--text-muted)",
-                              background: r.type === "exon" || r.type === "orf" ? "color-mix(in oklch, var(--accent), transparent 92%)" : "transparent",
-                            }}>
-                            <ScienceTooltip term={r.type}>{r.type}</ScienceTooltip>
-                          </span>
-                          <span className="text-xs font-mono w-24 text-right" style={{ color: "var(--text-secondary)" }}>{r.start}-{r.end}</span>
-                          <span className="text-xs font-mono w-16 text-right" style={{ color: "var(--text-muted)" }}>{r.end - r.start} bp</span>
-                          <span className="text-xs font-mono w-16 text-right" style={{ color: r.score && Math.abs(r.score) < 2 ? "var(--accent)" : "var(--base-t)" }}>
-                            {r.score?.toFixed(1) ?? "-"}
-                          </span>
-                          <ChevronRight size={14} className="w-8 shrink-0" style={{ color: "var(--text-faint)" }} />
-                        </motion.button>
-                      ))}
+                          <div className="w-full flex items-center gap-4 px-5 py-3">
+                            <button onClick={inspect}
+                              className="text-[13px] font-medium flex-1 text-left truncate transition-colors hover:text-white"
+                              style={{ color: "var(--text-primary)" }}>
+                              {r.label ?? `${r.type} ${i + 1}`}
+                            </button>
+                            <span className="text-[11px] font-mono w-20 text-right px-1.5 py-0.5 rounded"
+                              style={{
+                                color: r.type === "exon" || r.type === "orf" ? "var(--accent)" : "var(--text-muted)",
+                                background: r.type === "exon" || r.type === "orf" ? "color-mix(in oklch, var(--accent), transparent 92%)" : "transparent",
+                              }}>
+                              <ScienceTooltip term={r.type}>{r.type}</ScienceTooltip>
+                            </span>
+                            <button
+                              onClick={() => setOpenRegionDetails(detailsOpen ? null : i)}
+                              aria-expanded={detailsOpen}
+                              aria-label={detailsOpen ? "Hide region details" : "Show position, length and score"}
+                              className="w-24 flex items-center justify-end gap-1 text-[11px] font-medium transition-colors"
+                              style={{ color: "var(--accent)" }}>
+                              {detailsOpen ? "Hide" : "Details"}
+                              <ChevronDown size={13} style={{ transform: detailsOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                            </button>
+                          </div>
+                          <AnimatePresence initial={false}>
+                            {detailsOpen && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                                style={{ overflow: "hidden" }}>
+                                <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 px-5 pb-3 text-xs font-mono">
+                                  <span style={{ color: "var(--text-muted)" }}>Position <span style={{ color: "var(--text-secondary)" }}>{r.start}-{r.end}</span></span>
+                                  <span style={{ color: "var(--text-muted)" }}><ScienceTooltip term="base-pair">Length</ScienceTooltip> <span style={{ color: "var(--text-secondary)" }}>{r.end - r.start} bp</span></span>
+                                  <span style={{ color: "var(--text-muted)" }}><ScienceTooltip term="log-likelihood">Score</ScienceTooltip> <span style={{ color: r.score && Math.abs(r.score) < 2 ? "var(--accent)" : "var(--base-t)" }}>{r.score?.toFixed(1) ?? "-"}</span></span>
+                                  <button onClick={inspect} className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium transition-colors hover:text-white" style={{ color: "var(--accent)" }}>
+                                    Inspect region <ArrowRight size={12} />
+                                  </button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                        );
+                      })}
                     </div>
                   </motion.div>
 
@@ -679,10 +736,15 @@ function AnalyzePageInner() {
                   </motion.div>
                 </motion.div>
 
-                {/* ── Related work & evidence (full width) ─────────────── */}
-                <motion.div className="mt-8 pt-6" style={{ borderTop: "1px solid var(--ghost-border)" }} {...scaleIn}>
-                  <h3 className="text-sm font-semibold mb-4" style={{ color: "var(--text-primary)" }}>Related work &amp; evidence</h3>
-                  <RelatedWorkPanel />
+                {/* ── Related work & evidence (collapsed by default) ───── */}
+                <motion.div className="mt-8 pt-2 rounded-xl overflow-hidden" style={{ borderTop: "1px solid var(--ghost-border)", background: "var(--surface-elevated)" }} {...scaleIn}>
+                  <DisclosureSection
+                    label="Evidence & sources"
+                    hint={<span>related work</span>}
+                    labelColor="var(--text-primary)"
+                    contentClassName="px-5 pb-5 pt-1">
+                    <RelatedWorkPanel />
+                  </DisclosureSection>
                 </motion.div>
               </div>
             </motion.div>
@@ -730,6 +792,9 @@ function AnalyzePageInner() {
                     </motion.button>
                   </div>
                 </motion.div>
+
+                {/* Plain-English framing for non-biologists */}
+                <ViewIntro text="The 3D shape your protein is predicted to fold into — hover or click a residue to link it back to the DNA that codes for it." />
 
                 {/* Viewer */}
                 <motion.div
@@ -841,10 +906,12 @@ function AnalyzePageInner() {
 
                   <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
 
-                  {/* Sequence context (only when analysis has run) */}
-                  {bases.length > 0 && (
-                    <>
-                      <div className="p-5">
+                  {/* Sequence context — DNA preview + candidate scores, collapsed
+                      by default (they duplicate the Sequence view). Residue
+                      Inspector and Guided Next Steps stay primary/visible. */}
+                  <DisclosureSection label="Sequence context" hint="preview + scores" contentClassName="px-5 pb-5 space-y-4">
+                    {bases.length > 0 && (
+                      <div>
                         <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>
                           Sequence Preview
                         </span>
@@ -855,37 +922,34 @@ function AnalyzePageInner() {
                           </div>
                         </div>
                       </div>
-                      <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                    </>
-                  )}
-
-                  {/* Quick scores */}
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>
-                      <ScienceTooltip term="overall-viability">Candidate Scores</ScienceTooltip>
-                    </span>
-                    {candidates.length > 0 && (() => {
-                      const c = candidates.find(c => c.id === (activeCandidateId ?? 0)) ?? candidates[0];
-                      return (
-                        <div className="space-y-2.5">
-                          {[
-                            { label: "Functional", val: c.scores.functional, color: "var(--accent)", term: "functional-plausibility" },
-                            { label: "Tissue", val: c.scores.tissue, color: "var(--base-c)", term: "tissue-specificity" },
-                            { label: "Off-target", val: c.scores.offTarget, color: "var(--base-t)", term: "off-target-risk" },
-                            { label: "Novelty", val: c.scores.novelty, color: "var(--base-g)", term: "novelty" },
-                          ].map(({ label, val, color, term }, i) => (
-                            <div key={label} className="flex items-center gap-3">
-                              <span className="text-[11px] w-16" style={{ color: "var(--text-muted)" }}>
-                                <ScienceTooltip term={term}>{label}</ScienceTooltip>
-                              </span>
-                              <AnimatedScoreBar value={val} color={color} delay={0.15 + i * 0.08} />
-                              <span className="text-[11px] font-mono w-10 text-right" style={{ color }}>{(val * 100).toFixed(0)}%</span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
+                    )}
+                    <div>
+                      <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>
+                        <ScienceTooltip term="overall-viability">Candidate Scores</ScienceTooltip>
+                      </span>
+                      {candidates.length > 0 && (() => {
+                        const c = candidates.find(c => c.id === (activeCandidateId ?? 0)) ?? candidates[0];
+                        return (
+                          <div className="space-y-2.5">
+                            {[
+                              { label: "Functional", val: c.scores.functional, color: "var(--accent)", term: "functional-plausibility" },
+                              { label: "Tissue", val: c.scores.tissue, color: "var(--base-c)", term: "tissue-specificity" },
+                              { label: "Off-target", val: c.scores.offTarget, color: "var(--base-t)", term: "off-target-risk" },
+                              { label: "Novelty", val: c.scores.novelty, color: "var(--base-g)", term: "novelty" },
+                            ].map(({ label, val, color, term }, i) => (
+                              <div key={label} className="flex items-center gap-3">
+                                <span className="text-[11px] w-16" style={{ color: "var(--text-muted)" }}>
+                                  <ScienceTooltip term={term}>{label}</ScienceTooltip>
+                                </span>
+                                <AnimatedScoreBar value={val} color={color} delay={0.15 + i * 0.08} />
+                                <span className="text-[11px] font-mono w-10 text-right" style={{ color }}>{(val * 100).toFixed(0)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </DisclosureSection>
 
                   <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
 
@@ -1014,6 +1078,10 @@ function AnalyzePageInner() {
                   </button>
                 </div>
               </div>
+
+              {/* Plain-English framing for non-biologists */}
+              <ViewIntro text="The DNA you're designing — edit any base and watch the scores and 3D shape update." />
+
               <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Editable workspace */}
                 <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -1044,114 +1112,167 @@ function AnalyzePageInner() {
                       highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
                   </div>
                 </div>
-                {/* IDE right panel */}
-                <motion.div className="hidden lg:flex w-[380px] shrink-0 flex-col overflow-y-auto"
+                {/* IDE right panel — compact tabbed rail (simple by default,
+                    one tab open). Every original panel is still reachable:
+                    Edit → mutation + structure, Scores, Tools → tools + related
+                    work, History → merged edit + experiment history. */}
+                <motion.div className="hidden lg:flex w-[380px] shrink-0 flex-col overflow-hidden"
                   style={{ background: "var(--surface-elevated)" }}
                   {...slideInRight}>
-                  {/* Mutation editor */}
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
-                      <ScienceTooltip term="mutation">Mutation Editor</ScienceTooltip>
-                    </span>
-                    <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
-                      mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
-                    {mutationEffect && (
-                      <motion.div className="mt-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                        <MutationDiff effect={mutationEffect} />
-                      </motion.div>
-                    )}
-                  </div>
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  {/* Scoring summary */}
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>
-                      <ScienceTooltip term="overall-viability">Candidate scores</ScienceTooltip>
-                    </span>
-                    {candidates.length > 0 && (() => {
-                      const c = candidates.find(c => c.id === (activeCandidateId ?? 0)) ?? candidates[0];
+                  {/* Tab bar */}
+                  <div className="shrink-0 flex items-stretch gap-1 px-3 py-2" role="tablist" aria-label="Sequence tools"
+                    style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+                    {([
+                      { id: "edit", label: "Edit", icon: Pencil },
+                      { id: "scores", label: "Scores", icon: BarChart3 },
+                      { id: "tools", label: "Tools", icon: Wrench },
+                      { id: "history", label: "History", icon: History },
+                    ] as const).map(({ id, label, icon: Icon }) => {
+                      const active = railTab === id;
                       return (
-                        <div className="space-y-2.5">
-                          {[
-                            { label: "Functional", val: c.scores.functional, color: "var(--accent)", term: "functional-plausibility" },
-                            { label: "Tissue", val: c.scores.tissue, color: "var(--base-c)", term: "tissue-specificity" },
-                            { label: "Off-target", val: c.scores.offTarget, color: "var(--base-t)", term: "off-target-risk" },
-                            { label: "Novelty", val: c.scores.novelty, color: "var(--base-g)", term: "novelty" },
-                          ].map(({ label, val, color, term }, i) => (
-                            <div key={label} className="flex items-center gap-3">
-                              <span className="text-[11px] w-16" style={{ color: "var(--text-muted)" }}>
-                                <ScienceTooltip term={term}>{label}</ScienceTooltip>
-                              </span>
-                              <AnimatedScoreBar value={val} color={color} delay={i * 0.06} />
-                              <span className="text-[11px] font-mono w-10 text-right" style={{ color }}>{(val * 100).toFixed(0)}%</span>
-                            </div>
-                          ))}
-                        </div>
+                        <button key={id} onClick={() => setRailTab(id)}
+                          role="tab" aria-selected={active}
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-full text-[11px] font-medium transition-colors"
+                          style={{
+                            background: active ? "var(--ink)" : "transparent",
+                            color: active ? "var(--cream)" : "var(--text-muted)",
+                          }}>
+                          <Icon size={12} aria-hidden="true" /> {label}
+                        </button>
                       );
-                    })()}
+                    })}
                   </div>
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  {/* Research tools: off-target, codon opt, variants, export */}
-                  <ToolsPanel />
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  {/* Related work: foundational + run-specific evidence */}
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
-                      Related work
-                    </span>
-                    <RelatedWorkPanel compact />
-                  </div>
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  {/* Live 3D structure preview */}
-                  <div className="p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                        <ScienceTooltip term="protein-structure">Live Structure</ScienceTooltip>
-                      </span>
-                      <button onClick={() => setViewMode("structure")} className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>
-                        Fullscreen <Maximize2 size={10} className="inline ml-0.5" />
-                      </button>
-                    </div>
-                    <div className="rounded-lg overflow-hidden h-[200px]" style={{ background: "var(--surface-void)" }}>
-                      <ProteinViewer pdbData={activePdb || undefined} highlightResidues={highlightResidues}
-                        onResidueClick={handleResidueClick} theme={theme} structureModel={structureModel} />
-                    </div>
-                    {mutationEffect && (
-                      <div className="mt-2 text-center">
-                        <span className="text-[10px]" style={{ color: "var(--accent)" }}>
-                          Structure re-folded after {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""}
+
+                  <div className="flex-1 overflow-y-auto" role="tabpanel">
+                    {/* ── EDIT: mutation editor + structure shortcut ── */}
+                    {railTab === "edit" && (
+                      <div>
+                        <div className="p-5">
+                          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
+                            <ScienceTooltip term="mutation">Mutation Editor</ScienceTooltip>
+                          </span>
+                          <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
+                            mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
+                          {mutationEffect && (
+                            <motion.div className="mt-4" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                              <MutationDiff effect={mutationEffect} />
+                            </motion.div>
+                          )}
+                        </div>
+                        <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
+                        {/* Static structure shortcut — the one live 3D viewer lives
+                            in the Structure view; this is just a link to it. */}
+                        <div className="p-5">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                              <ScienceTooltip term="protein-structure">3D structure</ScienceTooltip>
+                            </span>
+                            <button onClick={() => setViewMode("structure")} className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>
+                              Open <Maximize2 size={10} className="inline ml-0.5" />
+                            </button>
+                          </div>
+                          <button onClick={() => setViewMode("structure")}
+                            className="w-full rounded-lg overflow-hidden h-[140px] flex items-center justify-center transition-colors hover:bg-white/[0.03]"
+                            style={{ background: "var(--surface-void)" }}>
+                            <div className="text-center">
+                              <Box size={32} style={{ color: "var(--accent)", margin: "0 auto 6px", opacity: 0.5 }} />
+                              <span className="text-[11px] block" style={{ color: "var(--text-muted)" }}>
+                                {activePdb ? "Open the 3D structure" : "No structure yet — fold in Structure view"}
+                              </span>
+                            </div>
+                          </button>
+                          {mutationEffect && (
+                            <div className="mt-2 text-center">
+                              <span className="text-[10px]" style={{ color: "var(--accent)" }}>
+                                Structure re-folded after {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── SCORES: candidate viability ── */}
+                    {railTab === "scores" && (
+                      <div className="p-5">
+                        <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>
+                          <ScienceTooltip term="overall-viability">Candidate scores</ScienceTooltip>
                         </span>
+                        {candidates.length > 0 ? (() => {
+                          const c = candidates.find(c => c.id === (activeCandidateId ?? 0)) ?? candidates[0];
+                          return (
+                            <div className="space-y-2.5">
+                              {[
+                                { label: "Functional", val: c.scores.functional, color: "var(--accent)", term: "functional-plausibility" },
+                                { label: "Tissue", val: c.scores.tissue, color: "var(--base-c)", term: "tissue-specificity" },
+                                { label: "Off-target", val: c.scores.offTarget, color: "var(--base-t)", term: "off-target-risk" },
+                                { label: "Novelty", val: c.scores.novelty, color: "var(--base-g)", term: "novelty" },
+                              ].map(({ label, val, color, term }, i) => (
+                                <div key={label} className="flex items-center gap-3">
+                                  <span className="text-[11px] w-16" style={{ color: "var(--text-muted)" }}>
+                                    <ScienceTooltip term={term}>{label}</ScienceTooltip>
+                                  </span>
+                                  <AnimatedScoreBar value={val} color={color} delay={i * 0.06} />
+                                  <span className="text-[11px] font-mono w-10 text-right" style={{ color }}>{(val * 100).toFixed(0)}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })() : (
+                          <p className="text-xs" style={{ color: "var(--text-faint)" }}>No scored candidates yet.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── TOOLS: research tools + related work ── */}
+                    {railTab === "tools" && (
+                      <div>
+                        {/* Research tools: off-target, codon opt, variants, export */}
+                        <ToolsPanel />
+                        <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
+                        {/* Related work: foundational + run-specific evidence */}
+                        <div className="p-5">
+                          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
+                            Related work
+                          </span>
+                          <RelatedWorkPanel compact />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── HISTORY: merged edit history + experiment history ── */}
+                    {railTab === "history" && (
+                      <div>
+                        <div className="p-5">
+                          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                            Edit history ({editHistory.length})
+                          </span>
+                          {editHistory.length === 0 ? (
+                            <p className="text-xs mt-2" style={{ color: "var(--text-faint)" }}>
+                              Click a base, select a target, and run <ScienceTooltip term="mutation">simulation</ScienceTooltip> to begin editing.
+                            </p>
+                          ) : (
+                            <div className="mt-2 space-y-1">
+                              {editHistory.slice(-8).reverse().map((e, i) => (
+                                <motion.div key={i}
+                                  className="flex items-center gap-2 text-xs font-mono py-1"
+                                  style={{ color: "var(--text-secondary)" }}
+                                  initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: i * 0.04 }}>
+                                  <span style={{ color: "var(--text-faint)" }}>pos {e.position}</span>
+                                  <span style={{ color: "var(--base-t)" }}>{e.from}</span>
+                                  <span style={{ color: "var(--text-faint)" }}>&rarr;</span>
+                                  <span style={{ color: "var(--accent)" }}>{e.to}</span>
+                                </motion.div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
+                        <ExperimentHistory />
                       </div>
                     )}
                   </div>
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  {/* Edit history */}
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                      Edit history ({editHistory.length})
-                    </span>
-                    {editHistory.length === 0 ? (
-                      <p className="text-xs mt-2" style={{ color: "var(--text-faint)" }}>
-                        Click a base, select a target, and run <ScienceTooltip term="mutation">simulation</ScienceTooltip> to begin editing.
-                      </p>
-                    ) : (
-                      <div className="mt-2 space-y-1">
-                        {editHistory.slice(-8).reverse().map((e, i) => (
-                          <motion.div key={i}
-                            className="flex items-center gap-2 text-xs font-mono py-1"
-                            style={{ color: "var(--text-secondary)" }}
-                            initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.04 }}>
-                            <span style={{ color: "var(--text-faint)" }}>pos {e.position}</span>
-                            <span style={{ color: "var(--base-t)" }}>{e.from}</span>
-                            <span style={{ color: "var(--text-faint)" }}>&rarr;</span>
-                            <span style={{ color: "var(--accent)" }}>{e.to}</span>
-                          </motion.div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  <ExperimentHistory />
                 </motion.div>
                 {chatOpen && <ChatPanel />}
               </div>
@@ -1162,7 +1283,7 @@ function AnalyzePageInner() {
 
       {/* Helio opens from the header only — no duplicate floating button */}
 
-      {/* Story Mode: judge-facing plain-English glossary (opens from Overview) */}
+      {/* Story Mode: judge-facing plain-English glossary (opens from the header on every view) */}
       <StoryMode />
     </div>
   );
