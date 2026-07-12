@@ -70,51 +70,64 @@ export default function CandidateLeaderboard() {
     <div className="flex-1 overflow-auto px-4 lg:px-8 py-6" style={{ background: "var(--surface-base)" }}
       role="region" aria-label="Design variants">
       <div className="max-w-5xl mx-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-          <div>
-            <h2 className="text-xl font-semibold tracking-tight mb-1">Design variants</h2>
-            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-              {candidates.length} alternative DNA sequences from this run, ranked by a <ScienceTooltip term="overall-viability">combined heuristic score</ScienceTooltip>. Pick one to inspect or edit.
-            </p>
+        <div className="mb-8">
+          <div className="flex items-center gap-2.5 mb-3">
+            <span className="label-caps" style={{ color: "var(--accent-bright)", opacity: 1 }}>
+              Design variants
+            </span>
+            <span className="h-3 w-px" style={{ background: "var(--ghost-border)" }} />
+            <span className="text-[10px] font-mono" style={{ color: "var(--text-faint)" }}>
+              {candidates.length} ranked
+            </span>
           </div>
-          <button onClick={() => setViewMode("explorer")}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all hover:scale-[1.02]"
-            style={{ background: "var(--accent)", color: "var(--ink)" }}>
-            Inspect top variant <ArrowRight size={14} aria-hidden="true" />
-          </button>
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="font-display text-[clamp(1.6rem,3vw,2.25rem)] leading-[1.05] tracking-tight mb-2">
+                Ranked candidates
+              </h2>
+              <p className="text-[13px] max-w-xl leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                {candidates.length} alternative DNA sequences from this run, ranked by a <ScienceTooltip term="overall-viability">combined heuristic score</ScienceTooltip>. Pick one to inspect or edit.
+              </p>
+            </div>
+            <button onClick={() => setViewMode("explorer")}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium transition-all hover:scale-[1.02] shrink-0"
+              style={{ background: "var(--accent)", color: "var(--ink)", boxShadow: "0 10px 24px -8px rgba(245,158,11,0.4)" }}>
+              Inspect top variant <ArrowRight size={14} aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
-        <div className="mb-5 rounded-xl p-4" style={{ background: "var(--surface-elevated)" }}>
-          <div className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "var(--accent)" }}>
-            Plain-Language Translation
+        <div className="card-elevated p-5 mb-6">
+          <div className="label-caps mb-2.5" style={{ color: "var(--accent-bright)", opacity: 1 }}>
+            Plain-language translation
           </div>
-          <p className="text-[13px] leading-relaxed mb-1" style={{ color: "var(--text-primary)" }}>
+          <p className="text-[13.5px] leading-relaxed mb-1.5" style={{ color: "var(--text-primary)" }}>
             {laySummary}
           </p>
           {expertSummary && (
-            <p className="text-[12px] font-mono mb-3" style={{ color: "var(--text-muted)" }}>
+            <p className="text-[12px] font-mono mb-4" style={{ color: "var(--text-muted)" }}>
               {expertSummary}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => queuePrompt("Explain the top candidate for a clinician and a layman in 5 bullet points.")}
-              className="px-3 py-1.5 rounded-full text-[11px] transition-colors hover:bg-white/[0.06]"
-              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+              className="px-3.5 py-1.5 rounded-full text-[11px] font-medium transition-colors hover:bg-[color-mix(in_oklch,var(--accent),transparent_92%)]"
+              style={{ background: "var(--surface-base)", color: "var(--text-secondary)", border: "1px solid var(--ghost-border)" }}
             >
               Explain Top Candidate
             </button>
             <button
               onClick={() => queuePrompt("Compare top 3 candidates and recommend one for safety-sensitive use.")}
-              className="px-3 py-1.5 rounded-full text-[11px] transition-colors hover:bg-white/[0.06]"
-              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+              className="px-3.5 py-1.5 rounded-full text-[11px] font-medium transition-colors hover:bg-[color-mix(in_oklch,var(--accent),transparent_92%)]"
+              style={{ background: "var(--surface-base)", color: "var(--text-secondary)", border: "1px solid var(--ghost-border)" }}
             >
               Compare Top 3
             </button>
             <button
               onClick={() => queuePrompt("Improve the active candidate for tissue specificity and explain tradeoffs.")}
-              className="px-3 py-1.5 rounded-full text-[11px] transition-colors hover:bg-white/[0.06]"
-              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+              className="px-3.5 py-1.5 rounded-full text-[11px] font-medium transition-colors hover:bg-[color-mix(in_oklch,var(--accent),transparent_92%)]"
+              style={{ background: "var(--surface-base)", color: "var(--text-secondary)", border: "1px solid var(--ghost-border)" }}
             >
               Improve Tissue Fit
             </button>
@@ -122,10 +135,10 @@ export default function CandidateLeaderboard() {
         </div>
 
         {/* Ranking table */}
-        <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)" }}>
+        <div className="card-elevated overflow-hidden">
           {/* Simple-by-default control: reveal the four heuristic score columns. */}
-          <div className="flex items-center justify-between px-5 pt-3 pb-1">
-            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          <div className="flex items-center justify-between px-5 pt-4 pb-1.5">
+            <span className="label-caps">
               Ranked variants
             </span>
             <button

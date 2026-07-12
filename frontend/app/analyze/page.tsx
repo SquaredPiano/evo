@@ -880,14 +880,14 @@ function AnalyzePageInner() {
 
               {/* Side panel (hidden in fullscreen and on mobile) */}
               {!structureFullscreen && (
-                <motion.div className="hidden lg:flex w-[320px] shrink-0 flex-col overflow-y-auto"
-                  style={{ background: "var(--surface-elevated)" }}
+                <motion.div className="hidden lg:flex w-[340px] shrink-0 flex-col overflow-y-auto gap-3 p-3"
+                  style={{ background: "var(--surface-base)", borderLeft: "1px solid var(--ghost-border)" }}
                   {...slideInRight}>
 
-                  {/* Selected residue info */}
-                  <div className="p-5 pb-4">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--accent)" }}>
-                      <ScienceTooltip term="residue">Residue Inspector</ScienceTooltip>
+                  {/* Selected residue info - primary elevated card */}
+                  <div className="card-elevated p-5">
+                    <span className="label-caps block mb-4" style={{ color: "var(--accent-bright)", opacity: 1 }}>
+                      <ScienceTooltip term="residue">Residue inspector</ScienceTooltip>
                     </span>
                     {inspectedResidue !== null ? (
                       <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={inspectedResidue}>
@@ -918,18 +918,16 @@ function AnalyzePageInner() {
                     )}
                   </div>
 
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-
                   {/* Sequence context - DNA preview + candidate scores, collapsed
                       by default (they duplicate the Sequence view). Residue
                       Inspector and Guided Next Steps stay primary/visible. */}
-                  <DisclosureSection label="Sequence context" hint="preview + scores" contentClassName="px-5 pb-5 space-y-4">
+                  <DisclosureSection className="card-flat overflow-hidden" label="Sequence context" hint="preview + scores" contentClassName="px-5 pb-5 space-y-4">
                     {bases.length > 0 && (
                       <div>
-                        <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>
-                          Sequence Preview
+                        <span className="label-caps block mb-3">
+                          Sequence preview
                         </span>
-                        <div className="h-[180px] overflow-auto rounded-lg" style={{ background: "var(--surface-base)" }}>
+                        <div className="h-[180px] overflow-auto rounded-lg" style={{ background: "var(--surface-base)", border: "1px solid var(--ghost-border)" }}>
                           <div className="p-2">
                             <SequenceViewer bases={bases.slice(0, 300)} regions={regions}
                               highlightedPosition={selectedPosition ?? undefined} onBaseClick={handleBaseClick} />
@@ -938,8 +936,8 @@ function AnalyzePageInner() {
                       </div>
                     )}
                     <div>
-                      <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>
-                        <ScienceTooltip term="overall-viability">Candidate Scores</ScienceTooltip>
+                      <span className="label-caps block mb-3">
+                        <ScienceTooltip term="overall-viability">Candidate scores</ScienceTooltip>
                       </span>
                       {candidates.length > 0 && (() => {
                         const c = candidates.find(c => c.id === (activeCandidateId ?? 0)) ?? candidates[0];
@@ -965,11 +963,9 @@ function AnalyzePageInner() {
                     </div>
                   </DisclosureSection>
 
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-
                   {/* Confidence summary */}
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+                  <div className="card-flat p-5">
+                    <span className="label-caps block mb-2">
                       About this view
                     </span>
                     <p className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>
@@ -992,11 +988,9 @@ function AnalyzePageInner() {
                     </p>
                   </div>
 
-                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "var(--accent)" }}>
-                      Guided Next Steps
+                  <div className="card-flat p-5">
+                    <span className="label-caps block mb-2" style={{ color: "var(--accent-bright)", opacity: 1 }}>
+                      Guided next steps
                     </span>
                     {(() => {
                       const active = candidates.find((c) => c.id === (activeCandidateId ?? -1)) ?? candidates[0];
@@ -1007,27 +1001,27 @@ function AnalyzePageInner() {
                       return (
                         <>
                           <p className="text-[12px] leading-relaxed mb-3" style={{ color: "var(--text-primary)" }}>
-                            Candidate #{active.id}: function heuristic <strong>{likely}</strong>, tissue-motif <strong>{tissueFit}</strong>, panel safety <strong>{safety}</strong>. Demo metrics only.
+                            Candidate #{active.id}: function heuristic <strong>{likely}</strong>, tissue-motif <strong>{tissueFit}</strong>, panel safety <strong>{safety}</strong>. Composition and motif heuristics, not clinical scores.
                           </p>
                           <div className="space-y-2">
                             <button
                               onClick={() => queueGuidedPrompt("Explain this structure and candidate in plain English for a patient-facing clinician and for a biotech researcher.")}
-                              className="w-full text-left px-3 py-2 rounded-full text-[11px] transition-colors hover:bg-white/[0.05]"
-                              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+                              className="w-full text-left px-3.5 py-2 rounded-full text-[11px] font-medium transition-colors hover:bg-[color-mix(in_oklch,var(--accent),transparent_92%)]"
+                              style={{ background: "var(--surface-raised)", color: "var(--text-secondary)", border: "1px solid var(--ghost-border)" }}
                             >
                               Explain this candidate for layman + clinician
                             </button>
                             <button
                               onClick={() => queueGuidedPrompt("Improve this candidate for tissue specificity and show exact score changes.")}
-                              className="w-full text-left px-3 py-2 rounded-full text-[11px] transition-colors hover:bg-white/[0.05]"
-                              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+                              className="w-full text-left px-3.5 py-2 rounded-full text-[11px] font-medium transition-colors hover:bg-[color-mix(in_oklch,var(--accent),transparent_92%)]"
+                              style={{ background: "var(--surface-raised)", color: "var(--text-secondary)", border: "1px solid var(--ghost-border)" }}
                             >
                               Improve tissue specificity
                             </button>
                             <button
                               onClick={() => queueGuidedPrompt("Reduce off-target risk and explain the tradeoffs in one concise paragraph.")}
-                              className="w-full text-left px-3 py-2 rounded-full text-[11px] transition-colors hover:bg-white/[0.05]"
-                              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+                              className="w-full text-left px-3.5 py-2 rounded-full text-[11px] font-medium transition-colors hover:bg-[color-mix(in_oklch,var(--accent),transparent_92%)]"
+                              style={{ background: "var(--surface-raised)", color: "var(--text-secondary)", border: "1px solid var(--ghost-border)" }}
                             >
                               Make it safer
                             </button>
@@ -1102,16 +1096,18 @@ function AnalyzePageInner() {
                   <div className="px-5 py-2 shrink-0" style={{ background: "var(--surface-raised)" }}>
                     <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} gene={activeGene} />
                   </div>
-                  <div className="flex-1 overflow-auto px-5 py-3">
-                    <SequenceEditor
-                      sequence={rawSequence}
-                      regions={regions}
-                      perPositionScores={scores}
-                      selectedPosition={selectedPosition}
-                      onSequenceChange={handleSequenceChange}
-                      onRescoreBase={handleRescoreBase}
-                      onSelectPosition={setSelectedPosition}
-                    />
+                  <div className="flex-1 overflow-auto px-5 py-4">
+                    <div className="card-elevated p-4">
+                      <SequenceEditor
+                        sequence={rawSequence}
+                        regions={regions}
+                        perPositionScores={scores}
+                        selectedPosition={selectedPosition}
+                        onSequenceChange={handleSequenceChange}
+                        onRescoreBase={handleRescoreBase}
+                        onSelectPosition={setSelectedPosition}
+                      />
+                    </div>
                   </div>
                   {/* Playhead: scrubs selectedPosition across the whole sequence */}
                   <div className="shrink-0 px-5 py-2.5" style={{ background: "var(--surface-raised)", borderTop: "1px solid var(--ghost-border)" }}>
@@ -1130,11 +1126,13 @@ function AnalyzePageInner() {
                     one tab open). Every original panel is still reachable:
                     Edit → mutation + structure, Scores, Tools → tools + related
                     work, History → merged edit + experiment history. */}
-                <motion.div className="hidden lg:flex w-[380px] shrink-0 flex-col overflow-hidden"
-                  style={{ background: "var(--surface-elevated)" }}
+                <motion.div className="hidden lg:flex w-[380px] shrink-0 flex-col p-3"
+                  style={{ background: "var(--surface-base)", borderLeft: "1px solid var(--ghost-border)" }}
                   {...slideInRight}>
+                  {/* Tabbed tool rail as one prepared, elevated panel */}
+                  <div className="card-elevated flex-1 flex flex-col overflow-hidden">
                   {/* Tab bar */}
-                  <div className="shrink-0 flex items-stretch gap-1 px-3 py-2" role="tablist" aria-label="Sequence tools"
+                  <div className="shrink-0 flex items-stretch gap-1 px-3 py-2.5" role="tablist" aria-label="Sequence tools"
                     style={{ borderBottom: "1px solid var(--ghost-border)" }}>
                     {([
                       { id: "edit", label: "Edit", icon: Pencil },
@@ -1150,6 +1148,7 @@ function AnalyzePageInner() {
                           style={{
                             background: active ? "var(--ink)" : "transparent",
                             color: active ? "var(--cream)" : "var(--text-muted)",
+                            boxShadow: active ? "0 6px 16px -6px rgba(15,15,15,0.3)" : "none",
                           }}>
                           <Icon size={12} aria-hidden="true" /> {label}
                         </button>
@@ -1162,8 +1161,8 @@ function AnalyzePageInner() {
                     {railTab === "edit" && (
                       <div>
                         <div className="p-5">
-                          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
-                            <ScienceTooltip term="mutation">Mutation Editor</ScienceTooltip>
+                          <span className="label-caps block mb-3" style={{ color: "var(--accent-bright)", opacity: 1 }}>
+                            <ScienceTooltip term="mutation">Mutation editor</ScienceTooltip>
                           </span>
                           <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
                             mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
@@ -1178,7 +1177,7 @@ function AnalyzePageInner() {
                             in the Structure view; this is just a link to it. */}
                         <div className="p-5">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                            <span className="label-caps">
                               <ScienceTooltip term="protein-structure">3D structure</ScienceTooltip>
                             </span>
                             <button onClick={() => setViewMode("structure")} className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>
@@ -1186,8 +1185,8 @@ function AnalyzePageInner() {
                             </button>
                           </div>
                           <button onClick={() => setViewMode("structure")}
-                            className="w-full rounded-lg overflow-hidden h-[140px] flex items-center justify-center transition-colors hover:bg-white/[0.03]"
-                            style={{ background: "var(--surface-void)" }}>
+                            className="w-full rounded-xl overflow-hidden h-[140px] flex items-center justify-center transition-colors hover:bg-white/[0.03]"
+                            style={{ background: "var(--surface-void)", border: "1px solid var(--ghost-border)" }}>
                             <div className="text-center">
                               <Box size={32} style={{ color: "var(--accent)", margin: "0 auto 6px", opacity: 0.5 }} />
                               <span className="text-[11px] block" style={{ color: "var(--text-muted)" }}>
@@ -1209,7 +1208,7 @@ function AnalyzePageInner() {
                     {/* ── SCORES: candidate viability ── */}
                     {railTab === "scores" && (
                       <div className="p-5">
-                        <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>
+                        <span className="label-caps block mb-3">
                           <ScienceTooltip term="overall-viability">Candidate scores</ScienceTooltip>
                         </span>
                         {candidates.length > 0 ? (() => {
@@ -1246,7 +1245,7 @@ function AnalyzePageInner() {
                         <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
                         {/* Related work: foundational + run-specific evidence */}
                         <div className="p-5">
-                          <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>
+                          <span className="label-caps block mb-3" style={{ color: "var(--accent-bright)", opacity: 1 }}>
                             Related work
                           </span>
                           <RelatedWorkPanel compact />
@@ -1258,7 +1257,7 @@ function AnalyzePageInner() {
                     {railTab === "history" && (
                       <div>
                         <div className="p-5">
-                          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                          <span className="label-caps">
                             Edit history ({editHistory.length})
                           </span>
                           {editHistory.length === 0 ? (
@@ -1286,6 +1285,7 @@ function AnalyzePageInner() {
                         <ExperimentHistory />
                       </div>
                     )}
+                  </div>
                   </div>
                 </motion.div>
                 {chatOpen && <ChatPanel />}
