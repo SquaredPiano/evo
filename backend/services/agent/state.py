@@ -22,6 +22,9 @@ class CopilotState(TypedDict, total=False):
     tool_calls: Annotated[list[dict[str, str]], operator.add]
     candidate_update: dict[str, Any] | None
     comparison: list[dict[str, Any]] | None
+    region_explanation: dict[str, Any] | None
+    tool_results: Annotated[list[dict[str, Any]], operator.add]
+    suggested_action: dict[str, Any] | None
     execution_notes: Annotated[list[str], operator.add]
     assistant_message: str
     iteration: int
@@ -82,6 +85,13 @@ class AgentChatResult:
     comparison: list[dict[str, object]] | None = None
     iterations: int = 1
     reasoning_steps: list[str] | None = None
+    # Plain-English, cited, honest explanation of the selected region (or None).
+    region_explanation: dict[str, object] | None = None
+    # Structured payloads from otherwise text-only read-only tools (off-target
+    # scan, restriction sites) so the frontend can render them visibly.
+    tool_results: list[dict[str, object]] | None = None
+    # One concrete, data-grounded next action the frontend renders as a click.
+    suggested_action: dict[str, object] | None = None
 
 
 @dataclass
@@ -91,6 +101,10 @@ class ToolExecution:
     note: str
     candidate_update: AgentCandidateUpdate | None = None
     comparison: list[dict[str, object]] | None = None
+    # Region-reasoning payload (per-position Evo2 signal + evidence + narration).
+    region_explanation: dict[str, object] | None = None
+    # Structured result for read-only tools (keyed by "tool" inside the dict).
+    structured_result: dict[str, object] | None = None
 
 
 def trim_history(history: list[dict[str, str]]) -> list[dict[str, str]]:

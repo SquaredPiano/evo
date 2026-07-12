@@ -16,9 +16,15 @@ from services.agent.parsing import (
     objective_from_prompt,
     parse_base_replacement,
     parse_explicit_edit,
+    parse_region_regeneration,
     parse_transform_mode,
+    resolve_selection_window,
 )
-from services.agent.planner import deterministic_plan, is_default_explain_plan
+from services.agent.planner import (
+    deterministic_fast_path,
+    deterministic_plan,
+    is_default_explain_plan,
+)
 from services.agent.memory import AgentMemory, derive_repeat_action, derive_undo_action
 from services.agent.state import (
     AgentCandidateUpdate,
@@ -321,6 +327,98 @@ class TestDeterministicPlan:
         }
 
 
+class TestDeterministicFastPath:
+    """The fast path ONLY fires for structurally-unambiguous commands. Intent-like
+    messages return None so the graph routes them to the LLM planner."""
+
+    def test_explicit_edit_is_fast_pathed(self):
+        plan = deterministic_fast_path("change position 5 to G")
+        assert plan == [{"tool": "edit_base", "args": {"position": 5, "new_base": "G"}}]
+
+    def test_reverse_complement_is_fast_pathed(self):
+        plan = deterministic_fast_path("take the reverse complement")
+        assert plan == [{"tool": "transform_sequence", "args": {"mode": "reverse_complement"}}]
+
+    def test_explicit_range_regen_is_fast_pathed(self):
+        plan = deterministic_fast_path("regenerate positions 40-80")
+        assert plan is not None
+        assert plan[0]["tool"] == "regenerate_region"
+        assert plan[0]["args"]["start"] == 40 and plan[0]["args"]["end"] == 80
+
+    def test_intent_offtarget_question_is_not_fast_pathed(self):
+        """The classic false positive — must go to the LLM, not run a scan."""
+        assert deterministic_fast_path("why is the off-target score high?") is None
+
+    def test_intent_make_safer_is_not_fast_pathed(self):
+        assert deterministic_fast_path("can you make it safer?") is None
+
+    def test_explain_is_not_fast_pathed(self):
+        assert deterministic_fast_path("what does this region do?") is None
+
+    def test_keyword_only_regen_without_range_is_not_fast_pathed(self):
+        """'resample this region' with no range/selection defers to the LLM."""
+        assert deterministic_fast_path("resample this region") is None
+
+    def test_regen_this_resolves_from_selection(self):
+        plan = deterministic_fast_path(
+            "regenerate this", selected_region={"start": 30, "end": 60}
+        )
+        assert plan is not None
+        assert plan[0]["tool"] == "regenerate_region"
+        assert plan[0]["args"] == {"start": 30, "end": 60}
+
+
+class TestSelectionAwareRegeneration:
+    def test_regen_here_uses_selected_region(self):
+        args = parse_region_regeneration(
+            "resample here", selected_region={"start": 10, "end": 25}
+        )
+        assert args == {"start": 10, "end": 25}
+
+    def test_regen_this_uses_position_window(self):
+        args = parse_region_regeneration("regenerate this", selected_position=50)
+        assert args is not None
+        assert args["start"] == 30 and args["end"] == 70  # ±SELECTION_WINDOW(20)
+
+    def test_explicit_range_wins_over_selection(self):
+        args = parse_region_regeneration(
+            "regenerate positions 5-15", selected_region={"start": 100, "end": 200}
+        )
+        assert args["start"] == 5 and args["end"] == 15
+
+    def test_no_regen_intent_returns_none_even_with_selection(self):
+        assert parse_region_regeneration("hello there", selected_position=50) is None
+
+
+class TestResolveSelectionWindow:
+    def test_region_preferred(self):
+        assert resolve_selection_window(50, {"start": 10, "end": 20}) == (10, 20)
+
+    def test_position_window(self):
+        assert resolve_selection_window(50, None) == (30, 70)
+
+    def test_position_clamped_at_zero(self):
+        assert resolve_selection_window(5, None) == (0, 25)
+
+    def test_none_when_no_selection(self):
+        assert resolve_selection_window(None, None) is None
+
+
+class TestExplainRegionRouting:
+    def test_explain_with_selection_routes_to_explain_region(self):
+        plan = deterministic_plan(
+            "what does this region do?", selected_region={"start": 40, "end": 80}
+        )
+        assert any(a["tool"] == "explain_region" for a in plan)
+        region = next(a for a in plan if a["tool"] == "explain_region")
+        assert region["args"] == {"start": 40, "end": 80}
+
+    def test_explain_without_selection_stays_whole_candidate(self):
+        plan = deterministic_plan("what does this candidate do?")
+        assert any(a["tool"] == "explain_candidate" for a in plan)
+        assert not any(a["tool"] == "explain_region" for a in plan)
+
+
 class TestIsDefaultExplainPlan:
     def test_single_explain_is_default(self):
         assert is_default_explain_plan([{"tool": "explain_candidate", "args": {}}]) is True
@@ -533,3 +631,106 @@ class TestMergeCandidateUpdates:
         result = merge_candidate_updates(previous, current)
         assert result.mutation == {"position": 10, "new_base": "A"}
         assert result.sequence == mutated
+
+
+# -------------------------------------------------------------------------
+# Region reasoning — real per-position signal + honest provenance
+# -------------------------------------------------------------------------
+
+# A 100 bp regulatory-ish sequence with a TATA box embedded.
+REGION_SEQ = (
+    "GCGCGCGCGCTATAAAAGGCGCGCGCGCATCGATCGATCGATCGATCGAT"
+    "GCGCGCGCGCAATTCCGGAATTCCGGAATTCCGGTTTTTTTTTTAAAAAA"
+)
+
+
+@pytest.mark.asyncio
+class TestExplainRegionTool:
+    async def test_produces_region_explanation_payload(self):
+        from services.agent.tools import tool_explain_region
+        from services.evo2 import Evo2MockService
+
+        result = await tool_explain_region(
+            service=Evo2MockService(),
+            candidate_id=0,
+            sequence=REGION_SEQ,
+            start=40,
+            end=80,
+        )
+        assert result.call.tool == "explain_region"
+        assert result.call.status == "ok"
+        # Read-only: no sequence mutation.
+        assert result.candidate_update is None
+        payload = result.region_explanation
+        assert payload is not None
+        assert payload["region"] == {"start": 40, "end": 80, "length": 40}
+        assert payload["bases"] == REGION_SEQ[40:80]
+        # Real per-position signal, sliced to the region.
+        assert payload["per_position_scores"]
+        assert all(40 <= p["position"] < 80 for p in payload["per_position_scores"])
+        # Honesty: mock engine is NOT real model confidence.
+        assert payload["model_confidence"]["is_real_model_confidence"] is False
+        assert payload["model_confidence"]["sampled_probs"] is None
+        assert "provenance" in payload
+
+    async def test_clamps_out_of_range(self):
+        from services.agent.tools import tool_explain_region
+        from services.evo2 import Evo2MockService
+
+        result = await tool_explain_region(
+            service=Evo2MockService(),
+            candidate_id=0,
+            sequence=REGION_SEQ,
+            start=90,
+            end=10_000,
+        )
+        payload = result.region_explanation
+        assert payload["region"]["end"] == len(REGION_SEQ)
+        assert payload["region"]["start"] == 90
+
+
+class TestSuggestedAction:
+    def test_grounds_regeneration_in_weakest_window(self):
+        from services.agent.graph import _derive_suggested_action
+
+        # Tissue is the weakest objective; a clear low-confidence window at 40-79.
+        per_position = (
+            [{"position": i, "score": -0.2} for i in range(40)]
+            + [{"position": i, "score": -0.9} for i in range(40, 80)]
+            + [{"position": i, "score": -0.2} for i in range(80, 120)]
+        )
+        state = {
+            "candidate_update": {
+                "scores": {
+                    "functional": 0.8,
+                    "tissue_specificity": 0.2,
+                    "off_target": 0.1,
+                    "novelty": 0.7,
+                },
+                "per_position_scores": per_position,
+            }
+        }
+        action = _derive_suggested_action(state)
+        assert action is not None
+        assert action["tool"] == "regenerate_region"
+        assert action["objective"] == "tissue_specificity"
+        # Window should center on the low-confidence stretch.
+        assert action["args"]["start"] >= 40 and action["args"]["end"] <= 120
+        assert "tissue" in action["rationale"].lower()
+
+    def test_falls_back_to_optimize_without_per_position(self):
+        from services.agent.graph import _derive_suggested_action
+
+        state = {
+            "candidate_update": {
+                "scores": {"functional": 0.2, "tissue_specificity": 0.8, "off_target": 0.1, "novelty": 0.7},
+            }
+        }
+        action = _derive_suggested_action(state)
+        assert action["tool"] == "optimize_candidate"
+        assert action["objective"] == "functional"
+
+    def test_none_without_scores(self):
+        from services.agent.graph import _derive_suggested_action
+
+        assert _derive_suggested_action({}) is None

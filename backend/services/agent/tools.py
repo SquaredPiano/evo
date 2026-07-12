@@ -67,6 +67,141 @@ async def tool_explain(
     )
 
 
+async def _engine_provenance(service: Evo2Service) -> tuple[str, bool]:
+    """Return (engine_label, is_heuristic) from the service health report.
+
+    Honesty helper: distinguishes real Evo2 log-likelihoods from the mock /
+    heuristic scorer so the region explainer never over-claims.
+    """
+    try:
+        health = await service.health()
+    except Exception:
+        health = {}
+    scoring_note = str(health.get("scoring_note") or "")
+    engine = str(health.get("inference_mode") or health.get("model") or "unknown")
+    heuristic = "mock" in scoring_note.lower() or "heuristic" in scoring_note.lower() or "mock" in engine.lower()
+    return engine, heuristic
+
+
+async def tool_explain_region(
+    *,
+    service: Evo2Service,
+    candidate_id: int,
+    sequence: str,
+    start: int | None = None,
+    end: int | None = None,
+    gene: str | None = None,
+    **_kwargs: Any,
+) -> ToolExecution:
+    """Explain ONE region for a (possibly non-biologist) scientist.
+
+    Assembles: the region's real per-position Evo2 signal (log-likelihood proxy),
+    a plain summary of where the model is least confident, region evidence
+    (regulatory motifs always; ClinVar as *gene context* when a gene is known),
+    and honest provenance. Read-only — never mutates the candidate. The narration
+    itself is produced by the responder from the ``region_explanation`` payload.
+    """
+    from services.region_evidence import assemble_region_evidence
+
+    seq_len = len(sequence)
+    region_start = 0 if start is None else max(0, int(start))
+    region_end = seq_len if end is None else min(seq_len, int(end))
+    if region_end <= region_start:
+        region_end = min(seq_len, region_start + 1)
+    region_start = max(0, min(region_start, max(0, seq_len - 1)))
+
+    # Real Evo2 forward pass — slice per-position log-likelihoods to the region.
+    scores, per_position = await score_candidate(service, sequence)
+    region_scores = [
+        {"position": p.position, "score": p.score}
+        for p in per_position
+        if region_start <= p.position < region_end
+    ]
+    engine, heuristic = await _engine_provenance(service)
+
+    values = [row["score"] for row in region_scores]
+    signal_summary: dict[str, Any] = {}
+    if values:
+        mean_v = sum(values) / len(values)
+        min_v = min(values)
+        min_pos = next(row["position"] for row in region_scores if row["score"] == min_v)
+        # "Low confidence" = positions in the bottom quartile of the region's LL.
+        threshold = mean_v - 0.5 * (mean_v - min_v)
+        low_conf = [row["position"] for row in region_scores if row["score"] <= threshold]
+        signal_summary = {
+            "mean_score": round(mean_v, 4),
+            "min_score": round(min_v, 4),
+            "min_position": min_pos,
+            "low_confidence_positions": low_conf[:20],
+        }
+
+    region_bases = sequence[region_start:region_end]
+    gc = (region_bases.count("G") + region_bases.count("C")) / max(len(region_bases), 1)
+
+    evidence: list[dict[str, Any]] = []
+    try:
+        records = await assemble_region_evidence(
+            sequence,
+            gene=gene,
+            region_start=region_start,
+            region_end=region_end,
+            include_clinvar=bool(gene),
+        )
+        evidence = [r.to_dict() for r in records]
+    except Exception:
+        evidence = []
+
+    signal_provenance = (
+        "per-position scores are heuristic proxies (mock/heuristic engine), not real Evo2 log-likelihoods"
+        if heuristic
+        else "per-position scores are real Evo2 log-likelihoods"
+    )
+    region_explanation: dict[str, Any] = {
+        "candidate_id": candidate_id,
+        "region": {"start": region_start, "end": region_end, "length": region_end - region_start},
+        "bases": region_bases,
+        "gc_content": round(gc, 4),
+        "per_position_scores": region_scores,
+        "signal_summary": signal_summary,
+        "model_confidence": {
+            "engine": engine,
+            "is_real_model_confidence": not heuristic,
+            # sampled_probs (true model confidence) only exist after a regeneration.
+            "mean_sampled_prob": None,
+            "sampled_probs": None,
+        },
+        "evidence": evidence,
+        "provenance": {
+            "per_position_signal": signal_provenance,
+            "four_d_scores": "4D scores (functional/tissue/off-target/novelty) are composition/motif heuristics",
+            "clinvar": "ClinVar records (if any) are gene-locus context, NOT a verdict on the generated bases",
+        },
+        "scores_whole_candidate": scores.to_dict(),
+    }
+
+    ev_note = f"{len(evidence)} evidence item(s)" if evidence else "no bound evidence"
+    conf_note = (
+        f"weakest model confidence near position {signal_summary['min_position']}"
+        if signal_summary
+        else "no per-position signal"
+    )
+    note = (
+        f"Region [{region_start}, {region_end}) of candidate #{candidate_id} "
+        f"({region_end - region_start} bp, GC {gc:.0%}): {conf_note}; {ev_note}. "
+        f"{signal_provenance}."
+    )
+
+    return ToolExecution(
+        call=AgentToolCall(
+            tool="explain_region",
+            status="ok",
+            summary=f"Explained region [{region_start}, {region_end}) ({region_end - region_start} bp).",
+        ),
+        note=note,
+        region_explanation=region_explanation,
+    )
+
+
 async def tool_edit_base(
     *,
     service: Evo2Service,
@@ -465,7 +600,30 @@ async def tool_offtarget_scan(
         f"GC balance risk: {result.gc_balance_risk}. {risk_summary}"
     )
 
-    # Return read-only result — no sequence mutation
+    structured_result = {
+        "tool": "offtarget_scan",
+        "query_length": result.query_length,
+        "k": result.k,
+        "repeat_fraction": round(result.repeat_fraction, 4),
+        "gc_balance_risk": result.gc_balance_risk,
+        "total_hits": len(result.hits),
+        "high_risk": len(high_risk),
+        "medium_risk": len(medium_risk),
+        "hits": [
+            {
+                "region_name": h.region_name,
+                "category": h.category,
+                "risk_level": h.risk_level,
+                "similarity_score": round(h.similarity_score, 4),
+                "shared_kmers": h.shared_kmers,
+                "description": h.description,
+            }
+            for h in result.hits[:10]
+        ],
+    }
+
+    # Return read-only result — no sequence mutation, but a structured payload so
+    # the frontend can render the scan visibly.
     return ToolExecution(
         call=AgentToolCall(
             tool="offtarget_scan",
@@ -473,6 +631,7 @@ async def tool_offtarget_scan(
             summary=f"{len(result.hits)} off-target hit(s), GC risk: {result.gc_balance_risk}.",
         ),
         note=note,
+        structured_result=structured_result,
     )
 
 
@@ -789,6 +948,14 @@ async def tool_restriction_sites(
         f"{summary}"
     )
 
+    structured_result = {
+        "tool": "restriction_sites",
+        "sequence_length": len(sequence),
+        "enzymes_checked": len(target_enzymes),
+        "total_sites": sum(int(entry["count"]) for entry in found),
+        "sites": found,
+    }
+
     return ToolExecution(
         call=AgentToolCall(
             tool="restriction_sites",
@@ -796,4 +963,5 @@ async def tool_restriction_sites(
             summary=summary,
         ),
         note=note,
+        structured_result=structured_result,
     )

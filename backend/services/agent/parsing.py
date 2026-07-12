@@ -18,6 +18,7 @@ EDIT_RE = re.compile(
 
 ALLOWED_TOOLS = frozenset({
     "explain_candidate",
+    "explain_region",
     "edit_base",
     "optimize_candidate",
     "compare_candidates",
@@ -30,6 +31,39 @@ ALLOWED_TOOLS = frozenset({
     "restriction_sites",
     "regenerate_region",
 })
+
+# When the user references "this"/"here"/a selected base without an explicit
+# numeric range, resolve a window of this half-width (bp) around the selection.
+SELECTION_WINDOW = 20
+
+
+def resolve_selection_window(
+    selected_position: int | None = None,
+    selected_region: dict[str, int] | tuple[int, int] | None = None,
+) -> tuple[int, int] | None:
+    """Resolve a [start, end) window from the user's UI selection.
+
+    Prefers an explicit ``selected_region {start,end}``; otherwise falls back to
+    a ``SELECTION_WINDOW``-wide window centred on ``selected_position``. Returns
+    None when neither is available. End is NOT clamped to sequence length here —
+    callers clamp against the live sequence.
+    """
+    if selected_region is not None:
+        if isinstance(selected_region, dict):
+            s = selected_region.get("start")
+            e = selected_region.get("end")
+        else:
+            s, e = selected_region[0], selected_region[1]
+        if s is not None and e is not None:
+            start, end = int(s), int(e)
+            if end < start:
+                start, end = end, start
+            if end > start:
+                return start, end
+    if selected_position is not None:
+        p = int(selected_position)
+        return max(0, p - SELECTION_WINDOW), p + SELECTION_WINDOW
+    return None
 
 # Enzyme names → recognition sites for "avoid EcoRI here" style requests.
 _ENZYME_SITES: dict[str, str] = {
@@ -55,18 +89,30 @@ _REGEN_KEYWORDS = (
 )
 
 
-def parse_region_regeneration(message: str) -> dict[str, Any] | None:
+def parse_region_regeneration(
+    message: str,
+    *,
+    selected_position: int | None = None,
+    selected_region: dict[str, int] | tuple[int, int] | None = None,
+) -> dict[str, Any] | None:
     """Detect a region-regeneration request and extract its args.
 
     Routes phrases like "regenerate positions 40-80", "redo this region",
     "resample the promoter", "raise GC in region", "avoid EcoRI here". Returns a
     dict of args for the ``regenerate_region`` tool, or None if not a regen ask.
+
+    Selection-aware: when the user says "regenerate this"/"resample here" WITHOUT
+    an explicit numeric range, the start/end are derived from the UI selection
+    (``selected_region`` or a window around ``selected_position``) so the
+    frontend never has to pre-bake coordinates into the message.
     """
     text = message.lower()
 
     range_match = _REGION_RANGE_RE.search(message)
     has_range = range_match is not None
     has_regen_kw = any(kw in text for kw in _REGEN_KEYWORDS)
+    sel_window = resolve_selection_window(selected_position, selected_region)
+    has_sel = sel_window is not None
 
     # GC intent — a strong regen trigger on its own ("raise GC in this region").
     gc_target: float | None = None
@@ -95,15 +141,23 @@ def parse_region_regeneration(message: str) -> dict[str, Any] | None:
     has_avoid = bool(avoid)
 
     # Only treat as regeneration when there is a clear regen signal:
-    # an explicit range, a regen keyword, or a GC/avoid-in-region ask.
+    # an explicit range, a regen keyword, or a GC/avoid-in-region ask. A live UI
+    # selection counts as a region reference too ("regenerate this").
     region_word = any(w in text for w in ("region", "promoter", "enhancer", "this part", "this section", "here"))
-    if not (has_regen_kw or (has_range and (region_word or has_gc or has_avoid)) or ((has_gc or has_avoid) and region_word)):
+    if not (
+        has_regen_kw
+        or (has_range and (region_word or has_gc or has_avoid))
+        or ((has_gc or has_avoid) and (region_word or has_sel))
+    ):
         return None
 
     args: dict[str, Any] = {}
     if has_range:
         a, b = int(range_match.group(1)), int(range_match.group(2))
         args["start"], args["end"] = (a, b) if a <= b else (b, a)
+    elif has_sel:
+        # No explicit numbers — fall back to the user's on-screen selection.
+        args["start"], args["end"] = sel_window
     if gc_target is not None:
         args["gc_target"] = gc_target
     if avoid:

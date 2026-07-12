@@ -16,9 +16,10 @@ from langgraph.graph import END, START, StateGraph
 from pipeline.evo2_score import score_candidate
 from services import llm
 from services.agent.memory import AgentMemory
+from services.agent.parsing import resolve_selection_window
 from services.agent.planner import (
+    deterministic_fast_path,
     deterministic_plan,
-    is_default_explain_plan,
     plan_with_llm,
 )
 from services.agent.state import (
@@ -53,7 +54,20 @@ Format for a chat bubble — scannable, never a wall of text:
 5. Ground every claim in tool outcomes — never invent scores or residues.
 6. End with ONE specific next action in Evo.
 7. Hard limit: ~80 words unless comparing ≥2 candidates. No markdown tables.
-8. If a tool failed, say so honestly and suggest a recovery step."""
+8. If a tool failed, say so honestly and suggest a recovery step.
+
+REGION FOCUS (when a `region_explanation` is present in the payload):
+- Explain THIS region for a non-biologist: in one plain line, what it likely does
+  (use the bound evidence — regulatory motifs, ClinVar gene context) and why it
+  matters. Then a line on WHERE the model is least confident (cite the region's
+  weakest per-position position from signal_summary).
+- CONFIDENCE HONESTY: `model_confidence.sampled_probs` are REAL Evo2 model
+  confidence ONLY when `is_real_model_confidence` is true (engine=nim, i.e. after
+  a regeneration) — cite them as "model confidence" then. Otherwise say the
+  per-position numbers are heuristic proxies, not real Evo2 log-likelihoods.
+  Never fabricate a probability.
+- ClinVar is gene-locus CONTEXT, never a pathogenicity verdict on generated bases.
+- If a `suggested_action` is present, phrase its `label` as the closing next action."""
 
 
 def _weakest_objective(scores: dict[str, Any]) -> str:
@@ -75,6 +89,129 @@ def _weakest_objective(scores: dict[str, Any]) -> str:
     if not candidates:
         return "functional"
     return min(candidates, key=candidates.get)
+
+
+_OBJECTIVE_LABELS = {
+    "safety": "off-target safety",
+    "tissue_specificity": "tissue specificity",
+    "functional": "functional plausibility",
+    "novelty": "novelty",
+}
+_OBJECTIVE_SCORE_KEY = {
+    "safety": "off_target",
+    "tissue_specificity": "tissue_specificity",
+    "functional": "functional",
+    "novelty": "novelty",
+}
+
+
+def _regeneration_signal(candidate_update: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Extract real regeneration confidence from a candidate_update, or None.
+
+    Returns the region span, engine, per-base ``sampled_probs`` (REAL Evo2
+    confidence only when engine=nim), and the constraint report — or None when
+    the last op was not a region regeneration.
+    """
+    if not candidate_update:
+        return None
+    mutation = candidate_update.get("mutation") or {}
+    if mutation.get("scope") != "regenerate":
+        return None
+    return {
+        "start": mutation.get("start"),
+        "end": mutation.get("end"),
+        "new_region_end": mutation.get("new_region_end"),
+        "engine": mutation.get("engine"),
+        "sampled_probs": mutation.get("sampled_probs"),
+        "sampled_probs_are_real_model_confidence": mutation.get(
+            "sampled_probs_are_real_model_confidence"
+        ),
+        "constraint_report": mutation.get("constraint_report"),
+    }
+
+
+def _weakest_window(
+    per_position: list[dict[str, Any]] | None, width: int = 40
+) -> tuple[int, int] | None:
+    """Find the [start, end) window of lowest mean per-position score.
+
+    Uses real per-position Evo2 log-likelihoods (or their heuristic proxy). This
+    is what turns "the model is least sure here" into concrete coordinates for a
+    suggested regeneration.
+    """
+    if not per_position:
+        return None
+    rows = [
+        (int(p["position"]), float(p["score"]))
+        for p in per_position
+        if isinstance(p, dict) and "position" in p and "score" in p
+    ]
+    if len(rows) < 2:
+        return None
+    rows.sort(key=lambda r: r[0])
+    positions = [r[0] for r in rows]
+    vals = [r[1] for r in rows]
+    n = len(vals)
+    w = min(width, n)
+    best_i, best_mean = 0, float("inf")
+    for i in range(0, n - w + 1):
+        m = sum(vals[i : i + w]) / w
+        if m < best_mean:
+            best_mean, best_i = m, i
+    return positions[best_i], positions[min(best_i + w - 1, n - 1)] + 1
+
+
+def _derive_suggested_action(state: CopilotState) -> dict[str, Any] | None:
+    """Propose ONE concrete, data-grounded next action for the frontend.
+
+    Grounds the suggestion in the weakest objective (:func:`_weakest_objective`)
+    and, when available, the lowest-confidence region window — e.g. "tissue score
+    is weakest and positions 40-80 have low model confidence → regenerate that
+    region?". Returns a structured suggested-action or None.
+    """
+    candidate_update = state.get("candidate_update") or {}
+    scores = dict(candidate_update.get("scores") or {})
+    if not scores:
+        snap = state.get("candidate_snapshot") or {}
+        raw = snap.get("scores")
+        if isinstance(raw, dict):
+            scores = dict(raw)
+    if not scores:
+        return None
+
+    objective = _weakest_objective(scores)
+    label = _OBJECTIVE_LABELS.get(objective, objective)
+    raw_val = scores.get(_OBJECTIVE_SCORE_KEY.get(objective, objective))
+    val_str = f" ({float(raw_val):.2f})" if isinstance(raw_val, (int, float)) else ""
+
+    weak_region: tuple[int, int] | None = None
+    region_explanation = state.get("region_explanation") or {}
+    summary = region_explanation.get("signal_summary") if isinstance(region_explanation, dict) else None
+    region = region_explanation.get("region") if isinstance(region_explanation, dict) else None
+    if summary and summary.get("low_confidence_positions") and isinstance(region, dict):
+        weak_region = (int(region["start"]), int(region["end"]))
+    else:
+        weak_region = _weakest_window(candidate_update.get("per_position_scores"))
+
+    if weak_region and weak_region[0] is not None:
+        s, e = int(weak_region[0]), int(weak_region[1])
+        return {
+            "label": f"Regenerate positions {s}–{e} to lift {label}",
+            "tool": "regenerate_region",
+            "args": {"start": s, "end": e},
+            "objective": objective,
+            "rationale": (
+                f"{label} is the weakest objective{val_str} and positions {s}–{e} show the "
+                f"lowest per-position model confidence."
+            ),
+        }
+    return {
+        "label": f"Optimize for {label}",
+        "tool": "optimize_candidate",
+        "args": {"objective": objective, "rounds": 3},
+        "objective": objective,
+        "rationale": f"{label} is the weakest objective{val_str}; a targeted hill-climb can improve it.",
+    }
 
 
 class AgenticCopilot:
@@ -99,7 +236,9 @@ class AgenticCopilot:
         ui_context: dict[str, Any] | None = None,
     ) -> AgentChatResult:
         memory_entries = await self._memory.snapshot(session_id, candidate_id)
-        candidate_snapshot = await self._candidate_snapshot(session_id=session_id, candidate_id=candidate_id)
+        candidate_snapshot = await self._candidate_snapshot(
+            session_id=session_id, candidate_id=candidate_id, ui_context=ui_context,
+        )
         if ui_context:
             candidate_snapshot = {**candidate_snapshot, **ui_context}
         state: CopilotState = {
@@ -111,6 +250,9 @@ class AgenticCopilot:
             "tool_calls": [],
             "candidate_update": None,
             "comparison": None,
+            "region_explanation": None,
+            "tool_results": [],
+            "suggested_action": None,
             "execution_notes": [],
             "assistant_message": "",
             "iteration": 0,
@@ -143,6 +285,9 @@ class AgenticCopilot:
             comparison=final.get("comparison"),
             iterations=int(final.get("iteration", 1)),
             reasoning_steps=final.get("reasoning_steps"),
+            region_explanation=final.get("region_explanation"),
+            tool_results=final.get("tool_results") or None,
+            suggested_action=final.get("suggested_action"),
         )
         await self._memory.remember_turn(
             session_id=session_id,
@@ -209,37 +354,61 @@ class AgenticCopilot:
                 "reasoning_steps": [f"[iter {iteration}] No message provided, defaulting to explain_candidate"],
             }
 
-        # 1. Deterministic fast path — reliable for demo-critical commands
-        det_plan = deterministic_plan(message, memory_entries=memory_entries)
-        if not is_default_explain_plan(det_plan):
-            tool_names = [a["tool"] for a in det_plan]
-            return {
-                "actions": det_plan,
-                "reasoning_steps": [
-                    f"[iter {iteration}] Planning: {message[:80]}...",
-                    f"[iter {iteration}] Deterministic plan: {', '.join(tool_names)}",
-                ],
-            }
+        selected_position = candidate_snapshot.get("selected_position")
+        resolved = candidate_snapshot.get("selected_region_resolved")
+        selected_region = resolved or candidate_snapshot.get("selected_region")
 
-        # 2. OpenRouter JSON planning — handles everything the fast path can't
-        llm_actions = await plan_with_llm(
-            message, history=history, memory_entries=memory_entries, candidate_snapshot=candidate_snapshot,
+        # 1. High-confidence deterministic fast path — ONLY structurally
+        # unambiguous commands (explicit edits, undo/redo, deterministic
+        # transforms, resolvable-range regen). Keeps these fast + reliable even
+        # when the LLM is up, and returns None for anything intent-like.
+        fast_plan = deterministic_fast_path(
+            message,
+            memory_entries=memory_entries,
+            selected_position=selected_position,
+            selected_region=selected_region,
         )
-        if llm_actions:
-            tool_names = [a["tool"] for a in llm_actions]
+        if fast_plan is not None:
+            tool_names = [a["tool"] for a in fast_plan]
             return {
-                "actions": llm_actions,
+                "actions": fast_plan,
                 "reasoning_steps": [
                     f"[iter {iteration}] Planning: {message[:80]}...",
-                    f"[iter {iteration}] OpenRouter plan: {', '.join(tool_names)}",
+                    f"[iter {iteration}] Deterministic fast-path: {', '.join(tool_names)}",
                 ],
             }
 
+        # 2. LLM-FIRST planning — the primary router for all free-text intent
+        # ("is this chunk risky?", "what does the middle do?", "make it safer").
+        # This kills the brittle-keyword false positives.
+        if llm.llm_available():
+            llm_actions = await plan_with_llm(
+                message, history=history, memory_entries=memory_entries, candidate_snapshot=candidate_snapshot,
+            )
+            if llm_actions:
+                tool_names = [a["tool"] for a in llm_actions]
+                return {
+                    "actions": llm_actions,
+                    "reasoning_steps": [
+                        f"[iter {iteration}] Planning: {message[:80]}...",
+                        f"[iter {iteration}] LLM plan: {', '.join(tool_names)}",
+                    ],
+                }
+
+        # 3. OFFLINE fallback — full deterministic keyword planner (used when the
+        # LLM is unavailable or returned nothing).
+        det_plan = deterministic_plan(
+            message,
+            memory_entries=memory_entries,
+            selected_position=selected_position,
+            selected_region=selected_region,
+        )
+        tool_names = [a["tool"] for a in det_plan]
         return {
             "actions": det_plan,
             "reasoning_steps": [
                 f"[iter {iteration}] Planning: {message[:80]}...",
-                f"[iter {iteration}] Fallback plan: explain_candidate",
+                f"[iter {iteration}] Offline deterministic plan: {', '.join(tool_names)}",
             ],
         }
 
@@ -251,17 +420,23 @@ class AgenticCopilot:
         if not actions:
             actions = [{"tool": "explain_candidate", "args": {}}]
 
+        snapshot = state.get("candidate_snapshot", {}) or {}
+        gene = snapshot.get("gene") or snapshot.get("target_gene")
+
         tool_calls: list[dict[str, str]] = []
         execution_notes: list[str] = []
         candidate_update: AgentCandidateUpdate | None = None
         comparison: list[dict[str, object]] | None = None
+        region_explanation: dict[str, object] | None = None
+        tool_results: list[dict[str, object]] = []
 
         for action in actions:
             tool_name = str(action.get("tool", "")).strip()
             args = action.get("args") or {}
 
             result = await self._dispatch_tool(
-                tool_name, args, session_id=session_id, candidate_id=candidate_id, sequence=sequence,
+                tool_name, args, session_id=session_id, candidate_id=candidate_id,
+                sequence=sequence, gene=gene,
             )
 
             tool_calls.append(result.call.to_dict())
@@ -271,6 +446,10 @@ class AgenticCopilot:
                 sequence = result.candidate_update.sequence
             if result.comparison is not None:
                 comparison = result.comparison
+            if result.region_explanation is not None:
+                region_explanation = result.region_explanation
+            if result.structured_result is not None:
+                tool_results.append(result.structured_result)
 
             # On failure, fall back to scoring so the response always has useful data
             if result.call.status == "failed":
@@ -286,6 +465,8 @@ class AgenticCopilot:
             "execution_notes": execution_notes,
             "candidate_update": candidate_update.to_dict() if candidate_update else None,
             "comparison": comparison,
+            "region_explanation": region_explanation,
+            "tool_results": tool_results,
         }
 
     async def _reflect_node(self, state: CopilotState) -> dict[str, object]:
@@ -367,13 +548,52 @@ class AgenticCopilot:
             "reasoning_steps": new_steps,
         }
 
-    async def _respond_node(self, state: CopilotState) -> dict[str, str]:
+    async def _respond_node(self, state: CopilotState) -> dict[str, object]:
         notes = state.get("execution_notes", [])
         reasoning = state.get("reasoning_steps", [])
         iteration = state.get("iteration", 1)
 
         if not notes:
             return {"assistant_message": "No actions were executed."}
+
+        candidate_update = state.get("candidate_update")
+        regen = _regeneration_signal(candidate_update)
+
+        # Region focus for the responder: the rich explain_region payload if one
+        # was produced, else a lightweight focus derived from a regeneration.
+        region_explanation = state.get("region_explanation")
+        region_focus = dict(region_explanation) if isinstance(region_explanation, dict) else None
+        if region_focus is None and regen and regen.get("start") is not None:
+            s = int(regen["start"])
+            e = int(regen.get("new_region_end") or regen.get("end") or s)
+            per_position = (candidate_update or {}).get("per_position_scores") or []
+            region_focus = {
+                "region": {"start": s, "end": e, "length": e - s},
+                "per_position_scores": [
+                    p for p in per_position
+                    if isinstance(p, dict) and s <= p.get("position", -1) < e
+                ],
+            }
+
+        # Fold REAL Evo2 model confidence (sampled_probs) into the focus when a
+        # regeneration produced it — kept honest via the is_real flag.
+        if region_focus is not None and regen:
+            probs = regen.get("sampled_probs") or []
+            mean_prob = (sum(probs) / len(probs)) if probs else None
+            region_focus["model_confidence"] = {
+                "engine": regen.get("engine"),
+                "is_real_model_confidence": bool(regen.get("sampled_probs_are_real_model_confidence")),
+                "mean_sampled_prob": round(mean_prob, 4) if mean_prob is not None else None,
+                "sampled_probs": probs or None,
+            }
+            region_focus["constraint_report"] = regen.get("constraint_report")
+
+        suggested_action = _derive_suggested_action(state)
+        # region_focus feeds suggested-action derivation too; recompute once the
+        # focus (with sampled_probs) exists so the rationale can cite it.
+        extra: dict[str, object] = {"suggested_action": suggested_action}
+        if region_focus is not None:
+            extra["region_explanation"] = region_focus
 
         # Try LLM response generation via OpenRouter
         if llm.llm_available():
@@ -384,6 +604,9 @@ class AgenticCopilot:
                     "agent_memory": state.get("memory_entries", []),
                     "candidate_snapshot": state.get("candidate_snapshot", {}),
                     "tool_calls": state.get("tool_calls", []),
+                    "tool_results": state.get("tool_results", []),
+                    "region_explanation": region_focus,
+                    "suggested_action": suggested_action,
                     "execution_notes": notes,
                     "iterations": iteration,
                     "reasoning_trace": reasoning,
@@ -401,7 +624,7 @@ class AgenticCopilot:
                 )).strip()
                 if text:
                     iteration_note = f" [{iteration} iteration(s)]" if iteration > 1 else ""
-                    return {"assistant_message": f"{text}{iteration_note}"}
+                    return {"assistant_message": f"{text}{iteration_note}", **extra}
             except Exception:
                 logger.debug("OpenRouter responder failed, using deterministic fallback", exc_info=True)
 
@@ -422,7 +645,10 @@ class AgenticCopilot:
                 base_msg = f"{base_msg}\nEvidence:\n" + "\n".join(cite_lines)
         if iteration > 1:
             base_msg = f"{base_msg}\n(completed in {iteration} agent iterations)"
-        return {"assistant_message": base_msg}
+        suggested = extra.get("suggested_action")
+        if isinstance(suggested, dict) and suggested.get("label"):
+            base_msg = f"{base_msg}\nSuggested next: {suggested['label']}"
+        return {"assistant_message": base_msg, **extra}
 
     # -------------------------------------------------------------------------
     # Tool dispatch
@@ -436,6 +662,7 @@ class AgenticCopilot:
         session_id: str,
         candidate_id: int,
         sequence: str,
+        gene: str | None = None,
     ) -> ToolExecution:
         """Dispatch a tool by name. Returns ToolExecution (never raises)."""
         common = {
@@ -447,7 +674,18 @@ class AgenticCopilot:
         }
 
         try:
-            if tool_name == "edit_base":
+            if tool_name == "explain_region":
+                start_raw = args.get("start")
+                end_raw = args.get("end")
+                return await agent_tools.tool_explain_region(
+                    service=self._service,
+                    candidate_id=candidate_id,
+                    sequence=sequence,
+                    start=int(start_raw) if start_raw is not None else None,
+                    end=int(end_raw) if end_raw is not None else None,
+                    gene=gene,
+                )
+            elif tool_name == "edit_base":
                 return await agent_tools.tool_edit_base(
                     **common,
                     position=int(args.get("position")),
@@ -560,14 +798,35 @@ class AgenticCopilot:
     # Helpers
     # -------------------------------------------------------------------------
 
-    async def _candidate_snapshot(self, *, session_id: str, candidate_id: int) -> dict[str, Any]:
+    async def _candidate_snapshot(
+        self,
+        *,
+        session_id: str,
+        candidate_id: int,
+        ui_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         try:
             sequence = await self._session_store.require_candidate_sequence(session_id, candidate_id)
         except Exception:
             return {}
         gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
-        return {
+        snapshot: dict[str, Any] = {
             "length_bp": len(sequence),
             "gc_ratio": round(gc, 4),
             "preview": sequence[:80],
         }
+
+        # Make the SELECTED region's actual bases visible to the planner/responder
+        # (not just the first 80 bp) so region reasoning works anywhere in the seq.
+        if ui_context:
+            window = resolve_selection_window(
+                ui_context.get("selected_position"),
+                ui_context.get("selected_region"),
+            )
+            if window is not None:
+                start = max(0, min(window[0], len(sequence)))
+                end = max(start, min(window[1], len(sequence)))
+                if end > start:
+                    snapshot["selected_region_resolved"] = {"start": start, "end": end}
+                    snapshot["selected_bases"] = sequence[start:end]
+        return snapshot

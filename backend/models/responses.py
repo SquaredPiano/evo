@@ -78,6 +78,12 @@ class AgentChatResponse(BaseModel):
     comparison: list[dict[str, object]] | None = None
     iterations: int = 1
     reasoning_steps: list[str] | None = None
+    # Plain-English, cited, honest explanation of the selected region (or None).
+    region_explanation: dict[str, object] | None = None
+    # Structured payloads from read-only tools (off-target scan, restriction sites).
+    tool_results: list[dict[str, object]] | None = None
+    # One concrete, data-grounded next action the frontend renders as a click.
+    suggested_action: dict[str, object] | None = None
 
 
 class StructureResponse(BaseModel):

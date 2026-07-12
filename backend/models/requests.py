@@ -98,11 +98,22 @@ class SessionBootstrapRequest(BaseModel):
         return _validate_sequence(v)
 
 
+class SelectedRegion(BaseModel):
+    """A half-open [start, end) selection in the candidate's own coordinate frame."""
+    start: int = Field(..., ge=0)
+    end: int = Field(..., ge=0)
+
+
 class AgentContext(BaseModel):
     """Optional UI context so the agent can explain what the user is looking at."""
     scores: dict[str, float] | None = None
     selected_position: int | None = Field(None, ge=0)
+    # The user's highlighted region. When omitted but selected_position is set,
+    # the agent derives a window around that position automatically.
+    selected_region: SelectedRegion | None = None
     view_mode: str | None = None
+    # Gene symbol for ClinVar gene-context in region explanations (optional).
+    gene: str | None = None
     # Provenance links from the design pipeline (NCBI / PubMed / ClinVar).
     evidence_links: list[dict[str, str]] | None = None
     seed_source: str | None = None

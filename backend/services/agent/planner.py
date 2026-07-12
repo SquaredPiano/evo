@@ -19,6 +19,7 @@ from services.agent.parsing import (
     parse_explicit_edit,
     parse_region_regeneration,
     parse_transform_mode,
+    resolve_selection_window,
 )
 
 logger = logging.getLogger("evo")
@@ -29,7 +30,16 @@ Return ONLY strict JSON with this exact shape:
 {"actions":[{"tool":"<tool_name>","args":{...}}]}
 
 Allowed tools:
-1) explain_candidate — args: {}
+0) explain_region — args: {"start": <int>, "end": <int>}
+    Explain ONE region for a (possibly non-biologist) scientist: what it likely
+    does, why it matters, and how confident the model is — using real per-position
+    Evo2 signal + region evidence. Route here whenever the user asks about, or
+    references, a SPECIFIC region or their current selection ("what does the
+    middle do?", "is this chunk risky?", "explain the selected region", "why is
+    the score high here?"). If the user has a selection and gives no numbers,
+    still emit explain_region — the backend fills start/end from the selection
+    (you MAY pass the selection's start/end shown in context).
+1) explain_candidate — args: {}   (WHOLE-sequence summary; use only when NO region/selection is in focus)
 2) edit_base — args: {"position": <int>, "new_base": "A|T|C|G"}
 3) optimize_candidate — args: {"objective": "safety|tissue_specificity|functional|novelty", "rounds": <int 1-5, optional>}
 4) compare_candidates — args: {}
@@ -58,25 +68,110 @@ Rules:
 - If user asks to delete or remove bases, use delete_bases.
 - If user asks about restriction enzymes or cloning sites, use restriction_sites.
 - If user asks to regenerate/resample/redo a region, raise GC in a region, or avoid a restriction site in a region, use regenerate_region.
+- SELECTION: when the context shows a selected region/position, resolve "this"/"here"/"the
+  selected region" to it. For "regenerate/resample this" emit regenerate_region with the
+  selection's start/end; for "explain/what does this do/is this risky" emit explain_region.
+- Prefer explain_region over explain_candidate whenever a region or selection is in focus.
 - You may chain multiple actions in order.
 - If uncertain, default to explain_candidate.
 """
+
+
+def deterministic_fast_path(
+    message: str,
+    *,
+    memory_entries: list[dict[str, Any]] | None = None,
+    selected_position: int | None = None,
+    selected_region: dict[str, int] | tuple[int, int] | None = None,
+) -> list[dict[str, Any]] | None:
+    """High-confidence, structurally-unambiguous commands that bypass the LLM.
+
+    Returns a concrete plan ONLY for commands whose intent is explicit from
+    structure (undo/redo, explicit single-base edits, deterministic transforms,
+    and region regeneration with a resolvable range). Returns ``None`` for
+    everything intent-like ("is this risky?", "make it safer", "why is the
+    off-target score high?"), which routes to the LLM planner instead — killing
+    the keyword false-positives.
+    """
+    text = message.lower()
+    memory_entries = memory_entries or []
+
+    # Undo / revert — explicit, structural.
+    if any(token in text for token in ("undo", "revert", "roll back", "rollback")):
+        undo_action = derive_undo_action(memory_entries)
+        if undo_action is not None:
+            actions = [undo_action]
+            if "explain" in text or "impact" in text:
+                actions.append({"tool": "explain_candidate", "args": {}})
+            return actions
+
+    # Repeat last action — explicit reference to a prior structural edit.
+    if "again" in text or "same change" in text or "do that" in text:
+        repeat_action = derive_repeat_action(memory_entries)
+        if repeat_action is not None:
+            actions = [repeat_action]
+            if "explain" in text or "impact" in text:
+                actions.append({"tool": "explain_candidate", "args": {}})
+            return actions
+
+    # Region regeneration — only fast-path when start/end are actually resolvable
+    # (explicit numeric range or a live selection). Keyword-only / whole-sequence
+    # regen flows to the LLM so it can reason with full context.
+    regen_args = parse_region_regeneration(
+        message, selected_position=selected_position, selected_region=selected_region,
+    )
+    if regen_args is not None and "start" in regen_args and "end" in regen_args:
+        actions = [{"tool": "regenerate_region", "args": regen_args}]
+        if "explain" in text or "impact" in text:
+            actions.append({"tool": "explain_candidate", "args": {}})
+        return actions
+
+    # Explicit single-base edit ("position 5 to G").
+    explicit = parse_explicit_edit(message)
+    if explicit is not None:
+        actions = [{"tool": "edit_base", "args": {"position": explicit[0], "new_base": explicit[1]}}]
+        if "explain" in text or "impact" in text:
+            actions.append({"tool": "explain_candidate", "args": {}})
+        return actions
+
+    # Global base replacement ("change all Gs to Cs").
+    replacement = parse_base_replacement(text)
+    if replacement is not None:
+        from_base, to_base = replacement
+        actions = [{
+            "tool": "transform_sequence",
+            "args": {"mode": "replace_base", "from_base": from_base, "to_base": to_base},
+        }]
+        if "explain" in text or "impact" in text:
+            actions.append({"tool": "explain_candidate", "args": {}})
+        return actions
+
+    # Deterministic whole-sequence transform ("all Ts", "reverse complement").
+    transform_mode = parse_transform_mode(text)
+    if transform_mode is not None:
+        return [{"tool": "transform_sequence", "args": {"mode": transform_mode}}]
+
+    return None
 
 
 def deterministic_plan(
     message: str,
     *,
     memory_entries: list[dict[str, Any]] | None = None,
+    selected_position: int | None = None,
+    selected_region: dict[str, int] | tuple[int, int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Fast-path deterministic tool selection via regex and keyword matching.
+    """Full deterministic tool selection via regex and keyword matching.
 
-    Returns a concrete plan for unambiguous commands, or the default
-    [explain_candidate] plan if nothing matched (caller checks this to
-    decide whether to escalate to the LLM).
+    Used as the OFFLINE fallback when the LLM planner is unavailable (and as the
+    substrate for :func:`deterministic_fast_path`). Returns a concrete plan for
+    matched commands, or the default ``[explain_candidate]`` plan if nothing
+    matched.
     """
     text = message.lower()
     actions: list[dict[str, Any]] = []
     memory_entries = memory_entries or []
+    sel_window = resolve_selection_window(selected_position, selected_region)
 
     # Undo / revert
     if any(token in text for token in ("undo", "revert", "roll back", "rollback")):
@@ -100,7 +195,9 @@ def deterministic_plan(
     # region, raise GC in a region, avoid a restriction site here). Checked before
     # single-base edit / optimize so "regenerate positions 40-80" doesn't fall
     # through to hill-climbing.
-    regen_args = parse_region_regeneration(message)
+    regen_args = parse_region_regeneration(
+        message, selected_position=selected_position, selected_region=selected_region,
+    )
     if regen_args is not None:
         actions.append({"tool": "regenerate_region", "args": regen_args})
         if "explain" in text or "impact" in text:
@@ -155,9 +252,16 @@ def deterministic_plan(
                 actions.append({"tool": "optimize_candidate", "args": {"objective": objective_from_prompt(text)}})
                 actions.append({"tool": "explain_candidate", "args": {}})
 
-    # Explain / interpret scores — read-only
+    # Explain / interpret scores — read-only. When the user has a region/base
+    # selected, explain THAT region (real per-position Evo2 signal + evidence)
+    # instead of re-printing the whole-sequence summary.
     if explain_only and not any(a["tool"] in {"edit_base", "optimize_candidate", "transform_sequence"} for a in actions):
-        if not any(a["tool"] == "explain_candidate" for a in actions):
+        if sel_window is not None and not any(
+            a["tool"] in {"explain_region", "explain_candidate"} for a in actions
+        ):
+            start, end = sel_window
+            actions.append({"tool": "explain_region", "args": {"start": start, "end": end}})
+        elif not any(a["tool"] in {"explain_region", "explain_candidate"} for a in actions):
             actions.append({"tool": "explain_candidate", "args": {}})
 
     # Codon optimize
@@ -231,7 +335,13 @@ def _build_planning_context(
     memory_entries: list[dict[str, Any]] | None,
     candidate_snapshot: dict[str, Any] | None,
 ) -> str:
-    """Build a rich context string for LLM planning."""
+    """Build a rich context string for LLM planning.
+
+    Injects the user's SELECTION (position/region + the selected bases), the
+    per-objective scores, the current view mode and any evidence links, so the
+    planner can resolve "this"/"here" and emit region-scoped tools with real
+    coordinates.
+    """
     parts: list[str] = []
 
     if candidate_snapshot:
@@ -240,6 +350,43 @@ def _build_planning_context(
             f"GC ratio {candidate_snapshot.get('gc_ratio', '?')}, "
             f"preview: {candidate_snapshot.get('preview', '?')}"
         )
+
+        scores = candidate_snapshot.get("scores")
+        if isinstance(scores, dict) and scores:
+            score_str = ", ".join(f"{k}={v}" for k, v in scores.items())
+            parts.append(f"Current scores (functional/tissue/novelty higher=better, off_target higher=worse): {score_str}")
+
+        view_mode = candidate_snapshot.get("view_mode")
+        if view_mode:
+            parts.append(f"View mode: {view_mode}")
+
+        # SELECTION — the single most important signal for region-scoped intent.
+        resolved = candidate_snapshot.get("selected_region_resolved")
+        sel_region = candidate_snapshot.get("selected_region")
+        sel_pos = candidate_snapshot.get("selected_position")
+        sel_bases = candidate_snapshot.get("selected_bases")
+        if resolved:
+            parts.append(
+                f"SELECTED REGION: positions [{resolved.get('start')}, {resolved.get('end')}) "
+                f"(use these as start/end for region tools)."
+            )
+        elif sel_region:
+            parts.append(f"SELECTED REGION: {sel_region}")
+        elif sel_pos is not None:
+            parts.append(f"SELECTED BASE: position {sel_pos}.")
+        else:
+            parts.append("No region is currently selected.")
+        if sel_bases:
+            parts.append(f"Selected bases: {sel_bases}")
+
+        evidence_links = candidate_snapshot.get("evidence_links")
+        if isinstance(evidence_links, list) and evidence_links:
+            labels = [
+                str(link.get("label") or link.get("source") or "source")
+                for link in evidence_links if isinstance(link, dict)
+            ]
+            if labels:
+                parts.append(f"Evidence available: {', '.join(labels[:6])}")
 
     if history:
         # Real conversation content — lets the planner resolve references like

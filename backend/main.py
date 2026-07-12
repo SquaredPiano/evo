@@ -452,6 +452,9 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
         comparison=result.comparison,
         iterations=result.iterations,
         reasoning_steps=result.reasoning_steps,
+        region_explanation=result.region_explanation,
+        tool_results=result.tool_results,
+        suggested_action=result.suggested_action,
     )
 
 
