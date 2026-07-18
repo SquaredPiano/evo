@@ -1,180 +1,214 @@
-# Proteus - a genomic design IDE
+<div align="center">
+  <img src="frontend/public/favicon.svg" alt="Proteus Logo" width="110" style="margin-bottom: 18px;"/>
 
-**Cursor for DNA.** Describe a design goal in plain English, and Proteus generates
-candidate DNA sequences with a genomic foundation model, scores them, folds the
-top ones into 3D protein structures, and hands you a real inline editor to
-tweak bases and re-score in real time.
+  # Proteus
 
-Proteus is a v2 rebuild of an earlier hackathon project (Helix). The goal of this
-revision was not more features - it was to make the existing ones **honest and
-usable**: a real inline editor, every backend capability reachable from the UI,
-a single well-behaved LLM gateway, and an interface that never claims an engine
-is live when it is actually simulated.
+  **An IDE for the code of life — from natural-language objective to editable DNA and live structure feedback.**
 
----
+  [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+  [![React](https://img.shields.io/badge/React-19-149ECA?style=for-the-badge&logo=react)](https://react.dev/)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+  [![Redis](https://img.shields.io/badge/Redis-Streaming-DC382D?style=for-the-badge&logo=redis)](https://redis.io/)
 
-## What's real vs. simulated
-
-Proteus runs fully offline in a deterministic **mock** mode with zero API keys, and
-each subsystem independently upgrades to a live engine when you provide a key.
-The app tells you which mode is active - the engine pill in the workspace
-sidebar reflects the backend's real state, and the intake screen lists engine
-status rather than hard-coding "Ready".
-
-| Subsystem | Mock (default) | Live (with config) |
-|---|---|---|
-| NCBI / PubMed / ClinVar retrieval | - | **Always live** (real E-utilities calls) |
-| Translation, ORF finding, GC, codon opt | **Always real** (deterministic compute) | - |
-| Evo2 generation + scoring | Deterministic local model | NVIDIA-hosted Evo2 40B (`EVO2_MODE=nim_api`) |
-| Protein structure | Placeholder PDB | ESMFold live API (`STRUCTURE_MODE=esmfold`) |
-| Intent parsing / explanation / agent | Heuristic fallback | OpenRouter (`OPENROUTER_API_KEY`) |
-
-Scoring is a transparent heuristic, not a clinically validated model - it is
-labeled as such in the UI rather than presented as ground truth. The workspace
-includes a **Validate** tab that *measures* this rather than asserting it: it
-pulls known pathogenic and benign variants from ClinVar, scores each with the
-active Evo2 engine, and reports a real AUROC (`POST /api/calibration`). With the
-mock or hosted-NIM engines - neither of which exposes real per-sequence
-log-likelihoods - an AUROC near 0.5 is the honest result; a real signal requires
-`EVO2_MODE=local`. Variants whose reference base does not align to the supplied
-sequence are counted and skipped rather than silently mis-scored.
+  [Demo Video](https://github.com/user-attachments/assets/fb579e02-f806-487a-88be-14cb9fc5785b) · [Report Bug](https://github.com/SquaredPiano/evo/issues)
+</div>
 
 ---
 
-## Architecture
+## 🎬 Demo
 
-```
-Design goal (English)
-      │
-      ▼
-Intent parser ── OpenRouter ──▶ structured, editable spec
-      │
-      ▼
-Orchestrator (FastAPI) ◀── Redis (queue + cache + pub/sub) ──▶ WebSocket
-      │
-      ├─ NCBI ┐
-      ├─ PubMed ├─ parallel retrieval
-      ├─ ClinVar ┘
-      ▼
-Evo2 generation (streamed) ─▶ scoring (functional / tissue / off-target / novelty)
-      ▼
-ESMFold structure ─▶ explanation (streamed) ─▶ frontend workspace
-```
-
-**Two edit paths, two latency contracts** (the core idea, kept and extended):
-
-- `POST /api/edit/base` - single-base edit, re-score only, target < 2s (used by
-  the inline editor's "mutate + rescore").
-- `POST /api/edit/followup` - natural-language follow-up, re-runs only the
-  affected pipeline stages, streamed over the WebSocket.
-
-The single LLM gateway lives in `backend/services/llm.py`; all reasoning routes
-through OpenRouter's OpenAI-compatible API, so swapping models is a one-line
-config change (`LLM_MODEL`).
-
-**Durable persistence (optional).** Redis stays the hot store for a live run
-(streaming, TTL'd). Set `MONGODB_URI` and MongoDB adds two durable layers:
-
-- **Resumable session snapshots** - the full `useProteusStore` state per session
-  (candidates, chat, scores, structure, edits…), so a session is *resumed*, not
-  re-run. `GET /api/sessions` (summaries), `GET/PUT/DELETE /api/sessions/{id}`.
-  This implements the contract in `docs/session_persistence_interface.md`.
-- **Design-run history** - each run's English **goal**, config, and resulting
-  candidates, plus a durable mirror of experiment versions. `GET /api/history/{session_id}`.
-
-Both are best-effort: leave `MONGODB_URI` blank (or if Atlas is unreachable) and
-the app behaves exactly as before, Redis-only - every persistence call becomes a
-logged no-op, never a request error. Implementation: `backend/services/mongo_store.py`.
-Atlas note: the connecting host's IP must be on the cluster's Network Access
-allowlist or the store stays disabled. (The former `GET /api/sessions/{user_id}`
-Redis listing moved to `GET /api/users/{user_id}/sessions` to free the
-`/api/sessions/{id}` route for snapshots.)
-
-**Semantic literature search (optional).** Research articles (PubMed) are
-embedded and searched by meaning, so a design can pull the papers most relevant
-to a gene, region, or free-text question.
-
-- `POST /api/literature/index` - fetch + embed PubMed articles for a `gene`,
-  and/or index supplied `articles` directly.
-- `POST /api/literature/search` - semantic query (optional `gene` filter),
-  returning ranked hits with real PubMed links.
-
-Two graceful-degradation axes keep it working with zero setup: **embeddings**
-are hybrid (a real embedding API when `EMBEDDING_API_KEY` is set, else a
-deterministic local feature-hashing embedder), and the **index** uses MongoDB
-Atlas `$vectorSearch` when a vector index is provisioned, else an in-memory
-cosine fallback. It also plugs into the region→evidence seam
-(`LiteratureRagProvider`) so retrieved papers appear as `source="literature"`
-evidence. Details in `docs/vector_search.md`. Implementation:
-`backend/services/embeddings.py`, `backend/services/literature_index.py`.
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/fb579e02-f806-487a-88be-14cb9fc5785b" controls width="100%">
+    <a href="https://github.com/user-attachments/assets/fb579e02-f806-487a-88be-14cb9fc5785b">Watch the Proteus demo video</a>
+  </video>
+  <p><em>From a sentence to generated DNA, live confidence, editable regions, and predicted structure.</em></p>
+</div>
 
 ---
 
-## Stack
+## ✨ Overview
 
-- **Frontend:** Next.js 16, React 19, TypeScript, Zustand, Framer Motion,
-  Three.js / React Three Fiber (3D protein viewer).
-- **Backend:** FastAPI, Redis (queue + cache + pub/sub), MongoDB (optional
-  durable store for design-run history), Pydantic, LangGraph for the agent
-  state machine.
-- **Engines:** Evo2 (mock / NVIDIA NIM 40B / local), ESMFold, OpenRouter.
+Proteus is the **second-generation rebuild of Helix**, our AI-native genomic design IDE.
+
+Helix proved the core idea: describe a biological objective in plain language, generate candidate DNA, score it, predict its structure, and refine it with an AI copilot. Proteus turns that prototype into a more capable, transparent, and usable workspace—without losing the speed and immediacy that made Helix compelling.
+
+> *"Describe the biology. Generate the sequence. Edit the code of life."*
+
+### Helix, evolved
+
+| Helix | Proteus |
+|-------|---------|
+| Prototype sequence workspace | Full inline DNA editor with selection, mutation, and instant re-scoring |
+| Backend-heavy research tools | Every major capability is accessible directly from the interface |
+| Opaque engine state | Honest live/mock status for every model and subsystem |
+| One-shot generation | Region-level regeneration, version history, comparison, and rollback |
+| General retrieval context | Real papers, ClinVar evidence, motif analysis, and semantic literature search |
+| Ephemeral sessions | Optional durable snapshots and design-run history with MongoDB |
+| Distributed model calls | One well-behaved OpenRouter gateway for reasoning and explanation |
+
+Proteus is not a new coat of paint on Helix. It is a deliberate revision of the same vision: **better editing, better science, better observability, and a much tighter loop between human intent and model output.**
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| 🧬 **Evo 2 Generation** | Generate and score DNA with NVIDIA-hosted Evo 2 40B, a local engine, or deterministic mock mode. |
+| ✍️ **Real Sequence Editor** | Select, overwrite, delete, reverse-complement, mutate, and re-score bases directly in the workspace. |
+| 🔁 **Region Regeneration** | Ask Proteus to rewrite only a selected region, splice it back into the sequence, and refold the result. |
+| 🧱 **3D Fold Studio** | Explore ESMFold predictions with confidence coloring, residue inspection, and side-by-side comparison. |
+| 🤖 **Helio Agent** | A LangGraph-powered agent that explains regions, uses tools, and connects model output to evidence. |
+| 📚 **Live Research Context** | Retrieve NCBI, PubMed, ClinVar, and semantically ranked literature with links to original sources. |
+| 🧪 **Scientific Tooling** | JASPAR motifs, CRISPR off-target scoring, codon optimization, primer design, melting temperature, and RNA structure. |
+| 🕒 **Versioned Experiments** | Track edits and follow-ups, compare versions, restore prior states, and optionally persist complete sessions. |
 
 ---
 
-## Getting started
+## 🔬 Real by design
 
-### 1. Configure keys (optional - mock mode needs none)
+Proteus runs fully offline in deterministic mock mode with no API keys. Each subsystem independently upgrades to a live engine when configured, and the interface reports the backend's actual state instead of claiming a simulated engine is live.
+
+| Subsystem | Default | Live configuration |
+|-----------|---------|--------------------|
+| NCBI, PubMed, and ClinVar | Real E-utilities calls | Always live |
+| Translation, ORFs, GC, motifs, and optimization | Deterministic scientific compute | Always real |
+| Sequence generation and scoring | Deterministic mock engine | NVIDIA Evo 2 40B or local Evo 2 |
+| Protein structure | Placeholder PDB | ESMFold API |
+| Intent, explanation, and agent reasoning | Heuristic fallback | OpenRouter |
+
+Scoring signals are transparent heuristics—not clinical predictions. Proteus labels them accordingly and includes calibration tooling to measure performance against known ClinVar variants rather than presenting unvalidated scores as ground truth.
+
+---
+
+## 🚀 Setup & Deployment
+
+### Quick Start (Local)
+
+1. **Clone and configure**
+   ```bash
+   git clone https://github.com/SquaredPiano/evo.git
+   cd evo
+   cp .env.example .env
+   # Add available API keys; mock mode works without them.
+   ```
+
+2. **Backend**
+   ```bash
+   cd backend
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   uvicorn main:app --reload --port 8000
+   ```
+
+3. **Frontend**
+   ```bash
+   cd frontend
+   npm install
+   cp .env.example .env.local
+   npm run dev
+   ```
+
+4. **Open**
+   - App: [http://localhost:3000](http://localhost:3000)
+   - API health: [http://localhost:8000/api/health](http://localhost:8000/api/health)
+
+### Docker (Recommended)
 
 ```bash
-cp .env.example .env            # repo root, or backend/.env
-# fill in OPENROUTER_API_KEY, NVIDIA_API_KEY, NCBI_API_KEY as available
-# optional: set MONGODB_URI (+ MONGODB_DB_NAME) to persist design-run history
-```
-
-### 2. Backend
-
-```bash
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
-
-### 3. Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev        # http://localhost:3000
-```
-
-### Or with Docker
-
-```bash
+cp .env.example .env
 docker compose up --build
 ```
 
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- Backend: [http://localhost:8000](http://localhost:8000)
+
 ---
 
-## Tests
+## 🛠️ Architecture
+
+Proteus keeps Helix's streaming, event-driven core and extends it with richer editing, evidence, scientific computation, and persistence:
+
+```text
+Natural-language objective
+          ↓
+Intent Parse → Parallel Retrieval (NCBI / PubMed / ClinVar / Literature)
+          ↓
+Evo 2 Generation → Scoring → ESMFold → Explanation
+          ↓
+Editable Workspace ↔ Region Regeneration ↔ Scientific Tools
+          ↓
+Redis live session + optional MongoDB snapshots and history
+```
+
+- **Frontend:** Next.js 16, React 19, TypeScript, Zustand, Framer Motion, Three.js.
+- **Backend:** FastAPI, Pydantic, Redis-backed session and event flow, optional MongoDB persistence.
+- **AI stack:** Evo 2, ESMFold, OpenRouter, and a LangGraph agent.
+- **Scientific stack:** Biopython, DNA Chisel, Primer3, ViennaRNA, and JASPAR.
+- **Transport:** REST for control plus WebSocket streaming for progressive generation and explanation.
+
+Two edit paths keep interaction fast:
+
+- `POST /api/edit/base` handles a single-base mutation and re-scores without rerunning the full pipeline.
+- `POST /api/edit/followup` handles natural-language revisions and streams only the affected pipeline stages.
+
+---
+
+## 🧪 Testing
 
 ```bash
-cd backend && pytest -q     # 765 passing
-cd frontend && npm run build
+cd backend
+source .venv/bin/activate
+pytest -q
+```
+
+```bash
+cd frontend
+npm run build
 ```
 
 ---
 
-## In the workspace
+## 🧭 Project Structure
 
-- **Inline editor** - click to place a caret, drag to select, type A/T/C/G to
-  overwrite, Backspace/Delete to remove, Shift+Arrows to extend selection,
-  reverse-complement a selection, and "mutate + rescore" a single base through
-  the fast edit path.
-- **Research tools panel** - off-target scanning, organism-specific codon
-  optimization (with one-click apply), live ClinVar variant annotation, and
-  FASTA / GenBank export. All were backend-only before; now they have a UI.
-- **Version history** - every edit and follow-up is versioned; revert to any
-  earlier state.
-- **Import** - drag in FASTA or GenBank; GenBank is parsed server-side with its
-  feature table intact.
+```text
+evo/
+├── backend/
+│   ├── main.py
+│   ├── pipeline/
+│   ├── services/
+│   ├── ws/
+│   └── tests/
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   ├── hooks/
+│   ├── lib/
+│   └── public/
+├── docs/
+├── deploy/
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## ⚠️ Research Use Note
+
+Proteus is a research and design platform, not a clinical decision system. Treat generated sequences, scores, structures, and explanations as hypotheses that require domain review and experimental validation.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome.
+
+1. Fork the repository
+2. Create a feature branch
+3. Ensure tests and builds pass
+4. Open a pull request
+
+---
+
+<div align="center">
+  <sub>Proteus · Helix, evolved</sub>
+</div>
